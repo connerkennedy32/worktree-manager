@@ -65,6 +65,15 @@ describe('reconcileTarget', () => {
     expect(reconcileTarget(open, rows)).toBe(open)
   })
 
+  it('returns the caller\'s own object, not the matching row, when the key is still present', () => {
+    // The caller identity-compares the result to decide whether to setState, and
+    // useMemo rebuilds these rows on every status refresh — returning the equal-but-
+    // distinct row object would re-render forever.
+    const open = row({})
+    const rows = [row({ ...open, code: 'M' })]  // same key, different object
+    expect(reconcileTarget(open, rows)).toBe(open)
+  })
+
   it('returns the same object when rows are empty (loading guard)', () => {
     const open = row({})
     expect(reconcileTarget(open, [])).toBe(open)
