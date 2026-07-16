@@ -3,7 +3,7 @@ import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
-import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
+import { useChangedFiles, codeColor, reconcileTarget, type Row, type SectionId } from './changed-files'
 
 type ViewType = 'unified' | 'split'
 
@@ -35,12 +35,13 @@ export function DiffModal() {
     return () => window.removeEventListener('keydown', onKey)
   }, [setOpenDiff])
 
-  // The open file vanished (committed, reverted, checked out elsewhere) — close
-  // rather than show a stale diff. The length guard keeps this from firing while
-  // the list is still loading. Staging is handled in stageRow, not here.
+  // Staging changes a row's key, so follow the file rather than the key; close
+  // only when it is genuinely gone. Identity compare: reconcileTarget returns the
+  // same object when nothing changed, so this cannot loop.
   useEffect(() => {
-    if (!openDiff || allRows.length === 0) return
-    if (!allRows.some(r => r.key === openDiff.key)) setOpenDiff(null)
+    if (!openDiff) return
+    const next = reconcileTarget(openDiff, allRows)
+    if (next !== openDiff) setOpenDiff(next)
   }, [allRows, openDiff, setOpenDiff])
 
   // Fetch the open file's patch. Cached by row key; cleared on stage.
@@ -62,12 +63,6 @@ export function DiffModal() {
     await window.api.stagePath({ worktreePath: selected, path: row.path, unstage: row.staged })
     // Patch content for the old staged/unstaged split is now stale; drop cache.
     setPatches({})
-    // Staging flips the row's key suffix. Follow the file to its new side so the
-    // modal stays open on what the user is reading.
-    if (openDiff?.key === row.key) {
-      const staged = !row.staged
-      setOpenDiff({ ...row, staged, untracked: false, key: row.path + (staged ? ':s' : ':w') })
-    }
     await refreshStatus(selected)
   }
 

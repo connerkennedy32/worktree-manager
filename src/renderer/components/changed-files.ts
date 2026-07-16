@@ -32,6 +32,16 @@ export function buildWorkingRows(status?: WorktreeStatus): Row[] {
   return out
 }
 
+// Which file the diff modal should show, given the rows currently listed.
+// Staging flips a row's key (a.ts:w -> a.ts:s), so a vanished key does not mean
+// a vanished file — follow the path to its new side of the split, and close only
+// when the file is really gone (committed, reverted, checked out away).
+export function reconcileTarget(open: DiffTarget, rows: Row[]): DiffTarget | null {
+  if (rows.length === 0) return open        // list still loading — hold
+  if (rows.some(r => r.key === open.key)) return open
+  return rows.find(r => r.path === open.path) ?? null
+}
+
 export function buildCommittedRows(committed: CommittedChanges | null): Row[] {
   return (committed?.files ?? []).map(f => ({
     key: f.path + ':c', path: f.path, staged: false, untracked: false, committed: true, code: f.code

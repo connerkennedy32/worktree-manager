@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildWorkingRows, buildCommittedRows, codeColor } from '../../src/renderer/components/changed-files'
+import { buildWorkingRows, buildCommittedRows, codeColor, reconcileTarget, type Row } from '../../src/renderer/components/changed-files'
 import type { WorktreeStatus, CommittedChanges } from '@shared/ipc-types'
 
 const status = (files: WorktreeStatus['files']): WorktreeStatus =>
@@ -52,6 +52,40 @@ describe('codeColor', () => {
   it('colors every other status amber', () => {
     expect(codeColor('M')).toBe('#c9a26a')
     expect(codeColor('R')).toBe('#c9a26a')
+  })
+})
+
+describe('reconcileTarget', () => {
+  const row = (over: Partial<Row>): Row =>
+    ({ key: 'a.ts:w', path: 'a.ts', staged: false, untracked: false, committed: false, code: 'M', ...over })
+
+  it('returns the same object when the key is still present', () => {
+    const open = row({})
+    const rows = [open, row({ key: 'b.ts:w', path: 'b.ts' })]
+    expect(reconcileTarget(open, rows)).toBe(open)
+  })
+
+  it('returns the same object when rows are empty (loading guard)', () => {
+    const open = row({})
+    expect(reconcileTarget(open, [])).toBe(open)
+  })
+
+  it('follows the path to its new key when staged (:w -> :s)', () => {
+    const open = row({ key: 'a.ts:w', staged: false })
+    const staged = row({ key: 'a.ts:s', staged: true, code: 'M' })
+    expect(reconcileTarget(open, [staged])).toBe(staged)
+  })
+
+  it('follows the path when unstaging a formerly untracked file (:s -> :u)', () => {
+    const open = row({ key: 'a.ts:s', staged: true })
+    const untracked = row({ key: 'a.ts:u', staged: false, untracked: true, code: '?' })
+    expect(reconcileTarget(open, [untracked])).toBe(untracked)
+  })
+
+  it('returns null when the path is gone entirely', () => {
+    const open = row({})
+    const rows = [row({ key: 'b.ts:w', path: 'b.ts' })]
+    expect(reconcileTarget(open, rows)).toBeNull()
   })
 })
 
