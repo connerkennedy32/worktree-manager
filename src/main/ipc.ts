@@ -44,7 +44,7 @@ export function registerIpc(win: BrowserWindow) {
 
   ipcMain.handle(IPC.listTerminals, () => ptys.list())
 
-  ipcMain.on(IPC.termStart, (_e, p: string) => {
+  ipcMain.on(IPC.termStart, async (_e, p: string) => {
     if (ptys.has(p)) {
       // Session survived a renderer reload — replay its scrollback so the fresh
       // xterm shows the existing terminal instead of a blank pane.
@@ -52,7 +52,8 @@ export function registerIpc(win: BrowserWindow) {
     } else {
       ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
     }
-    watchers.watch(p, () => win.webContents.send(IPC.statusChanged, p))
+    const head = await wt.headPath(p).catch(() => undefined)
+    watchers.watch(p, () => win.webContents.send(IPC.statusChanged, p), head)
   })
   ipcMain.handle(IPC.termReset, (_e, p: string) => {
     // Kill the wedged shell and spawn a fresh one for the same worktree.

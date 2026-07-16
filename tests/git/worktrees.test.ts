@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { makeTmpRepo } from '../helpers/tmpRepo'
-import { listWorktrees, createWorktree, removeWorktree } from '../../src/main/git/worktrees'
+import { listWorktrees, createWorktree, removeWorktree, headPath } from '../../src/main/git/worktrees'
 import { existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
@@ -44,6 +44,17 @@ describe('worktrees', () => {
     await removeWorktree(target.path, false)
     const branchesAfter = await r.git.branchLocal()
     expect(branchesAfter.all).not.toContain('feat-z')
+  })
+
+  it('headPath resolves an existing HEAD file that reflects branch renames', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    const hp = await headPath(r.dir)
+    expect(existsSync(hp)).toBe(true)
+    await r.git.raw(['branch', '-m', 'renamed-main'])
+    // listing now reflects the rename, and HEAD still resolves
+    const wts = await listWorktrees(r.dir)
+    expect(wts[0].branch).toBe('renamed-main')
+    expect(existsSync(await headPath(r.dir))).toBe(true)
   })
 
   it('force-removes a worktree that has uncommitted changes', async () => {

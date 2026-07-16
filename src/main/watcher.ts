@@ -19,10 +19,13 @@ export class WatcherManager {
   private watchers = new Map<string, FSWatcher>()
   private timers = new Map<string, NodeJS.Timeout>()
 
-  watch(worktreePath: string, onChange: () => void) {
+  watch(worktreePath: string, onChange: () => void, headFile?: string) {
     if (this.watchers.has(worktreePath)) return
-    const w = chokidar.watch(worktreePath, {
-      ignored: (p: string) => isIgnoredPath(p),
+    const paths = headFile ? [worktreePath, headFile] : [worktreePath]
+    const w = chokidar.watch(paths, {
+      // Watch the working tree (skipping heavy dirs) plus the git HEAD file
+      // (which lives under .git and would otherwise be ignored).
+      ignored: (p: string) => p === headFile ? false : isIgnoredPath(p),
       ignoreInitial: true,
       persistent: true,
       depth: 8

@@ -8,6 +8,7 @@ interface State {
   selected?: string
   init: () => Promise<void>
   refreshWorktrees: () => Promise<void>
+  refreshWorktreeList: () => Promise<void>
   refreshStatus: (p: string) => Promise<void>
   select: (p: string) => void
 }
@@ -18,18 +19,23 @@ export const useStore = create<State>((set, get) => ({
     const repos = await window.api.listRepos()
     set({ repos })
     await get().refreshWorktrees()
-    window.api.onStatusChanged(p => get().refreshStatus(p))
+    // On any change (files or branch HEAD), refresh that worktree's status and
+    // re-list worktrees so branch renames/switches show in the sidebar.
+    window.api.onStatusChanged(p => { get().refreshStatus(p); get().refreshWorktreeList() })
     // Restore the previously selected worktree after a reload so its terminal
     // (still alive in the main process) reattaches and replays automatically.
     const saved = localStorage.getItem('wtm.selected')
     if (saved && get().worktrees.some(w => w.path === saved)) set({ selected: saved })
   },
-  refreshWorktrees: async () => {
+  refreshWorktreeList: async () => {
     const { repos } = get()
     const all: Worktree[] = []
     for (const r of repos) all.push(...await window.api.listWorktrees(r))
     set({ worktrees: all })
-    for (const w of all) get().refreshStatus(w.path)
+  },
+  refreshWorktrees: async () => {
+    await get().refreshWorktreeList()
+    for (const w of get().worktrees) get().refreshStatus(w.path)
   },
   refreshStatus: async (p) => {
     const s = await window.api.getStatus(p)

@@ -1,6 +1,14 @@
 import simpleGit from 'simple-git'
-import { basename, dirname, join } from 'path'
+import { basename, dirname, join, isAbsolute, resolve } from 'path'
 import type { Worktree, NewWorktreeRequest } from '@shared/ipc-types'
+
+// Absolute path to a worktree's HEAD file (correct for linked worktrees, whose
+// real HEAD lives under the main repo's .git/worktrees/<id>/). Watching this
+// detects branch switches/renames, which never touch the working tree.
+export async function headPath(worktreePath: string): Promise<string> {
+  const raw = (await simpleGit(worktreePath).raw(['rev-parse', '--git-path', 'HEAD'])).trim()
+  return isAbsolute(raw) ? raw : resolve(worktreePath, raw)
+}
 
 export function worktreeDir(repoPath: string, branch: string): string {
   const repoName = basename(repoPath)
