@@ -9,8 +9,20 @@ export function Sidebar() {
   const { worktrees, statuses, selected, select, refreshWorktrees, repos } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
+  const [pickError, setPickError] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+
+  const addRepo = async () => {
+    try {
+      await window.api.pickRepo()
+      await useStore.getState().init()
+    } catch (e: any) {
+      // strip Electron's "Error invoking remote method '...':" prefix
+      const msg = (e?.message ?? String(e)).replace(/^Error invoking remote method '[^']*':\s*Error:\s*/, '')
+      setPickError(msg)
+    }
+  }
 
   const doDisconnectRepo = async () => {
     if (!pendingRepo) return
@@ -52,10 +64,7 @@ export function Sidebar() {
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
-        <button onClick={async () => {
-          await window.api.pickRepo()
-          await useStore.getState().init()
-        }} style={{ fontSize: 11 }}>+ Repo</button>
+        <button onClick={addRepo} style={{ fontSize: 11 }}>+ Repo</button>
       </div>
       {repos.length > 0 && (
         <div style={{ borderBottom: '1px solid #333', padding: '4px 0' }}>
@@ -131,6 +140,16 @@ export function Sidebar() {
           error={error}
           onConfirm={doDisconnectRepo}
           onCancel={() => { if (!busy) { setPendingRepo(null); setError(undefined) } }}
+        />
+      )}
+
+      {pickError && (
+        <ConfirmModal
+          title="Can't add that folder"
+          body={pickError}
+          confirmLabel="OK"
+          onConfirm={() => setPickError(undefined)}
+          onCancel={() => setPickError(undefined)}
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
+import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
 import * as diff from './git/diff'
 import * as config from './config'
@@ -17,7 +18,8 @@ export function registerIpc(win: BrowserWindow) {
   ipcMain.handle(IPC.pickRepo, async () => {
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] })
     if (r.canceled || !r.filePaths[0]) return config.listRepos()
-    return config.addRepo(r.filePaths[0])
+    const root = await validateRepoSelection(r.filePaths[0]) // throws with a clear message if invalid
+    return config.addRepo(root)
   })
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
   ipcMain.handle(IPC.createWorktree, (_e, req) => wt.createWorktree(req))
