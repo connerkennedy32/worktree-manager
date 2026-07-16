@@ -1,114 +1,34 @@
-import { useEffect, useMemo, useState } from 'react'
-import { parseDiff, Diff, Hunk } from 'react-diff-view'
-import 'react-diff-view/style/index.css'
-import './diff-theme.css'
+import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
-import type { CommittedChanges } from '@shared/ipc-types'
+import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
 
-type SectionId = 'staged' | 'unstaged' | 'committed'
-
-interface Row {
-  key: string
-  path: string
-  staged: boolean
-  untracked: boolean
-  committed: boolean // came from the branch's commits, not the working tree
-  code: string // status letter: M A D R ? etc.
-}
-
-const codeColor = (c: string) =>
-  c === 'A' || c === '?' ? '#6a9955' : c === 'D' ? '#c94a4a' : '#c9a26a'
-
+// Diffs are not rendered here — clicking a row opens DiffModal. This panel is the
+// file list, the staging surface, and the commit box.
 export function DiffPanel({ collapsed, onToggle, width = 460 }:
   { collapsed: boolean; onToggle: () => void; width?: number }) {
   const selected = useStore(s => s.selected)
   const refreshStatus = useStore(s => s.refreshStatus)
-  const status = useStore(s => (selected ? s.statuses[selected] : undefined))
+  const setOpenDiff = useStore(s => s.setOpenDiff)
   const worktrees = useStore(s => s.worktrees)
   const branch = worktrees.find(w => w.path === selected)?.branch
 
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [patches, setPatches] = useState<Record<string, string>>({})
+  const { stagedRows, unstagedRows, committedRows, committed, stagedCount, total } =
+    useChangedFiles(selected)
+
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
-  const [committed, setCommitted] = useState<CommittedChanges | null>(null)
   // Working changes are the panel's job, so they start open; committed files are
   // reference material and start collapsed.
   const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>(
     { staged: true, unstaged: true, committed: false })
 
-  const refreshCommitted = async (path: string) => {
-    setCommitted(await window.api.getCommittedFiles(path))
-  }
-
-  // Keep status fresh when the worktree is selected.
   useEffect(() => {
-    if (!selected) return
-    setCommitted(null)
     setOpenSections({ staged: true, unstaged: true, committed: false })
-    refreshStatus(selected)
   }, [selected])
-
-  // Refetch alongside every status change: a commit empties the working tree but
-  // grows the committed list, so the panel would otherwise just go blank.
-  useEffect(() => { if (selected) refreshCommitted(selected) }, [selected, status])
-
-  // Build the file list cheaply from `git status` — no diffs computed here.
-  const rows = useMemo<Row[]>(() => {
-    if (!status) return []
-    const out: Row[] = []
-    for (const f of status.files) {
-      const untracked = f.index === '?' && f.working === '?'
-      if (untracked) {
-        out.push({ key: f.path + ':u', path: f.path, staged: false, untracked: true, committed: false, code: '?' })
-        continue
-      }
-      if (f.index !== ' ' && f.index !== '?') {
-        out.push({ key: f.path + ':s', path: f.path, staged: true, untracked: false, committed: false, code: f.index })
-      }
-      if (f.working !== ' ' && f.working !== '?') {
-        out.push({ key: f.path + ':w', path: f.path, staged: false, untracked: false, committed: false, code: f.working })
-      }
-    }
-    return out
-  }, [status])
-
-  const stagedRows = useMemo(() => rows.filter(r => r.staged), [rows])
-  const unstagedRows = useMemo(() => rows.filter(r => !r.staged), [rows])
-
-  const committedRows = useMemo<Row[]>(() =>
-    (committed?.files ?? []).map(f => ({
-      key: f.path + ':c', path: f.path, staged: false, untracked: false, committed: true, code: f.code
-    })), [committed])
-
-  // Committed files aren't pending work — they must not inflate these counts.
-  const stagedCount = rows.filter(r => r.staged).length
-  const total = rows.length
-
-  const fetchPatch = async (row: Row) => {
-    if (!selected || patches[row.key] !== undefined) return
-    const patch = await window.api.getFileDiff({
-      worktreePath: selected, path: row.path, staged: row.staged, untracked: row.untracked,
-      baseRef: row.committed ? committed?.baseBranch : undefined
-    })
-    setPatches(p => ({ ...p, [row.key]: patch }))
-  }
-
-  const toggle = (row: Row) => {
-    setExpanded(s => {
-      const n = new Set(s)
-      if (n.has(row.key)) n.delete(row.key)
-      else { n.add(row.key); fetchPatch(row) }
-      return n
-    })
-  }
 
   const stageRow = async (row: Row) => {
     if (!selected) return
     await window.api.stagePath({ worktreePath: selected, path: row.path, unstage: row.staged })
-    // Patch content for the old staged/unstaged split is now stale; drop cache.
-    setPatches({})
-    setExpanded(new Set())
     await refreshStatus(selected)
   }
 
@@ -117,10 +37,33 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     setCommitting(true)
     try {
       await window.api.commit({ worktreePath: selected, message: msg.trim() })
-      setMsg(''); setPatches({}); setExpanded(new Set())
+      setMsg('')
       await refreshStatus(selected)
     } finally { setCommitting(false) }
   }
+
+  const renderRow = (row: Row) => (
+    <div key={row.key} onClick={() => setOpenDiff(row)} title={row.path}
+         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                  borderBottom: '1px solid #2a2a2a', background: 'rgba(37, 37, 38, 0.5)',
+                  fontSize: 12, cursor: 'pointer' }}>
+      <span title={row.committed ? 'committed' : row.staged ? 'staged' : 'unstaged'}
+            style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                     direction: 'rtl', textAlign: 'left' }}>{row.path}</span>
+      {/* Staging an already-committed file is meaningless. */}
+      {!row.committed && (
+        <button onClick={e => { e.stopPropagation(); stageRow(row) }}
+                title={row.staged ? 'Unstage' : 'Stage'}
+                style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                         fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+          {row.staged ? '−' : '+'}
+        </button>
+      )}
+    </div>
+  )
 
   const renderSection = (id: SectionId, label: string, sectionRows: Row[]) => {
     if (sectionRows.length === 0) return null
@@ -139,52 +82,6 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
         </div>
         {open && sectionRows.map(renderRow)}
       </>
-    )
-  }
-
-  const renderRow = (row: Row) => {
-    const open = expanded.has(row.key)
-    const patch = patches[row.key]
-    let parsed: any[] = []
-    if (open && patch) { try { parsed = parseDiff(patch, { nearbySequences: 'zip' }) } catch { parsed = [] } }
-    return (
-      <div key={row.key} style={{ borderBottom: '1px solid #2a2a2a' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                      background: 'rgba(37, 37, 38, 0.5)', fontSize: 12 }}>
-          <span onClick={() => toggle(row)} style={{ cursor: 'pointer', width: 12, color: '#888' }}>
-            {open ? '▾' : '▸'}
-          </span>
-          <span title={row.committed ? 'committed' : row.staged ? 'staged' : 'unstaged'}
-                style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
-          <span onClick={() => toggle(row)}
-                style={{ flex: 1, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
-                         whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}
-                title={row.path}>{row.path}</span>
-          {/* Staging an already-committed file is meaningless. */}
-          {!row.committed && (
-            <button onClick={() => stageRow(row)}
-                    title={row.staged ? 'Unstage' : 'Stage'}
-                    style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                             fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
-              {row.staged ? '−' : '+'}
-            </button>
-          )}
-        </div>
-        {open && (
-          <div style={{ overflowX: 'auto' }}>
-            {patch === undefined && <div style={{ padding: 8, color: '#888', fontSize: 11 }}>Loading…</div>}
-            {patch !== undefined && parsed.length === 0 &&
-              <div style={{ padding: 8, color: '#888', fontSize: 11 }}>No textual diff (binary or empty).</div>}
-            {parsed.map((d: any, di: number) => (
-              <Diff key={di} viewType="unified" diffType={d.type} hunks={d.hunks}>
-                {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
-              </Diff>
-            ))}
-          </div>
-        )}
-      </div>
     )
   }
 
