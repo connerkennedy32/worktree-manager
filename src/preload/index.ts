@@ -30,6 +30,11 @@ const api: Api = {
     const h = (_e: unknown, p: string) => cb(p)
     ipcRenderer.on(IPC.statusChanged, h as any)
     return () => ipcRenderer.removeListener(IPC.statusChanged, h as any)
+  },
+  onMenuResetTerminal: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuResetTerminal, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuResetTerminal, h as any)
   }
 }
 contextBridge.exposeInMainWorld('api', api)

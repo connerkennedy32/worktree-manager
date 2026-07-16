@@ -17,6 +17,14 @@ export function App() {
 
   useEffect(() => { init() }, [init])
 
+  // Reset the active terminal when the Terminal › Reset menu item is chosen.
+  useEffect(() => {
+    return window.api.onMenuResetTerminal(() => {
+      const sel = useStore.getState().selected
+      if (sel) resetTerminal(sel)
+    })
+  }, [])
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return
@@ -54,12 +62,6 @@ export function App() {
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selected ?? 'No worktree selected'}
           </span>
-          {selected && (
-            <button onClick={() => resetTerminal(selected)}
-                    title="Kill this terminal's shell and start a fresh one">
-              Reset terminal
-            </button>
-          )}
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
           {selected && <TerminalView />}

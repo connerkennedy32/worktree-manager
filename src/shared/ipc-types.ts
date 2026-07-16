@@ -56,6 +56,7 @@ export interface Api {
   termResize(worktreePath: string, cols: number, rows: number): void
   onTermData(cb: (worktreePath: string, data: string) => void): () => void
   onStatusChanged(cb: (worktreePath: string) => void): () => void
+  onMenuResetTerminal(cb: () => void): () => void
 }
 
 export const IPC = {
@@ -66,5 +67,6 @@ export const IPC = {
   openLazygit: 'term:lazygit',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
-  termData: 'term:data', statusChanged: 'wt:statusChanged'
+  termData: 'term:data', statusChanged: 'wt:statusChanged',
+  menuResetTerminal: 'menu:resetTerminal'
 } as const
