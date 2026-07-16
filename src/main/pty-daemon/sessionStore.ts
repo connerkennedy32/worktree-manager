@@ -12,7 +12,8 @@ export class PtyManager {
   start(worktreePath: string, onData: (data: string) => void) {
     if (this.sessions.has(worktreePath)) return
     const shell = process.env.SHELL || (platform() === 'win32' ? 'powershell.exe' : 'bash')
-    const proc = pty.spawn(shell, [], {
+    const args = platform() === 'win32' ? [] : ['-l']
+    const proc = pty.spawn(shell, args, {
       name: 'xterm-color', cols: 100, rows: 30, cwd: worktreePath, env: process.env as any
     })
     const session: Session = { proc, buffer: '' }

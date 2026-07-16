@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { join } from 'path'
 
-function configDir(): string {
+export function configDir(): string {
   if (process.env.WTM_CONFIG_DIR) return process.env.WTM_CONFIG_DIR
   // lazy require so tests never load electron
   const { app } = require('electron')

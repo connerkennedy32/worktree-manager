@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { homedir } from 'os'
-import { PtyManager } from '../../src/main/terminal/ptyManager'
+import { PtyManager } from '../../src/main/pty-daemon/sessionStore'
 
 let mgr: PtyManager | undefined
 afterEach(() => { mgr?.killAll(); mgr = undefined })

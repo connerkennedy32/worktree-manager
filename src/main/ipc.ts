@@ -5,12 +5,39 @@ import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
 import * as diff from './git/diff'
 import * as config from './config'
-import { PtyManager } from './terminal/ptyManager'
+import { PtyDaemonClient } from './pty-daemon/client'
 import { WatcherManager } from './watcher'
 
-export function registerIpc(win: BrowserWindow) {
-  const ptys = new PtyManager()
-  const watchers = new WatcherManager()
+// ipcMain.handle/on registrations are process-global and can only happen once,
+// but createWindow() (and thus registerIpc) runs again whenever the app is
+// reactivated after all windows were closed (e.g. macOS dock relaunch). So we
+// register handlers only on the first call and just repoint the module-level
+// `win`/`ptys`/`watchers` bindings on subsequent calls — the closures below
+// read these as outer variables, so reassigning them updates all handlers.
+let win: BrowserWindow
+let ptys: PtyDaemonClient
+let watchers: WatcherManager
+let registered = false
+
+// node-pty and chokidar callbacks are async and can still fire after the
+// window that owns them has been closed (e.g. buffered pty output draining
+// after proc.kill()), so every send to the renderer must check the window
+// is still alive.
+function send(channel: string, ...args: unknown[]) {
+  if (!win.isDestroyed()) win.webContents.send(channel, ...args)
+}
+
+export async function registerIpc(w: BrowserWindow) {
+  win = w
+  // Sessions live in the pty-daemon process, not this window — closing (or
+  // quitting) the app must not kill them. Only the file watchers, which are
+  // cheap to recreate, are tied to the window's lifecycle.
+  win.on('closed', () => { watchers.unwatchAll() })
+  if (registered) return
+  registered = true
+
+  ptys = await PtyDaemonClient.connect((p, d) => send(IPC.termData, p, d))
+  watchers = new WatcherManager()
 
   ipcMain.handle(IPC.listRepos, () => config.listRepos())
   ipcMain.handle(IPC.addRepo, (_e, p: string) => config.addRepo(p))
@@ -38,7 +65,7 @@ export function registerIpc(win: BrowserWindow) {
   ipcMain.handle(IPC.commit, (_e, req) => diff.commit(req))
 
   ipcMain.on(IPC.openLazygit, (_e, p: string) => {
-    ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+    ptys.start(p)
     ptys.write(p, 'lazygit\n')
   })
 
@@ -48,21 +75,19 @@ export function registerIpc(win: BrowserWindow) {
     if (ptys.has(p)) {
       // Session survived a renderer reload — replay its scrollback so the fresh
       // xterm shows the existing terminal instead of a blank pane.
-      win.webContents.send(IPC.termData, p, ptys.getBuffer(p))
+      send(IPC.termData, p, ptys.getBuffer(p))
     } else {
-      ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+      ptys.start(p)
     }
     const head = await wt.headPath(p).catch(() => undefined)
-    watchers.watch(p, () => win.webContents.send(IPC.statusChanged, p), head)
+    watchers.watch(p, () => send(IPC.statusChanged, p), head)
   })
   ipcMain.handle(IPC.termReset, (_e, p: string) => {
     // Kill the wedged shell and spawn a fresh one for the same worktree.
     ptys.kill(p)
-    ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+    ptys.start(p)
   })
 
   ipcMain.on(IPC.termInput, (_e, p: string, data: string) => ptys.write(p, data))
   ipcMain.on(IPC.termResize, (_e, p: string, c: number, r: number) => ptys.resize(p, c, r))
-
-  win.on('closed', () => { ptys.killAll(); watchers.unwatchAll() })
 }
