@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useStore } from '../state/store'
 import './sidebar-theme.css'
 
 interface Props {
@@ -12,6 +14,13 @@ interface Props {
 }
 
 export function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger, busy, error, onConfirm, onCancel }: Props) {
+  // Suppress worktree navigation while open, so Cmd+Up/Down can't switch the
+  // worktree out from under a confirmation that names a specific one.
+  useEffect(() => {
+    useStore.getState().pushModal()
+    return () => useStore.getState().popModal()
+  }, [])
+
   return (
     <div onClick={onCancel}
          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',

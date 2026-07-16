@@ -11,6 +11,13 @@ export function NewWorktreeModal({ repoPath, onClose }: { repoPath: string; onCl
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
+  // Suppress worktree navigation while open — Cmd+Up/Down would otherwise fire
+  // while you're typing a branch name.
+  useEffect(() => {
+    useStore.getState().pushModal()
+    return () => useStore.getState().popModal()
+  }, [])
+
   const create = async () => {
     const name = branch.trim()
     if (!name || busy) return

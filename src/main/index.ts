@@ -2,6 +2,7 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './ipc'
 import { buildAppMenu } from './menu'
+import { attachShortcuts } from './shortcuts'
 
 const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
 // Set the dock icon explicitly since dev/preview runs are unpackaged and would
@@ -16,6 +17,7 @@ async function createWindow() {
   })
   await registerIpc(win)
   buildAppMenu(win)
+  attachShortcuts(win)
   if (process.env['ELECTRON_RENDERER_URL']) win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   else win.loadFile(join(__dirname, '../renderer/index.html'))
 }

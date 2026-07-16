@@ -24,20 +24,41 @@ first repo, which reads correctly on screen.
 
 ## Architecture
 
-The shortcut is delivered as an **Electron menu accelerator**, matching the existing
-path for `Cmd+N` (`menu.ts:16`) and `Cmd+Shift+R` (`menu.ts:26`):
+The shortcut is intercepted in the main process via **`before-input-event`**, which
+fires ahead of the renderer and independently of focus:
 
 ```
-menu.ts accelerator → webContents.send → preload bridge → App.tsx useEffect → store.selectRelative
+shortcuts.ts before-input-event → webContents.send → preload bridge → App.tsx useEffect → store.selectRelative
 ```
 
-Electron consumes accelerators before the renderer, so xterm never sees these keys.
-This matters because `TerminalView.tsx:95` focuses the terminal on every selection
-change, meaning the terminal holds focus essentially all the time. A renderer-level
-`keydown` listener would have required a guard in `attachCustomKeyEventHandler`
-(`TerminalView.tsx:68-77`) and would break on Linux/Windows, where `Ctrl+Up` would be
-swallowed and forwarded to the shell as a control code. **`TerminalView.tsx` requires
-no changes.**
+`TerminalView.tsx:95` focuses the terminal on every selection change, so the terminal
+holds focus essentially all the time. Any mechanism that lets the key reach the
+renderer first will lose it to xterm.
+
+### Why not a menu accelerator
+
+The first implementation registered `CmdOrCtrl+Up` / `CmdOrCtrl+Down` as accelerators
+on the menu items, on the assumption that Electron consumes accelerators before the
+renderer. **That assumption is false on macOS.** Chromium offers the key to the
+renderer first, and xterm calls `preventDefault()` on `Cmd+Arrow` while focused, which
+suppresses the accelerator entirely. The shortcut worked only when the sidebar happened
+to hold focus.
+
+Instrumenting both boundaries made this unambiguous: over ~40 presses,
+`before-input-event` fired every time, while the menu `click` handler fired twice —
+exactly the presses where the terminal was not focused.
+
+`before-input-event` runs in the main process before the key is dispatched to the page,
+so it is unaffected by xterm, by focus, and by platform key-handling differences.
+`attachShortcuts` calls `event.preventDefault()`, so the terminal never receives the
+key. **`TerminalView.tsx` requires no changes** — this remains true, but because the
+key is intercepted upstream, not because accelerators bypass the renderer.
+
+The menu items are retained with `registerAccelerator: false`: the accelerator is
+displayed for discoverability and the items still work when clicked, but it is not
+registered as a key handler. Leaving it registered would double-fire — both the
+accelerator and `before-input-event` fire for the same press when the sidebar has
+focus, stepping two worktrees per keystroke.
 
 ## Components
 
@@ -50,19 +71,36 @@ Add two channels to `IPC`: `menuSelectPrev`, `menuSelectNext`. Add matching
 
 Extend the existing `Worktree` submenu (line 13) with a separator and two items:
 
-| Label | Accelerator | Sends |
+| Label | Accelerator (display only) | Sends |
 |---|---|---|
 | Previous Worktree | `CmdOrCtrl+Up` | `IPC.menuSelectPrev` |
 | Next Worktree | `CmdOrCtrl+Down` | `IPC.menuSelectNext` |
 
-Menu placement is deliberate: it makes the shortcut discoverable rather than hidden.
+Both carry `registerAccelerator: false`. Menu placement is deliberate: it makes the
+shortcut discoverable rather than hidden.
 
-### 3. `src/preload/index.ts`
+### 3. `src/main/shortcuts.ts` (new)
+
+`shortcutFor(input, isMac): 'prev' | 'next' | null` — a pure decision function over the
+`before-input-event` input, kept free of `electron` imports so it is unit-testable in
+the node test environment.
+
+It requires the modifier **exclusively**: Cmd and not Ctrl on macOS, Ctrl and not Cmd
+elsewhere, and rejects any press carrying Alt or Shift. This keeps bare arrows (shell
+history, cursor movement) and `Ctrl+Arrow` (a control sequence on macOS) flowing to the
+terminal, and leaves `Cmd+Shift+Arrow` free for future bindings. It also ignores
+`keyUp`, so one press steps exactly one worktree.
+
+`attachShortcuts(win, isMac)` registers the `before-input-event` listener, calls
+`event.preventDefault()` on a match, and sends the corresponding IPC channel. Wired in
+`index.ts` next to `buildAppMenu(win)`.
+
+### 4. `src/preload/index.ts`
 
 Two `on*` bridges alongside the existing `onMenuNewWorktree` / `onMenuResetTerminal`
 (lines 35-44), following the same subscription shape.
 
-### 4. `src/renderer/state/store.ts`
+### 5. `src/renderer/state/store.ts`
 
 Add to `State`:
 
@@ -72,7 +110,7 @@ Add to `State`:
 
 `selectRelative` logic, in order:
 
-1. If `modalOpen > 0`, return.
+1. If `modalOpen > 0` or `openDiff` is set, return.
 2. Let `n = worktrees.length`. If `n === 0`, return.
 3. Find `i = worktrees.findIndex(w => w.path === selected)`.
 4. If `i === -1` (nothing selected, or the selected path is no longer in the list —
@@ -87,7 +125,11 @@ persistence and terminal reattach.
 (`Sidebar.tsx:158-196`) and `App` renders `NewWorktreeModal` (`App.tsx:92`). With a
 boolean, one modal unmounting would clear the guard while another was still open.
 
-### 5. Modal components
+**Why `openDiff` is read directly rather than via `pushModal`:** the diff modal's open
+state already lives in the store as `openDiff`. Having `DiffModal` also push onto the
+counter would duplicate that truth and let the two drift apart.
+
+### 6. Modal components
 
 `ConfirmModal.tsx` and `NewWorktreeModal.tsx` each call `pushModal` on mount and
 `popModal` on unmount via their own `useEffect` with an empty dep array.
@@ -97,14 +139,22 @@ the guard is maintained by the modal itself, and future modals inherit it withou
 anyone having to remember. This replaces the alternative of lifting the scattered
 `pending` / `pendingRepo` / `pickError` / `newRepo` flags into the store.
 
-### 6. `src/renderer/App.tsx`
+### 7. `src/renderer/App.tsx`
 
 One `useEffect` subscribing both channels to `selectRelative(-1)` / `selectRelative(1)`,
 mirroring the existing menu subscriptions at `App.tsx:35-48`.
 
 ## Testing
 
-`selectRelative` is pure store manipulation and is unit-tested in vitest:
+`shortcutFor` is unit-tested in vitest (`tests/main/shortcuts.test.ts`), covering both
+platforms: Cmd+Arrow maps on macOS and Ctrl+Arrow off it; bare arrows, `Ctrl+Arrow` on
+macOS, `Cmd+Arrow` off macOS, non-arrow keys, `keyUp`, and Alt/Shift combinations all
+return null.
+
+`selectRelative` is unit-tested in vitest (`tests/renderer/store-select-relative.test.ts`).
+Note that it is *not* purely in-memory: `select` writes to `localStorage`, which does not
+exist in the `node` test environment, so the test installs a small in-memory
+`localStorage` stub before importing the store. Cases covered:
 
 - moves forward and backward through a multi-worktree list
 - wraps forward from the last worktree to the first
@@ -113,13 +163,16 @@ mirroring the existing menu subscriptions at `App.tsx:35-48`.
 - with no selection: `delta 1` selects the first, `delta -1` selects the last
 - with a stale `selected` path not present in `worktrees`: same as no selection
 - no-ops when `modalOpen > 0`
+- no-ops when `openDiff` is set
 - a single worktree re-selects itself for both deltas
 
 `pushModal` / `popModal`: nested modals keep the guard active until the last one closes.
 
-The menu, IPC, and preload wiring is declarative and verified by running the app:
-confirm both shortcuts switch worktrees while the terminal has focus, that they wrap,
-and that they no-op while a confirm modal is open.
+The `before-input-event`, IPC, and preload wiring cannot be covered by these tests —
+it depends on real key delivery through Electron. It is verified by running the app and
+confirming both shortcuts switch worktrees **while the terminal has focus** (the case
+the original accelerator design failed), that they wrap, and that they no-op while a
+modal is open.
 
 ## Out of Scope
 

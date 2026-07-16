@@ -18,16 +18,24 @@ interface State {
   selected?: string
   openDiff: DiffTarget | null
   setOpenDiff: (t: DiffTarget | null) => void
+  // Count, not a boolean: the sidebar can stack confirm modals, and a boolean
+  // would let one closing modal clear another's guard.
+  modalOpen: number
+  pushModal: () => void
+  popModal: () => void
   init: () => Promise<void>
   refreshWorktrees: () => Promise<void>
   refreshWorktreeList: () => Promise<void>
   refreshStatus: (p: string) => Promise<void>
   select: (p: string) => void
+  selectRelative: (delta: 1 | -1) => void
 }
 
 export const useStore = create<State>((set, get) => ({
-  repos: [], worktrees: [], statuses: {}, openDiff: null,
+  repos: [], worktrees: [], statuses: {}, openDiff: null, modalOpen: 0,
   setOpenDiff: (t) => set({ openDiff: t }),
+  pushModal: () => set(st => ({ modalOpen: st.modalOpen + 1 })),
+  popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
     set({ repos })
@@ -65,5 +73,19 @@ export const useStore = create<State>((set, get) => ({
   // Note: we do NOT call termStart here. The terminal is started by TerminalView
   // once its xterm instance exists and the onTermData handler is bound, so the
   // shell's initial prompt output can never arrive before the renderer is ready.
-  select: (p) => { set({ selected: p }); localStorage.setItem('wtm.selected', p) }
+  select: (p) => { set({ selected: p }); localStorage.setItem('wtm.selected', p) },
+  // Step through the flat worktree list, wrapping at both ends. The list is built
+  // in `repos` order and the sidebar groups by repo in that same order, so this
+  // walks the sidebar top-to-bottom as it appears on screen.
+  selectRelative: (delta) => {
+    const { worktrees, selected, modalOpen, openDiff, select } = get()
+    if (modalOpen > 0 || openDiff) return
+    const n = worktrees.length
+    if (n === 0) return
+    const i = worktrees.findIndex(w => w.path === selected)
+    // i === -1 covers both "nothing selected yet" and a `selected` path that has
+    // since disappeared from the list, which the 3s refresh above can produce.
+    if (i === -1) return select(worktrees[delta === 1 ? 0 : n - 1].path)
+    select(worktrees[(i + delta + n) % n].path)
+  }
 }))

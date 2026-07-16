@@ -41,6 +41,16 @@ const api: Api = {
     const h = () => cb()
     ipcRenderer.on(IPC.menuNewWorktree, h as any)
     return () => ipcRenderer.removeListener(IPC.menuNewWorktree, h as any)
+  },
+  onMenuSelectPrev: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuSelectPrev, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuSelectPrev, h as any)
+  },
+  onMenuSelectNext: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuSelectNext, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuSelectNext, h as any)
   }
 }
 contextBridge.exposeInMainWorld('api', api)
