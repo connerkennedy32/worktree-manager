@@ -8,17 +8,31 @@
   color: #d4d4d4;
   border-collapse: collapse;
   width: 100%;
+  /* Fixed layout is what actually forbids horizontal scrolling: without it the
+     table sizes to its widest line and overflows however the cells wrap. In split
+     view it also keeps the two code columns an even 50/50. */
+  table-layout: fixed;
 }
 .diff td { border: 0; }
 .diff-gutter {
   background: #1e1e1e;
   color: #6b6b6b;
-  min-width: 2.2em;
   padding: 0 6px;
   text-align: right;
+  /* Fixed layout no longer lets the gutter grow to fit its content, so line
+     numbers must never wrap — they'd silently double a row's height. */
+  white-space: nowrap;
 }
-.diff-gutter-col { width: 2.2em; }
-.diff-code { padding: 0 8px; white-space: pre; }
+/* Wide enough for a five-digit line number; min-width would be ignored now. */
+.diff-gutter-col { width: 4em; }
+/* Wrap rather than scroll. `anywhere` splits a long token only when it cannot fit
+   otherwise, so ordinary code still breaks at word boundaries — unlike break-all,
+   which chops mid-identifier on every line. */
+.diff-code {
+  padding: 0 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 .diff-code-insert { background: rgba(70, 149, 74, 0.18); }
 .diff-gutter-insert { background: rgba(70, 149, 74, 0.25); }
