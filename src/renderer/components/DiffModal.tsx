@@ -4,6 +4,7 @@ import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
 import { useChangedFiles, codeColor, reconcileTarget, type Row } from './changed-files'
+import { languageOf, tokenizeHunks } from './diff-tokens'
 
 type ViewType = 'unified' | 'split'
 
@@ -77,13 +78,25 @@ export function DiffModal() {
     await refreshStatus(selected)
   }
 
-  if (!openDiff) return null
-
   // A refetch of the SAME file keeps showing the old text (no "Loading…" flicker
   // on every status tick); switching files shows "Loading…" immediately.
   const patchText = patch && patch.key === patchKey ? patch.text : undefined
-  let parsed: any[] = []
-  if (patchText) { try { parsed = parseDiff(patchText, { nearbySequences: 'zip' }) } catch { parsed = [] } }
+  const parsed = useMemo<any[]>(() => {
+    if (!patchText) return []
+    try { return parseDiff(patchText, { nearbySequences: 'zip' }) } catch { return [] }
+  }, [patchText])
+
+  // getFileDiff fetches exactly one file, so the open row's path names the
+  // language for every entry in `parsed`.
+  const language = openDiff ? languageOf(openDiff.path) : undefined
+  // Tokenizing walks every line of both sides, so it must not rerun on unrelated
+  // renders — hovering a rail row, or a status tick that refetches identical
+  // text. `parsed` is memoized on the patch text, which makes it a stable key.
+  const tokens = useMemo(
+    () => parsed.map(d => tokenizeHunks(d.hunks, language)),
+    [parsed, language])
+
+  if (!openDiff) return null
 
   const renderRailRow = (row: Row) => {
     const active = row.key === openDiff.key
@@ -205,7 +218,7 @@ export function DiffModal() {
               {patchText !== undefined && parsed.length === 0 &&
                 <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No textual diff (binary or empty).</div>}
               {parsed.map((d: any, di: number) => (
-                <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks}>
+                <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks} tokens={tokens[di]}>
                   {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
                 </Diff>
               ))}
