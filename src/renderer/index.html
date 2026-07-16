@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <title>Worktree Manager</title>
     <style>
-      html, body, #root { margin: 0; padding: 0; height: 100%; background: #252526; }
+      html, body, #root { margin: 0; padding: 0; height: 100%; }
+      /* Base color lives only on body; html/#root stay transparent so the
+         fixed z-index:-1 backdrop layers in App.tsx are not painted over. */
+      body { background: #1b1e24; }
       *, *::before, *::after { box-sizing: border-box; }
     </style>
   </head>

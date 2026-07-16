@@ -60,7 +60,7 @@ export function Sidebar() {
 
   return (
     <div style={{ width: 260, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column',
-                  background: '#1e1e1e', color: '#ddd', fontFamily: 'system-ui', fontSize: 13 }}>
+                  background: 'rgba(30, 30, 30, 0.55)', color: '#ddd', fontFamily: 'system-ui', fontSize: 13 }}>
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>

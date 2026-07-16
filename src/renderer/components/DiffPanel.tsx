@@ -93,7 +93,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   if (collapsed) {
     return (
       <div onClick={onToggle} title="Show changes"
-           style={{ width: 34, borderLeft: '1px solid #333', background: '#1e1e1e', color: '#ddd',
+           style={{ width: 34, borderLeft: '1px solid #333', background: 'rgba(30, 30, 30, 0.55)', color: '#ddd',
                     cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
                     paddingTop: 10, gap: 8, flexShrink: 0, fontFamily: 'system-ui' }}>
         <span style={{ fontSize: 14 }}>‹</span>
@@ -105,7 +105,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   }
 
   return (
-    <div style={{ width, borderLeft: '1px solid #333', background: '#1e1e1e', color: '#d4d4d4',
+    <div style={{ width, borderLeft: '1px solid #333', background: 'rgba(30, 30, 30, 0.55)', color: '#d4d4d4',
                   display: 'flex', flexDirection: 'column', flexShrink: 0, fontFamily: 'system-ui' }}>
       <div style={{ padding: '6px 10px', borderBottom: '1px solid #333', display: 'flex',
                     alignItems: 'center', gap: 8, fontSize: 12 }}>
@@ -128,7 +128,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
           return (
             <div key={row.key} style={{ borderBottom: '1px solid #2a2a2a' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                            background: '#252526', fontSize: 12 }}>
+                            background: 'rgba(37, 37, 38, 0.5)', fontSize: 12 }}>
                 <span onClick={() => toggle(row)} style={{ cursor: 'pointer', width: 12, color: '#888' }}>
                   {open ? '▾' : '▸'}
                 </span>

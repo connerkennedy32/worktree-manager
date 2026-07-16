@@ -50,7 +50,7 @@ export function TerminalView() {
       container.style.inset = '0'
       wrap.appendChild(container)
       const term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 13,
-        theme: { background: '#1e1e1e' }, cursorBlink: true })
+        allowTransparency: true, theme: { background: 'rgba(0, 0, 0, 0)' }, cursorBlink: true })
       const fit = new FitAddon(); term.loadAddon(fit)
       term.onData(d => window.api.termInput(selected, d))
       term.open(container)
@@ -82,5 +82,5 @@ export function TerminalView() {
     return () => ro.disconnect()
   }, [selected])
 
-  return <div ref={wrapRef} style={{ position: 'relative', height: '100%', width: '100%', background: '#1e1e1e' }} />
+  return <div ref={wrapRef} style={{ position: 'relative', height: '100%', width: '100%' }} />
 }
