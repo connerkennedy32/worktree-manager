@@ -123,9 +123,28 @@ calls `setOpenDiff(row)`. Row-list derivation comes from `useChangedFiles`.
 - Patch present but `parseDiff` yields nothing (binary or empty): "No textual diff
   (binary or empty)." — same copy as today.
 - `parseDiff` throws: caught, treated as the empty case, as today.
-- The open file disappears from the file list (e.g. staged away, or status refreshed
-  out from under it): the modal closes via `setOpenDiff(null)` rather than rendering
-  a stale diff.
+- The open file's row key disappears from the file list: reconcile by path rather
+  than by key. Staging flips a row's key (`a.ts:w` → `a.ts:s`), so a vanished key
+  usually means the file moved sides, not that it left — follow it, keeping the modal
+  open on what the user is reading. Close via `setOpenDiff(null)` only when no row
+  for that path remains at all (reverted, checked out away).
+
+  This supersedes an earlier "close whenever the key disappears" design, which closed
+  the modal on every stage — the exact thing staging-from-the-modal exists to avoid.
+  Reconciliation is a pure function, `reconcileTarget(open, rows)`, and is the one
+  piece of this feature's logic covered by unit tests.
+
+- Reconciliation must not run against a list that hasn't loaded, or a fresh worktree
+  selection would close the modal before its committed files arrive. `useChangedFiles`
+  exposes a `loaded` flag for this; an empty row list therefore means "no changes",
+  never "not yet fetched".
+
+- The patch cache is a single entry keyed by worktree **and** row key
+  (`${worktree}\0${rowKey}`), refetched whenever `status` changes. Row keys repeat
+  across worktrees of one repo, so a bare row key would serve one worktree's diff for
+  another's file; and because the modal never unmounts, a stale entry would otherwise
+  outlive both the close and the worktree switch. Keying on `status` also means an
+  open diff tracks edits on disk instead of freezing.
 
 ## Testing
 
