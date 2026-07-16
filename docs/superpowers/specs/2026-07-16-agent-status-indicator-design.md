@@ -53,6 +53,35 @@ Split into two units so the logic is testable without PTYs:
 
 The watcher itself only wires these to a timer and the broadcast.
 
+### Matching a `claude` process
+
+Observed `ps -axo pid,ppid,comm` output on this machine rules out a naive
+substring match. Three real shapes:
+
+```
+15820 11275 claude                                          <- interactive, shell-launched
+54405 54052 /Users/connerkennedy/.local/bin/claude          <- comm is an absolute path
+22867 22772 claude bg-pty-host                              <- comm contains spaces
+77291     1 /Users/connerkennedy/.local/share/claude/versions/2.1.201
+```
+
+Consequences:
+
+- **Parse pid, ppid, and rest-of-line.** `comm` can contain spaces, so
+  splitting the line on whitespace corrupts it. Take the first two
+  whitespace-separated fields as numbers; everything after is `comm`.
+- **Match on `basename(firstToken(comm)) === 'claude'`.** This catches the
+  bare, absolute-path, and space-suffixed forms.
+- **The version-numbered form is deliberately not matched.** Every such
+  process has `ppid 1` — they are Claude's own daemon/background
+  infrastructure, reparented to launchd, and sit in a subtree the descendant
+  walk never enters. Matching them would risk lighting up every row from a
+  single unrelated daemon.
+
+A shell-launched `claude` is a true descendant of the PTY's shell (verified:
+`claude` 15820 → `-zsh` 11275), so the descendant walk is sound for the
+interactive case that matters.
+
 Match `claude` only. Widening the match later is a one-line change; each extra name is another chance for a false positive.
 
 ### Transport
