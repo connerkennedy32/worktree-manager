@@ -11,7 +11,7 @@ export function App() {
   const init = useStore(s => s.init)
   const selected = useStore(s => s.selected)
   const [diffCollapsed, setDiffCollapsed] = useState(false)
-  const [diffWidth, setDiffWidth] = useState(460)
+  const [diffWidth, setDiffWidth] = useState(MIN_DIFF_WIDTH)
   const dragging = useRef(false)
 
   useEffect(() => { init() }, [init])
