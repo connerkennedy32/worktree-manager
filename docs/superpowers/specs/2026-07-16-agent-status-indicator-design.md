@@ -2,131 +2,172 @@
 
 ## Problem
 
-The sidebar shows what git knows about each worktree — branch, main-vs-branch icon, uncommitted change count — but nothing about what is happening *inside* the worktree's terminal. When an agent runs in several worktrees at once, there is no way to tell from the left pane which one is churning and which one has stopped and is waiting for input. You have to click through tabs to find out.
+The sidebar shows what git knows about each worktree — branch, main-vs-branch icon, uncommitted change count — but nothing about what is happening *inside* the worktree's terminal. When an agent runs in several worktrees at once, there is no way to tell from the left pane which one is churning, which one is blocked asking permission, and which one has finished. You have to click through tabs to find out.
 
 ## Goal
 
-Show, per sidebar row, whether an agent is running in that worktree's terminal and whether it is currently working or waiting on the user.
+Show, per sidebar row, what the agent in that worktree is doing — and make any visible dot mean "this needs me".
 
-## Why two signals
+## Approach: ask Claude, don't guess
 
-The daemon spawns a plain login shell (`sessionStore.ts:14-18`); the user types `claude` themselves. Nothing in the app records that an agent exists, so presence must be discovered.
+An earlier revision of this spec inferred status from the outside: walk the process tree for a `claude` descendant, and treat "PTY emitted output in the last 750ms" as *working*, on the theory that the thinking spinner repaints continuously.
 
-Two independent signals, neither sufficient alone:
+That is abandoned. Claude Code has a **hooks** system: it runs a command of our choosing on lifecycle events and pipes it a JSON payload. It will tell us exactly what it is doing. No thresholds, no spinner heuristics, no tuning.
 
-- **Presence** — does the PTY have a descendant process named `claude`. Cannot distinguish working from waiting.
-- **Output activity** — has the PTY emitted data recently. Cannot distinguish an idle shell from a waiting agent.
+This mirrors how Superset (`github.com/superset-sh/superset`) solves the same problem in the same shape of app. Notably, their terminal-title scanner *strips* spinner glyphs as noise — the exact signal the old design depended on.
 
-Gated together they resolve all three states.
+Verified against the hooks reference (https://code.claude.com/docs/en/hooks.md):
 
-Output activity works as a proxy for "working" because of a specific property of Claude Code: while thinking it renders an animated spinner and elapsed-time counter that repaint continuously, so output never goes quiet. Sitting at a prompt awaiting input, it emits nothing.
+- `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `Stop`, `StopFailure`, `SessionStart`, `SessionEnd` are all real events.
+- Every payload carries `hook_event_name` and `session_id` on stdin.
+- **Hook commands inherit environment variables from the shell that launched `claude`.** This is the linchpin: it lets a hook identify which terminal it came from, so a manually-typed `claude` reports in without the app launching it.
+
+### Why an env var and not `cwd`
+
+The payload includes `cwd`, which is tempting since our sessions are keyed by worktree path. But `cwd` follows the user — one `cd` and the mapping breaks. An injected identifier is stable for the life of the PTY.
+
+The identifier is an **opaque id, not the path**. The hook script is bash assembling JSON; a path is arbitrary text that would need escaping (quotes, backslashes) to be embedded safely. An opaque id sidesteps escaping entirely. The daemon maps id → path.
 
 ## States
 
-| State | Condition | Meaning |
-|---|---|---|
-| `none` | no `claude` descendant | no agent in this worktree |
-| `working` | `claude` present **and** `now - lastDataAt < 750ms` | agent is churning |
-| `waiting` | `claude` present, output quiet | agent is blocked on you |
+The daemon tracks a raw status per worktree, derived from the last event:
 
-`waiting` is the actionable state: it means the tab wants your attention.
+| Event | Raw status | Meaning |
+|---|---|---|
+| `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure` | `working` | agent is churning |
+| `PermissionRequest` | `permission` | blocked asking to run something |
+| `Stop` | `done` | turn finished |
+| `StopFailure` | `failed` | turn died on an API error |
+| `SessionEnd` | `none` | agent gone |
+| `SessionStart` | *(ignored)* | agent booted but is idle awaiting input — not a working state, and nothing to act on |
+
+`PostToolUse` maps to `working` so a long multi-tool turn keeps reporting rather than decaying. `PostToolUseFailure` also maps to `working`: a failed tool call does not end the turn.
+
+### Display, with seen-gating
+
+The renderer derives what to draw from the raw status plus a per-worktree `seenAt` (updated when you select that worktree, persisted in `localStorage`):
+
+| Raw | Dot |
+|---|---|
+| `working` | green, pulsing |
+| `permission` | amber, pulsing |
+| `failed` | red, static |
+| `done` **and** `lastEventAt > seenAt` | grey, static |
+| `done` **and** already seen | *nothing* |
+| `none` | *nothing* |
+
+Only `done` is seen-gated. `permission` and `failed` are live states that must persist until actually resolved — visiting the tab does not un-block a permission prompt.
+
+The payoff: any visible dot means unhandled. Finishing a turn lights the row; visiting it clears the row.
 
 ## Architecture
 
-Detection lives in the daemon. It owns the PTYs and their pids, it outlives the Electron app, and it is the only place where both signals exist.
+### 1. Hook installation — `src/main/agent-hooks/install.ts` (new, main process)
 
-### Detection — `src/main/pty-daemon/agentWatcher.ts` (new)
+On app start:
 
-`Session` (`sessionStore.ts:4`) gains `lastDataAt: number`, stamped in the existing `proc.onData` handler (`sessionStore.ts:20`). One assignment; the handler already runs on every chunk.
+1. Write the hook script to `configDir()/notify-hook.sh`, `chmod 0755`.
+2. Merge our hook entries into `~/.claude/settings.json`.
 
-Every 2s the watcher:
+Merging is the risky part — this is the user's global config and must never be clobbered:
 
-1. Runs one `ps -axo pid,ppid,comm` for **all** sessions — flat cost regardless of worktree count.
-2. Builds a child→parent map from the output.
-3. For each session, walks descendants of `proc.pid` for a command matching `claude`.
-4. Resolves each session to `none` / `working` / `waiting` per the table above.
+- Read and parse; **on any parse error, abort and log**. Never overwrite a file we could not read.
+- Back up once to `settings.json.wtm-backup` if no backup exists.
+- Identify our entries by the script path. Remove stale ones, then append current ones. Preserve every other hook untouched.
+- Write atomically: temp file in the same directory, then `rename`.
 
-Split into two units so the logic is testable without PTYs:
+**Scope caveat:** `~/.claude/settings.json` applies to *every* project, so this script runs on every `claude` invocation anywhere on the machine. It must therefore be near-free and silent when it is not ours — hence the env-var guard as the very first line.
 
-- `parseProcessTable(psOutput: string): ProcEntry[]` — pure parse.
-- `resolveStatus(entries, rootPid, lastDataAt, now): AgentStatus` — pure decision.
+### 2. Env injection — `sessionStore.ts`
 
-The watcher itself only wires these to a timer and the broadcast.
-
-### Matching a `claude` process
-
-Observed `ps -axo pid,ppid,comm` output on this machine rules out a naive
-substring match. Three real shapes:
+`PtyManager.start` generates an opaque id per session and injects:
 
 ```
-15820 11275 claude                                          <- interactive, shell-launched
-54405 54052 /Users/connerkennedy/.local/bin/claude          <- comm is an absolute path
-22867 22772 claude bg-pty-host                              <- comm contains spaces
-77291     1 /Users/connerkennedy/.local/share/claude/versions/2.1.201
+WTM_TERMINAL_ID=<uuid>
+WTM_HOOK_SOCKET=<configDir()/agent-hook.sock>
 ```
 
-Consequences:
+`Session` gains `id`. The daemon holds an `id → worktreePath` map.
 
-- **Parse pid, ppid, and rest-of-line.** `comm` can contain spaces, so
-  splitting the line on whitespace corrupts it. Take the first two
-  whitespace-separated fields as numbers; everything after is `comm`.
-- **Match on `basename(firstToken(comm)) === 'claude'`.** This catches the
-  bare, absolute-path, and space-suffixed forms.
-- **The version-numbered form is deliberately not matched.** Every such
-  process has `ppid 1` — they are Claude's own daemon/background
-  infrastructure, reparented to launchd, and sit in a subtree the descendant
-  walk never enters. Matching them would risk lighting up every row from a
-  single unrelated daemon.
+### 3. The hook script
 
-A shell-launched `claude` is a true descendant of the PTY's shell (verified:
-`claude` 15820 → `-zsh` 11275), so the descendant walk is sound for the
-interactive case that matters.
+```bash
+#!/bin/bash
+# wtm-agent-hook — reports Claude Code lifecycle events to Worktree Manager.
+# Installed in the user's global settings, so it runs for every `claude`
+# everywhere. Exit immediately unless launched from one of our terminals.
+[ -z "$WTM_TERMINAL_ID" ] && exit 0
+[ -S "$WTM_HOOK_SOCKET" ] || exit 0
 
-Match `claude` only. Widening the match later is a one-line change; each extra name is another chance for a false positive.
+EVENT=$(cat | grep -oE '"hook_event_name"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+# Never guess an event on a parse failure: a wrong "Stop" would falsely clear
+# a working indicator. Dropping the event is always safer.
+[ -z "$EVENT" ] && exit 0
 
-### Transport
-
-New `ServerMessage` variant in `protocol.ts`:
-
-```ts
-| { type: 'agentStatus'; path: string; status: AgentStatus }
+curl -sS --unix-socket "$WTM_HOOK_SOCKET" \
+  -X POST -H 'Content-Type: application/json' \
+  -d "{\"id\":\"$WTM_TERMINAL_ID\",\"event\":\"$EVENT\"}" \
+  --connect-timeout 1 --max-time 2 \
+  http://localhost/hook >/dev/null 2>&1
+exit 0
 ```
 
-`AgentStatus = 'none' | 'working' | 'waiting'`, declared in `shared/ipc-types.ts` alongside `WorktreeStatus`.
+Both `WTM_TERMINAL_ID` and `EVENT` are constrained values (a uuid we generated; an event name matched by regex), so embedding them in JSON needs no escaping.
 
-Broadcast **only on change** — a stable tab costs zero traffic. On client connect the daemon sends the current status for every live session, so a reloaded window is not blank until the next transition.
+The script always `exit 0` — a hook that fails must never disturb the user's Claude session.
 
-`client.ts` forwards to the renderer over a new IPC channel, following the existing terminal-channel pattern (`ipc-types.ts:68-74`, `88-91`).
+### 4. Transport — a second unix socket
 
-### Renderer
+The existing daemon socket speaks length-prefixed JSON frames, not HTTP, so the hook endpoint gets its own socket at `configDir()/agent-hook.sock` running `http.createServer`.
 
-`store.ts` gains `agentStatuses: Record<string, AgentStatus>`, mirroring the existing `statuses` map (`store.ts:69-72`). Populated from the pushed event. It does **not** join the 3s poll loop at `store.ts:49` — that loop only refreshes the selected worktree, whereas this indicator is needed on every row, and the push already covers it.
+Verified working: macOS ships curl 8.7.1 with `--unix-socket`, and a Node HTTP server bound to a socket path receives the POST.
 
-`Sidebar.tsx` renders `<AgentDot status={...}/>` at the leading edge next to `MainDotIcon`/`BranchIcon` (line 134), clear of the right-side badge cluster (lines 142-148) where the change-count badge and hover-✕ already compete for space.
+A unix socket rather than a localhost TCP port: nothing is exposed on the network, no port to allocate or collide, and filesystem permissions gate access.
 
-- `working` — pulsing dot
-- `waiting` — static dim dot
-- `none` — renders nothing
+### 5. The `ps` backstop
 
-The pulse respects `prefers-reduced-motion`, falling back to a solid color so the state stays legible without animation. Styles go in `sidebar-theme.css` beside `.wt-badge`.
+Hooks are events, so a *missing* event is invisible. If Claude is `SIGKILL`ed mid-turn, `SessionEnd` never fires and the row would sit at `working` forever. Superset has exactly this bug: their binding is only cleared on terminal exit.
 
-## Known weakness
+So a reduced version of the old process check survives, in a purely corrective role: every 2s, if a worktree's raw status is not `none` and its PTY has **no `claude` descendant**, force it to `none`.
 
-`working` rests on Claude Code repainting continuously. If it ever works while emitting nothing for >750ms, the dot briefly reads `waiting`.
+It can only *clear* state, never create it. Hooks remain the sole source of positive status.
 
-This is the benign direction: it self-corrects on the next repaint, and the failure is a momentary flicker rather than a wrong tab. The 750ms threshold is the knob if it proves twitchy in practice.
+Two consequences worth stating:
 
-Output activity also fires on user keystroke echo, which would read as `working` while typing. Harmless — you are looking at that tab.
+- **It only polls when something is active.** If every worktree is `none`, no `ps` runs at all — the idle machine does nothing.
+- The process-matching rules are unchanged from the old design and still apply, because `ps` output is still `ps` output:
+  - Parse pid, ppid, and **rest-of-line** — `comm` can contain spaces (`claude bg-pty-host`).
+  - Match `basename(firstToken(comm)) === 'claude'` — `comm` can be an absolute path.
+  - Do **not** match the versioned form (`.../versions/2.1.201`). Those are Claude's own daemon processes, reparented to launchd (`ppid 1`), outside any PTY subtree.
+
+### 6. Renderer
+
+`store.ts` gains `agentStatuses: Record<string, AgentReport>` where `AgentReport = { status: RawStatus; at: number }`, plus `seenAt: Record<string, number>` persisted to `localStorage`. `select()` stamps `seenAt[path] = Date.now()`.
+
+Push-driven from the daemon; it does **not** join the 3s poll loop. On init the renderer fetches the current map once, since `registerIpc` connects the daemon client only once (`ipc.ts:37`) and a window reload would otherwise miss the connect-time snapshot.
+
+`Sidebar.tsx` renders `<AgentDot/>` at the leading edge beside `MainDotIcon`/`BranchIcon`, clear of the right-side badge cluster. The dot always occupies a fixed-width slot even when empty, so a starting agent never shifts row labels sideways.
+
+Pulses respect `prefers-reduced-motion`; colour alone must carry the state when motion is off. Colour alone is also not the only channel — each state sets a `title`, so the states remain distinguishable without colour vision.
+
+## Known weaknesses
+
+- **Hook latency.** Each event runs a bash script and a curl inside Claude's turn. Over a unix socket this is sub-millisecond, and the timeouts are tight (1s connect / 2s total), but it is not free. The hooks config supports `"async": true`, which is the obvious follow-up if it ever shows; it is not used initially because its delivery semantics are unverified.
+- **Global config.** We modify the user's `~/.claude/settings.json`. The env-var guard makes the script inert elsewhere, but the entries are still there and must be removable.
+- **Claude only.** Other agents have their own hook schemas. The daemon's event→status mapping is the seam where another agent would slot in.
+- **Fresh install ordering.** Hooks are registered at app start; a `claude` already running in a PTY from a previous session will not have them until it restarts.
 
 ## Testing
 
-- `parseProcessTable` — against captured real `ps -axo pid,ppid,comm` output, including the header line and commands containing spaces.
-- `resolveStatus` — fabricated process tables covering: no descendants; `claude` as a direct child; `claude` nested under an intermediate process; a non-agent descendant; recent vs. stale `lastDataAt` at the 750ms boundary.
-- Change-only broadcast — repeated identical resolutions emit one message.
-- End-to-end in the real app: start `claude` in one worktree, confirm the dot pulses; let it finish, confirm it goes static; exit, confirm it disappears; confirm an untouched worktree's row never lights up.
+- Event→status mapping and seen-gating: pure functions, unit-tested.
+- `ps` parsing and descendant walk: pure, tested against captured real output (spaces, absolute paths, the version-numbered decoy, cyclic parent chains).
+- settings.json merge: unit-tested against a populated file with pre-existing user hooks, a malformed file (must abort, not clobber), and repeated installs (must be idempotent).
+- The hook script itself: exercised by piping a payload with and without `WTM_TERMINAL_ID` set.
+- End-to-end in the real app: start `claude`, confirm green pulse; trigger a permission prompt, confirm amber; approve and finish, confirm grey; visit the tab, confirm it clears; `kill -9` the agent mid-turn, confirm the backstop clears it.
 
 ## Out of scope
 
-- Configurable agent-name list (YAGNI for a one-name match).
+- Completion chimes and dock badges (Superset has both; separate feature).
+- Agents other than `claude`.
 - Agent status anywhere but the sidebar.
-- Distinguishing *why* an agent is waiting (permission prompt vs. finished).
+- Aggregating status per repo group.
