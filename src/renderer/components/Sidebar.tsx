@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { NewWorktreeForm } from './NewWorktreeForm'
 import { ConfirmModal } from './ConfirmModal'
@@ -12,6 +12,15 @@ export function Sidebar() {
   const [pickError, setPickError] = useState<string>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const tipTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  const showTip = (e: React.MouseEvent, text: string) => {
+    const x = e.clientX + 14, y = e.clientY + 12
+    clearTimeout(tipTimer.current)
+    tipTimer.current = setTimeout(() => setTip({ text, x, y }), 120)
+  }
+  const hideTip = () => { clearTimeout(tipTimer.current); setTip(null) }
 
   const addRepo = async () => {
     try {
@@ -93,7 +102,8 @@ export function Sidebar() {
         {worktrees.map(w => {
           const count = statuses[w.path]?.changeCount ?? 0
           return (
-            <div key={w.path} onClick={() => select(w.path)} title={w.path}
+            <div key={w.path} onClick={() => select(w.path)}
+                 onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}
                  style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
                           background: selected === w.path ? '#094771' : 'transparent' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -151,6 +161,16 @@ export function Sidebar() {
           onConfirm={() => setPickError(undefined)}
           onCancel={() => setPickError(undefined)}
         />
+      )}
+
+      {tip && (
+        <div style={{ position: 'fixed', left: tip.x, top: tip.y, zIndex: 2000, pointerEvents: 'none',
+                      background: '#2d2d2d', color: '#ddd', border: '1px solid #444', borderRadius: 4,
+                      padding: '3px 8px', fontSize: 11, fontFamily: 'system-ui', maxWidth: 520,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+          {tip.text}
+        </div>
       )}
     </div>
   )
