@@ -1,9 +1,30 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
 import { NewWorktreeForm } from './NewWorktreeForm'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
+import './sidebar-theme.css'
+
+function MainDotIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
+      <circle cx="5" cy="5" r="4" fill="currentColor" />
+    </svg>
+  )
+}
+
+function BranchIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
+      <circle cx="2.5" cy="2.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="2.5" cy="7.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2.5 4.1 V7.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M2.5 4.1 C2.5 6 4 6 5.5 6" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <circle cx="7" cy="6" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
 
 export function Sidebar() {
   const { worktrees, statuses, selected, select, refreshWorktrees, repos } = useStore()
@@ -67,63 +88,67 @@ export function Sidebar() {
     }
   }
 
+  // Worktrees are already produced repo-by-repo (see refreshWorktreeList), so
+  // grouping here just visually separates what's already in repo order.
+  const groups = useMemo(() => {
+    return repos.map(repo => ({
+      repo,
+      worktrees: worktrees.filter(w => w.repoName === repo.split('/').filter(Boolean).pop()),
+    }))
+  }, [repos, worktrees])
+
   return (
     <div style={{ width: 260, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column',
                   background: 'rgba(30, 30, 30, 0.55)', color: '#ddd', fontFamily: 'system-ui', fontSize: 13 }}>
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
-        <button onClick={addRepo} style={{ fontSize: 11 }}>+ Repo</button>
+        <button className="wt-btn wt-btn-ghost" onClick={addRepo}>+ Repo</button>
       </div>
-      {repos.length > 0 && (
-        <div style={{ borderBottom: '1px solid #333', padding: '4px 0' }}>
-          {repos.map(repo => {
-            const name = repo.split('/').filter(Boolean).pop() ?? repo
-            return (
-              <div key={repo} title={repo}
-                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 10px',
-                            fontSize: 11, color: '#9aa' }}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </span>
-                <span title="Disconnect repo" onClick={() => setPendingRepo(repo)}
-                      style={{ color: '#888', cursor: 'pointer' }}>✕</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {worktrees.length === 0 && (
           <div style={{ padding: 10, color: '#888', fontSize: 12 }}>
             No repos yet. Click "+ Repo" to add a git repository.
           </div>
         )}
-        {worktrees.map(w => {
-          const count = statuses[w.path]?.changeCount ?? 0
+        {groups.map(({ repo, worktrees: repoWorktrees }) => {
+          const name = repo.split('/').filter(Boolean).pop() ?? repo
           return (
-            <div key={w.path} onClick={() => select(w.path)}
-                 onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}
-                 style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-                          gap: 6, justifyContent: 'space-between',
-                          background: selected === w.path ? '#094771' : 'transparent' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {w.isMain ? '● ' : '▸ '}{w.path.split('/').filter(Boolean).pop()}
+            <div key={repo}>
+              <div className="wt-repo-header" title={repo}>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {name}
                 </span>
-                <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
-                               whiteSpace: 'nowrap', paddingLeft: 14 }}>
-                  {w.branch}
-                </span>
+                <span className="wt-repo-disconnect" title="Disconnect repo"
+                      onClick={() => setPendingRepo(repo)}>✕</span>
               </div>
-              <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                {count > 0 && <span style={{ background: '#c93', color: '#000', borderRadius: 8,
-                                             padding: '0 6px', fontSize: 11 }}>{count}</span>}
-                {!w.isMain && <span title="Remove worktree" onClick={(e) => {
-                  e.stopPropagation()
-                  setError(undefined); setPending(w)
-                }} style={{ color: '#888', cursor: 'pointer' }}>✕</span>}
-              </span>
+              {repoWorktrees.map(w => {
+                const count = statuses[w.path]?.changeCount ?? 0
+                return (
+                  <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}`}
+                       onClick={() => select(w.path)}
+                       onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6,
+                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {w.isMain ? <MainDotIcon /> : <BranchIcon />}
+                        {w.path.split('/').filter(Boolean).pop()}
+                      </span>
+                      <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
+                                     whiteSpace: 'nowrap', paddingLeft: 16 }}>
+                        {w.branch}
+                      </span>
+                    </div>
+                    <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+                      {count > 0 && <span className="wt-badge">{count}</span>}
+                      {!w.isMain && <span className="wt-row-remove" title="Remove worktree" onClick={(e) => {
+                        e.stopPropagation()
+                        setError(undefined); setPending(w)
+                      }}>✕</span>}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )
         })}
@@ -172,7 +197,7 @@ export function Sidebar() {
 
       {tip && (
         <div style={{ position: 'fixed', left: tip.x, top: tip.y, zIndex: 2000, pointerEvents: 'none',
-                      background: '#2d2d2d', color: '#ddd', border: '1px solid #444', borderRadius: 4,
+                      background: '#2d2d2d', color: '#ddd', border: '1px solid #444', borderRadius: 6,
                       padding: '3px 8px', fontSize: 11, fontFamily: 'system-ui', maxWidth: 520,
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>

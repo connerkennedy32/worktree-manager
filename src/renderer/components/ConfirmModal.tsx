@@ -1,3 +1,5 @@
+import './sidebar-theme.css'
+
 interface Props {
   title: string
   body: string
@@ -22,10 +24,9 @@ export function ConfirmModal({ title, body, confirmLabel = 'Confirm', danger, bu
         <div style={{ color: '#bbb', lineHeight: 1.5, marginBottom: 16 }}>{body}</div>
         {error && <div style={{ color: '#f28b82', marginBottom: 12, whiteSpace: 'pre-wrap' }}>{error}</div>}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onCancel} disabled={busy}>Cancel</button>
-          <button onClick={onConfirm} disabled={busy}
-                  style={{ background: danger ? '#a1260d' : '#0e639c', color: '#fff', border: 'none',
-                           padding: '4px 12px', borderRadius: 4, cursor: busy ? 'default' : 'pointer' }}>
+          <button className="wt-btn wt-btn-ghost" onClick={onCancel} disabled={busy}>Cancel</button>
+          <button className={`wt-btn ${danger ? 'wt-btn-danger' : 'wt-btn-primary'}`}
+                  onClick={onConfirm} disabled={busy}>
             {busy ? 'Working…' : confirmLabel}
           </button>
         </div>
