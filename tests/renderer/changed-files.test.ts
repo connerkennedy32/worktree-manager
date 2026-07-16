@@ -74,9 +74,9 @@ describe('reconcileTarget', () => {
     expect(reconcileTarget(open, rows)).toBe(open)
   })
 
-  it('returns the same object when rows are empty (loading guard)', () => {
+  it('returns null when rows are empty (file genuinely gone)', () => {
     const open = row({})
-    expect(reconcileTarget(open, [])).toBe(open)
+    expect(reconcileTarget(open, [])).toBeNull()
   })
 
   it('follows the path to its new key when staged (:w -> :s)', () => {

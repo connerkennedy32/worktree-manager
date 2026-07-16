@@ -37,7 +37,6 @@ export function buildWorkingRows(status?: WorktreeStatus): Row[] {
 // a vanished file — follow the path to its new side of the split, and close only
 // when the file is really gone (committed, reverted, checked out away).
 export function reconcileTarget(open: DiffTarget, rows: Row[]): DiffTarget | null {
-  if (rows.length === 0) return open        // list still loading — hold
   if (rows.some(r => r.key === open.key)) return open
   return rows.find(r => r.path === open.path) ?? null
 }
@@ -77,6 +76,9 @@ export function useChangedFiles(selected?: string) {
     unstagedRows: useMemo(() => rows.filter(r => !r.staged), [rows]),
     committedRows,
     committed,
+    // Distinguishes "no changes" from "not fetched yet" — the modal must not
+    // reconcile against a list that hasn't arrived.
+    loaded: status !== undefined && committed !== null,
     // Committed files aren't pending work — they must not inflate these counts.
     stagedCount: rows.filter(r => r.staged).length,
     total: rows.length

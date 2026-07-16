@@ -3,7 +3,7 @@ import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
-import { useChangedFiles, codeColor, reconcileTarget, type Row, type SectionId } from './changed-files'
+import { useChangedFiles, codeColor, reconcileTarget, type Row } from './changed-files'
 
 type ViewType = 'unified' | 'split'
 
@@ -17,8 +17,14 @@ export function DiffModal() {
   const worktrees = useStore(s => s.worktrees)
   const branch = worktrees.find(w => w.path === selected)?.branch
 
-  const { stagedRows, unstagedRows, committedRows, committed } = useChangedFiles(selected)
-  const [patches, setPatches] = useState<Record<string, string>>({})
+  const { stagedRows, unstagedRows, committedRows, committed, loaded } = useChangedFiles(selected)
+  const status = useStore(s => (selected ? s.statuses[selected] : undefined))
+  // One entry, scoped to the worktree: row keys like "src/index.ts:w" repeat across
+  // worktrees of the same repo, so a bare row key would serve one worktree's diff
+  // for another's file. Refetches on every status change, so an open diff tracks
+  // edits on disk instead of freezing.
+  const [patch, setPatch] = useState<{ key: string; text: string } | null>(null)
+  const patchKey = openDiff ? `${selected}\0${openDiff.key}` : ''
   // Side-by-side by default: the modal is wide enough for it. Last choice wins after that.
   const [view, setView] = useState<ViewType>(() =>
     localStorage.getItem(VIEW_KEY) === 'unified' ? 'unified' : 'split')
@@ -30,23 +36,25 @@ export function DiffModal() {
     [stagedRows, unstagedRows, committedRows])
 
   useEffect(() => {
+    if (!openDiff) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenDiff(null) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [setOpenDiff])
+  }, [openDiff, setOpenDiff])
 
   // Staging changes a row's key, so follow the file rather than the key; close
   // only when it is genuinely gone. Identity compare: reconcileTarget returns the
   // same object when nothing changed, so this cannot loop.
   useEffect(() => {
-    if (!openDiff) return
+    if (!openDiff || !loaded) return
     const next = reconcileTarget(openDiff, allRows)
     if (next !== openDiff) setOpenDiff(next)
-  }, [allRows, openDiff, setOpenDiff])
+  }, [allRows, openDiff, setOpenDiff, loaded])
 
-  // Fetch the open file's patch. Cached by row key; cleared on stage.
+  // Fetch the open file's patch, scoped by worktree + row key. Refetches whenever
+  // status changes, so an open diff tracks edits on disk instead of freezing.
   useEffect(() => {
-    if (!selected || !openDiff || patches[openDiff.key] !== undefined) return
+    if (!selected || !openDiff) return
     let cancelled = false
     window.api.getFileDiff({
       worktreePath: selected,
@@ -54,23 +62,23 @@ export function DiffModal() {
       staged: openDiff.staged,
       untracked: openDiff.untracked,
       baseRef: openDiff.committed ? committed?.baseBranch : undefined
-    }).then(p => { if (!cancelled) setPatches(m => ({ ...m, [openDiff.key]: p })) })
+    }).then(text => { if (!cancelled) setPatch({ key: patchKey, text }) })
     return () => { cancelled = true }
-  }, [selected, openDiff, patches, committed])
+  }, [selected, openDiff, status, committed?.baseBranch, patchKey])
 
   const stageRow = async (row: Row) => {
     if (!selected) return
     await window.api.stagePath({ worktreePath: selected, path: row.path, unstage: row.staged })
-    // Patch content for the old staged/unstaged split is now stale; drop cache.
-    setPatches({})
     await refreshStatus(selected)
   }
 
   if (!openDiff) return null
 
-  const patch = patches[openDiff.key]
+  // A refetch of the SAME file keeps showing the old text (no "Loading…" flicker
+  // on every status tick); switching files shows "Loading…" immediately.
+  const patchText = patch && patch.key === patchKey ? patch.text : undefined
   let parsed: any[] = []
-  if (patch) { try { parsed = parseDiff(patch, { nearbySequences: 'zip' }) } catch { parsed = [] } }
+  if (patchText) { try { parsed = parseDiff(patchText, { nearbySequences: 'zip' }) } catch { parsed = [] } }
 
   const renderRailRow = (row: Row) => {
     const active = row.key === openDiff.key
@@ -98,10 +106,10 @@ export function DiffModal() {
     )
   }
 
-  const renderRailSection = (id: SectionId, label: string, rows: Row[]) => {
+  const renderRailSection = (label: string, rows: Row[]) => {
     if (rows.length === 0) return null
     return (
-      <div key={id}>
+      <div>
         <div style={{ padding: '5px 10px', position: 'sticky', top: 0, zIndex: 1,
                       borderTop: '1px solid #333', borderBottom: '1px solid #2a2a2a',
                       background: '#2d2d2d', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
@@ -149,9 +157,9 @@ export function DiffModal() {
 
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <div style={{ width: 260, borderRight: '1px solid #333', overflowY: 'auto', flexShrink: 0 }}>
-            {renderRailSection('staged', 'Staged', stagedRows)}
-            {renderRailSection('unstaged', 'Unstaged', unstagedRows)}
-            {renderRailSection('committed', `Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
+            {renderRailSection('Staged', stagedRows)}
+            {renderRailSection('Unstaged', unstagedRows)}
+            {renderRailSection(`Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
           </div>
 
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
@@ -168,8 +176,8 @@ export function DiffModal() {
               )}
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: '#1e1e1e' }}>
-              {patch === undefined && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Loading…</div>}
-              {patch !== undefined && parsed.length === 0 &&
+              {patchText === undefined && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Loading…</div>}
+              {patchText !== undefined && parsed.length === 0 &&
                 <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No textual diff (binary or empty).</div>}
               {parsed.map((d: any, di: number) => (
                 <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks}>
