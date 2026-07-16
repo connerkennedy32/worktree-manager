@@ -60,12 +60,13 @@ export function TerminalView() {
         allowTransparency: true, theme: { background: 'rgba(0, 0, 0, 0)' }, cursorBlink: true })
       const fit = new FitAddon(); term.loadAddon(fit)
       term.onData(d => window.api.termInput(selected, d))
-      // Shift+Enter → send meta-enter (ESC + CR) instead of a plain CR, so TUIs
-      // like Claude Code insert a newline rather than submitting. xterm.js sends
-      // the same byte for Enter and Shift+Enter by default, hence the override.
+      // Shift+Enter → send Ctrl+J (line feed, 0x0a) instead of a plain CR (0x0d).
+      // xterm.js sends the same byte for Enter and Shift+Enter by default; line
+      // feed is Claude Code's universal "insert newline" (chat:newline) signal,
+      // while CR remains submit.
       term.attachCustomKeyEventHandler(e => {
         if (e.type === 'keydown' && e.key === 'Enter' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-          window.api.termInput(selected, '\x1b\r')
+          window.api.termInput(selected, '\x0a')
           return false
         }
         return true
