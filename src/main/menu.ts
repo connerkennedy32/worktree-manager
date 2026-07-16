@@ -9,6 +9,16 @@ export function buildAppMenu(win: BrowserWindow) {
     { role: 'fileMenu' },
     { role: 'editMenu' },
     {
+      label: 'Worktree',
+      submenu: [
+        {
+          label: 'New Worktree…',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => win.webContents.send(IPC.menuNewWorktree)
+        }
+      ]
+    },
+    {
       label: 'Terminal',
       submenu: [
         {

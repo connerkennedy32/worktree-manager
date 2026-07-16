@@ -57,6 +57,7 @@ export interface Api {
   onTermData(cb: (worktreePath: string, data: string) => void): () => void
   onStatusChanged(cb: (worktreePath: string) => void): () => void
   onMenuResetTerminal(cb: () => void): () => void
+  onMenuNewWorktree(cb: () => void): () => void
 }
 
 export const IPC = {
@@ -68,5 +69,5 @@ export const IPC = {
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
-  menuResetTerminal: 'menu:resetTerminal'
+  menuResetTerminal: 'menu:resetTerminal', menuNewWorktree: 'menu:newWorktree'
 } as const

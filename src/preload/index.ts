@@ -35,6 +35,11 @@ const api: Api = {
     const h = () => cb()
     ipcRenderer.on(IPC.menuResetTerminal, h as any)
     return () => ipcRenderer.removeListener(IPC.menuResetTerminal, h as any)
+  },
+  onMenuNewWorktree: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuNewWorktree, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuNewWorktree, h as any)
   }
 }
 contextBridge.exposeInMainWorld('api', api)

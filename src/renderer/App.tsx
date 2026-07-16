@@ -3,6 +3,7 @@ import { useStore } from './state/store'
 import { Sidebar } from './components/Sidebar'
 import { TerminalView, resetTerminal } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
+import { NewWorktreeModal } from './components/NewWorktreeModal'
 import backdrop from './assets/voyage-backdrop.jpg'
 
 const MIN_DIFF_WIDTH = 280
@@ -13,7 +14,20 @@ export function App() {
   const selected = useStore(s => s.selected)
   const [diffCollapsed, setDiffCollapsed] = useState(false)
   const [diffWidth, setDiffWidth] = useState(MIN_DIFF_WIDTH)
+  const [newRepo, setNewRepo] = useState<string | null>(null)
   const dragging = useRef(false)
+
+  // Resolve which repo a new worktree should be created in: the selected
+  // worktree's repo root (its main worktree), else the first connected repo.
+  const repoForNew = () => {
+    const s = useStore.getState()
+    const sel = s.worktrees.find(w => w.path === s.selected)
+    if (sel) {
+      const main = s.worktrees.find(w => w.isMain && w.repoName === sel.repoName)
+      if (main) return main.path
+    }
+    return s.repos[0]
+  }
 
   useEffect(() => { init() }, [init])
 
@@ -22,6 +36,14 @@ export function App() {
     return window.api.onMenuResetTerminal(() => {
       const sel = useStore.getState().selected
       if (sel) resetTerminal(sel)
+    })
+  }, [])
+
+  // Open the new-worktree dialog from the Worktree › New menu item (Cmd+N).
+  useEffect(() => {
+    return window.api.onMenuNewWorktree(() => {
+      const repo = repoForNew()
+      if (repo) setNewRepo(repo)
     })
   }, [])
 
@@ -67,6 +89,7 @@ export function App() {
       )}
       <DiffPanel collapsed={diffCollapsed} width={diffWidth}
                  onToggle={() => setDiffCollapsed(c => !c)} />
+      {newRepo && <NewWorktreeModal repoPath={newRepo} onClose={() => setNewRepo(null)} />}
     </div>
   )
 }
