@@ -11,6 +11,7 @@ const api: Api = {
   removeWorktree: (p, f) => ipcRenderer.invoke(IPC.removeWorktree, p, f),
   getStatus: (p) => ipcRenderer.invoke(IPC.getStatus, p),
   getDiff: (p) => ipcRenderer.invoke(IPC.getDiff, p),
+  getCommittedFiles: (p) => ipcRenderer.invoke(IPC.getCommittedFiles, p),
   getFileDiff: (req) => ipcRenderer.invoke(IPC.getFileDiff, req),
   stage: (req) => ipcRenderer.invoke(IPC.stage, req),
   stagePath: (req) => ipcRenderer.invoke(IPC.stagePath, req),

@@ -3,6 +3,7 @@ import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
+import { getCommittedFiles } from './git/committed'
 import * as diff from './git/diff'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
@@ -59,6 +60,7 @@ export async function registerIpc(w: BrowserWindow) {
   })
   ipcMain.handle(IPC.getStatus, (_e, p: string) => getStatus(p))
   ipcMain.handle(IPC.getDiff, (_e, p: string) => diff.getDiff(p))
+  ipcMain.handle(IPC.getCommittedFiles, (_e, p: string) => getCommittedFiles(p))
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
   ipcMain.handle(IPC.stage, (_e, req) => diff.stage(req))
   ipcMain.handle(IPC.stagePath, (_e, req) => diff.stagePath(req))

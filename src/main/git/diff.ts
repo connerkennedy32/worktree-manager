@@ -39,6 +39,7 @@ export async function getDiff(worktreePath: string): Promise<DiffFile[]> {
 // expands that file), so opening the changes panel never computes every patch.
 export async function getFileDiff(req: FileDiffRequest): Promise<string> {
   const git = simpleGit(req.worktreePath)
+  if (req.baseRef) return git.raw(['diff', `${req.baseRef}...HEAD`, '--', req.path])
   if (req.untracked) {
     return git.raw(['diff', '--no-index', '--', '/dev/null', req.path]).catch((e: any) => e?.stdout ?? '')
   }

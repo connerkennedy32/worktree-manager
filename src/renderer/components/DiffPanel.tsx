@@ -3,12 +3,14 @@ import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
+import type { CommittedChanges } from '@shared/ipc-types'
 
 interface Row {
   key: string
   path: string
   staged: boolean
   untracked: boolean
+  committed: boolean // came from the branch's commits, not the working tree
   code: string // status letter: M A D R ? etc.
 }
 
@@ -27,9 +29,24 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const [patches, setPatches] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
+  const [committed, setCommitted] = useState<CommittedChanges | null>(null)
+  const [committedOpen, setCommittedOpen] = useState(false)
+
+  const refreshCommitted = async (path: string) => {
+    setCommitted(await window.api.getCommittedFiles(path))
+  }
 
   // Keep status fresh when the worktree is selected.
-  useEffect(() => { if (selected) refreshStatus(selected) }, [selected])
+  useEffect(() => {
+    if (!selected) return
+    setCommitted(null)
+    setCommittedOpen(false)
+    refreshStatus(selected)
+  }, [selected])
+
+  // Refetch alongside every status change: a commit empties the working tree but
+  // grows the committed list, so the panel would otherwise just go blank.
+  useEffect(() => { if (selected) refreshCommitted(selected) }, [selected, status])
 
   // Build the file list cheaply from `git status` — no diffs computed here.
   const rows = useMemo<Row[]>(() => {
@@ -38,26 +55,33 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     for (const f of status.files) {
       const untracked = f.index === '?' && f.working === '?'
       if (untracked) {
-        out.push({ key: f.path + ':u', path: f.path, staged: false, untracked: true, code: '?' })
+        out.push({ key: f.path + ':u', path: f.path, staged: false, untracked: true, committed: false, code: '?' })
         continue
       }
       if (f.index !== ' ' && f.index !== '?') {
-        out.push({ key: f.path + ':s', path: f.path, staged: true, untracked: false, code: f.index })
+        out.push({ key: f.path + ':s', path: f.path, staged: true, untracked: false, committed: false, code: f.index })
       }
       if (f.working !== ' ' && f.working !== '?') {
-        out.push({ key: f.path + ':w', path: f.path, staged: false, untracked: false, code: f.working })
+        out.push({ key: f.path + ':w', path: f.path, staged: false, untracked: false, committed: false, code: f.working })
       }
     }
     return out
   }, [status])
 
+  const committedRows = useMemo<Row[]>(() =>
+    (committed?.files ?? []).map(f => ({
+      key: f.path + ':c', path: f.path, staged: false, untracked: false, committed: true, code: f.code
+    })), [committed])
+
+  // Committed files aren't pending work — they must not inflate these counts.
   const stagedCount = rows.filter(r => r.staged).length
   const total = rows.length
 
   const fetchPatch = async (row: Row) => {
     if (!selected || patches[row.key] !== undefined) return
     const patch = await window.api.getFileDiff({
-      worktreePath: selected, path: row.path, staged: row.staged, untracked: row.untracked
+      worktreePath: selected, path: row.path, staged: row.staged, untracked: row.untracked,
+      baseRef: row.committed ? committed?.baseBranch : undefined
     })
     setPatches(p => ({ ...p, [row.key]: patch }))
   }
@@ -90,6 +114,47 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     } finally { setCommitting(false) }
   }
 
+  const renderRow = (row: Row) => {
+    const open = expanded.has(row.key)
+    const patch = patches[row.key]
+    let parsed: any[] = []
+    if (open && patch) { try { parsed = parseDiff(patch, { nearbySequences: 'zip' }) } catch { parsed = [] } }
+    return (
+      <div key={row.key} style={{ borderBottom: '1px solid #2a2a2a' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+                      background: 'rgba(37, 37, 38, 0.5)', fontSize: 12 }}>
+          <span onClick={() => toggle(row)} style={{ cursor: 'pointer', width: 12, color: '#888' }}>
+            {open ? '▾' : '▸'}
+          </span>
+          <span title={row.committed ? 'committed' : row.staged ? 'staged' : 'unstaged'}
+                style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
+          <span onClick={() => toggle(row)}
+                style={{ flex: 1, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
+                         whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}
+                title={row.path}>{row.path}</span>
+          {/* Staging an already-committed file is meaningless. */}
+          {!row.committed && (
+            <button onClick={() => stageRow(row)} style={{ fontSize: 11 }}>
+              {row.staged ? 'Unstage' : 'Stage'}
+            </button>
+          )}
+        </div>
+        {open && (
+          <div style={{ overflowX: 'auto' }}>
+            {patch === undefined && <div style={{ padding: 8, color: '#888', fontSize: 11 }}>Loading…</div>}
+            {patch !== undefined && parsed.length === 0 &&
+              <div style={{ padding: 8, color: '#888', fontSize: 11 }}>No textual diff (binary or empty).</div>}
+            {parsed.map((d: any, di: number) => (
+              <Diff key={di} viewType="unified" diffType={d.type} hunks={d.hunks}>
+                {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
+              </Diff>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (collapsed) {
     return (
       <div onClick={onToggle} title="Show changes"
@@ -119,44 +184,28 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {!selected && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Select a worktree.</div>}
-        {selected && total === 0 && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No changes.</div>}
-        {rows.map(row => {
-          const open = expanded.has(row.key)
-          const patch = patches[row.key]
-          let parsed: any[] = []
-          if (open && patch) { try { parsed = parseDiff(patch, { nearbySequences: 'zip' }) } catch { parsed = [] } }
-          return (
-            <div key={row.key} style={{ borderBottom: '1px solid #2a2a2a' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                            background: 'rgba(37, 37, 38, 0.5)', fontSize: 12 }}>
-                <span onClick={() => toggle(row)} style={{ cursor: 'pointer', width: 12, color: '#888' }}>
-                  {open ? '▾' : '▸'}
-                </span>
-                <span title={row.staged ? 'staged' : 'unstaged'}
-                      style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
-                <span onClick={() => toggle(row)}
-                      style={{ flex: 1, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis',
-                               whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}
-                      title={row.path}>{row.path}</span>
-                <button onClick={() => stageRow(row)} style={{ fontSize: 11 }}>
-                  {row.staged ? 'Unstage' : 'Stage'}
-                </button>
-              </div>
-              {open && (
-                <div style={{ overflowX: 'auto' }}>
-                  {patch === undefined && <div style={{ padding: 8, color: '#888', fontSize: 11 }}>Loading…</div>}
-                  {patch !== undefined && parsed.length === 0 &&
-                    <div style={{ padding: 8, color: '#888', fontSize: 11 }}>No textual diff (binary or empty).</div>}
-                  {parsed.map((d: any, di: number) => (
-                    <Diff key={di} viewType="unified" diffType={d.type} hunks={d.hunks}>
-                      {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
-                    </Diff>
-                  ))}
-                </div>
-              )}
+        {selected && total === 0 && (
+          <div style={{ padding: 12, color: '#888', fontSize: 12 }}>
+            {committedRows.length ? 'No working changes.' : 'No changes.'}
+          </div>
+        )}
+        {rows.map(renderRow)}
+
+        {committedRows.length > 0 && (
+          <>
+            <div onClick={() => setCommittedOpen(o => !o)}
+                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', cursor: 'pointer',
+                          borderTop: '1px solid #333', borderBottom: committedOpen ? '1px solid #2a2a2a' : 'none',
+                          background: 'rgba(45, 45, 45, 0.5)', fontSize: 12, color: '#bbb' }}>
+              <span style={{ width: 12, color: '#888' }}>{committedOpen ? '▾' : '▸'}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Committed vs {committed!.baseBranch}
+              </span>
+              <span style={{ color: '#888' }}>{committedRows.length}</span>
             </div>
-          )
-        })}
+            {committedOpen && committedRows.map(renderRow)}
+          </>
+        )}
       </div>
 
       <div style={{ borderTop: '1px solid #333', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>

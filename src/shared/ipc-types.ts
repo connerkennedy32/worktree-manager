@@ -27,8 +27,24 @@ export interface DiffFile {
   staged: boolean
 }
 
+export interface CommittedFile {
+  path: string          // repo-relative
+  code: string          // name-status letter: M A D R etc.
+}
+
+export interface CommittedChanges {
+  baseBranch: string    // branch of the repo's main worktree; '' when unresolvable
+  files: CommittedFile[]
+}
+
 export interface StageRequest { worktreePath: string; patch: string; reverse?: boolean }
-export interface FileDiffRequest { worktreePath: string; path: string; staged: boolean; untracked: boolean }
+export interface FileDiffRequest {
+  worktreePath: string
+  path: string
+  staged: boolean
+  untracked: boolean
+  baseRef?: string      // when set, diff <baseRef>...HEAD instead of the working tree
+}
 export interface StagePathRequest { worktreePath: string; path: string; unstage: boolean }
 export interface CommitRequest { worktreePath: string; message: string }
 export interface NewWorktreeRequest { repoPath: string; branch: string; createBranch: boolean }
@@ -43,6 +59,7 @@ export interface Api {
   removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]>
   getStatus(worktreePath: string): Promise<WorktreeStatus>
   getDiff(worktreePath: string): Promise<DiffFile[]>
+  getCommittedFiles(worktreePath: string): Promise<CommittedChanges>
   getFileDiff(req: FileDiffRequest): Promise<string>
   stage(req: StageRequest): Promise<void>
   stagePath(req: StagePathRequest): Promise<void>
@@ -64,6 +81,7 @@ export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
   listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
+  getCommittedFiles: 'diff:committed',
   stage: 'diff:stage', stagePath: 'diff:stagePath', commit: 'diff:commit',
   openLazygit: 'term:lazygit',
   listTerminals: 'term:list',
