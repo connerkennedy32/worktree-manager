@@ -1,0 +1,17 @@
+/* xterm forces `overflow-y: scroll` on the viewport, so the scrollbar gutter is
+   always reserved. Against our transparent terminal background macOS paints it
+   as a light bar. Style it dark and translucent instead of hiding it, so the
+   scroll position stays visible. */
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}

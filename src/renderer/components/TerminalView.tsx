@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import './terminal-theme.css'
 import { useStore } from '../state/store'
 
 interface Entry { term: Terminal; fit: FitAddon; container: HTMLDivElement }
