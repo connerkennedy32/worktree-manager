@@ -1,0 +1,100 @@
+/* Shared visual language for the sidebar and the modals it triggers:
+   consistent buttons/inputs, row hover/selection, and hover-revealed
+   remove/disconnect actions. Plain global CSS (no CSS modules in this repo). */
+
+.wt-btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+.wt-btn:disabled { cursor: default; opacity: 0.6; }
+
+.wt-btn-primary {
+  background: #0e639c;
+  border: 1px solid #0e639c;
+  color: #fff;
+}
+.wt-btn-primary:hover:not(:disabled) { background: #1177bb; border-color: #1177bb; }
+
+.wt-btn-ghost {
+  background: transparent;
+  border: 1px solid #4a4d52;
+  color: #ccc;
+}
+.wt-btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); border-color: #5a5d62; }
+
+.wt-btn-danger {
+  background: #a1260d;
+  border: 1px solid #a1260d;
+  color: #fff;
+}
+.wt-btn-danger:hover:not(:disabled) { background: #c22f16; border-color: #c22f16; }
+
+.wt-input {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #4a4d52;
+  background: rgba(255, 255, 255, 0.05);
+  color: #ddd;
+  outline: none;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.wt-input:focus { border-color: #0e639c; background: rgba(255, 255, 255, 0.08); }
+
+.wt-repo-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a8f98;
+}
+.wt-repo-disconnect {
+  opacity: 0;
+  color: #888;
+  cursor: pointer;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.wt-repo-header:hover .wt-repo-disconnect { opacity: 1; }
+.wt-repo-disconnect:hover { color: #f28b82; }
+
+.wt-row {
+  padding: 6px 10px 6px 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: space-between;
+  border-left: 2px solid transparent;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+.wt-row:hover { background: rgba(255, 255, 255, 0.05); }
+.wt-row.selected {
+  background: rgba(14, 99, 156, 0.22);
+  border-left-color: #2a9df4;
+}
+.wt-row-remove {
+  opacity: 0;
+  color: #888;
+  cursor: pointer;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.wt-row:hover .wt-row-remove, .wt-row.selected .wt-row-remove { opacity: 1; }
+.wt-row-remove:hover { color: #f28b82; }
+
+.wt-badge {
+  background: rgba(201, 162, 106, 0.25);
+  color: #e0b97d;
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 500;
+}

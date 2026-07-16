@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../state/store'
+import './sidebar-theme.css'
 
 export function NewWorktreeForm({ repoPath }: { repoPath: string }) {
   const [branch, setBranch] = useState('')
@@ -21,11 +22,11 @@ export function NewWorktreeForm({ repoPath }: { repoPath: string }) {
   }
 
   return (
-    <div style={{ display: 'flex', gap: 4, padding: 8, borderTop: '1px solid #333' }}>
-      <input placeholder="new branch" value={branch} onChange={e => setBranch(e.target.value)}
+    <div style={{ display: 'flex', gap: 6, padding: 8, borderTop: '1px solid #333' }}>
+      <input className="wt-input" placeholder="new branch" value={branch} onChange={e => setBranch(e.target.value)}
              onKeyDown={e => { if (e.key === 'Enter') create() }}
              style={{ flex: 1, minWidth: 0 }} />
-      <button onClick={create} disabled={busy}>+ WT</button>
+      <button className="wt-btn wt-btn-primary" onClick={create} disabled={busy}>+ WT</button>
     </div>
   )
 }
