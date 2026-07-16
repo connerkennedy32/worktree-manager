@@ -3,6 +3,7 @@ import { useStore } from './state/store'
 import { Sidebar } from './components/Sidebar'
 import { TerminalView, resetTerminal } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
+import { DiffModal } from './components/DiffModal'
 import { NewWorktreeModal } from './components/NewWorktreeModal'
 import backdrop from './assets/voyage-backdrop.jpg'
 
@@ -45,6 +46,15 @@ export function App() {
       const repo = repoForNew()
       if (repo) setNewRepo(repo)
     })
+  }, [])
+
+  // Step through worktrees from the Worktree menu (Cmd+Up / Cmd+Down). These are
+  // menu accelerators rather than a keydown listener so Electron consumes them
+  // before the focused terminal can send them to the shell.
+  useEffect(() => {
+    const prev = window.api.onMenuSelectPrev(() => useStore.getState().selectRelative(-1))
+    const next = window.api.onMenuSelectNext(() => useStore.getState().selectRelative(1))
+    return () => { prev(); next() }
   }, [])
 
   useEffect(() => {
@@ -90,6 +100,7 @@ export function App() {
       <DiffPanel collapsed={diffCollapsed} width={diffWidth}
                  onToggle={() => setDiffCollapsed(c => !c)} />
       {newRepo && <NewWorktreeModal repoPath={newRepo} onClose={() => setNewRepo(null)} />}
+      <DiffModal />
     </div>
   )
 }
