@@ -15,7 +15,8 @@ interface Row {
 const codeColor = (c: string) =>
   c === 'A' || c === '?' ? '#6a9955' : c === 'D' ? '#c94a4a' : '#c9a26a'
 
-export function DiffPanel({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function DiffPanel({ collapsed, onToggle, width = 460 }:
+  { collapsed: boolean; onToggle: () => void; width?: number }) {
   const selected = useStore(s => s.selected)
   const refreshStatus = useStore(s => s.refreshStatus)
   const status = useStore(s => (selected ? s.statuses[selected] : undefined))
@@ -104,7 +105,7 @@ export function DiffPanel({ collapsed, onToggle }: { collapsed: boolean; onToggl
   }
 
   return (
-    <div style={{ width: 460, borderLeft: '1px solid #333', background: '#1e1e1e', color: '#d4d4d4',
+    <div style={{ width, borderLeft: '1px solid #333', background: '#1e1e1e', color: '#d4d4d4',
                   display: 'flex', flexDirection: 'column', flexShrink: 0, fontFamily: 'system-ui' }}>
       <div style={{ padding: '6px 10px', borderBottom: '1px solid #333', display: 'flex',
                     alignItems: 'center', gap: 8, fontSize: 12 }}>

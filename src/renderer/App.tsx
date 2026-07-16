@@ -1,14 +1,44 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './state/store'
 import { Sidebar } from './components/Sidebar'
 import { TerminalView } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
 
+const MIN_DIFF_WIDTH = 280
+const MAX_DIFF_WIDTH = 900
+
 export function App() {
   const init = useStore(s => s.init)
   const selected = useStore(s => s.selected)
   const [diffCollapsed, setDiffCollapsed] = useState(false)
+  const [diffWidth, setDiffWidth] = useState(460)
+  const dragging = useRef(false)
+
   useEffect(() => { init() }, [init])
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragging.current) return
+      const w = Math.min(Math.max(window.innerWidth - e.clientX, MIN_DIFF_WIDTH), MAX_DIFF_WIDTH)
+      setDiffWidth(w)
+    }
+    const onUp = () => {
+      if (!dragging.current) return
+      dragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
+  }, [])
+
+  const startDrag = () => {
+    dragging.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: '#252526' }}>
       <Sidebar />
@@ -23,7 +53,12 @@ export function App() {
           {selected && <TerminalView />}
         </div>
       </div>
-      <DiffPanel collapsed={diffCollapsed} onToggle={() => setDiffCollapsed(c => !c)} />
+      {!diffCollapsed && (
+        <div onMouseDown={startDrag} title="Drag to resize"
+             style={{ width: 5, cursor: 'col-resize', background: '#333', flexShrink: 0 }} />
+      )}
+      <DiffPanel collapsed={diffCollapsed} width={diffWidth}
+                 onToggle={() => setDiffCollapsed(c => !c)} />
     </div>
   )
 }
