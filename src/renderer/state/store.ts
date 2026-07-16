@@ -22,6 +22,14 @@ export const useStore = create<State>((set, get) => ({
     // On any change (files or branch HEAD), refresh that worktree's status and
     // re-list worktrees so branch renames/switches show in the sidebar.
     window.api.onStatusChanged(p => { get().refreshStatus(p); get().refreshWorktreeList() })
+    // Safety net: periodically re-list worktrees (branch names) and refresh the
+    // selected worktree's status, so the sidebar stays current even if a file
+    // event is missed. Cheap: `git worktree list` / `git status` per tick.
+    setInterval(() => {
+      get().refreshWorktreeList()
+      const sel = get().selected
+      if (sel) get().refreshStatus(sel)
+    }, 3000)
     // Restore the previously selected worktree after a reload so its terminal
     // (still alive in the main process) reattaches and replays automatically.
     const saved = localStorage.getItem('wtm.selected')
