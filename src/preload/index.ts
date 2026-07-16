@@ -16,6 +16,7 @@ const api: Api = {
   stagePath: (req) => ipcRenderer.invoke(IPC.stagePath, req),
   commit: (req) => ipcRenderer.invoke(IPC.commit, req),
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
+  listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
   termStart: (p) => ipcRenderer.send(IPC.termStart, p),
   termInput: (p, d) => ipcRenderer.send(IPC.termInput, p, d),
   termResize: (p, c, r) => ipcRenderer.send(IPC.termResize, p, c, r),

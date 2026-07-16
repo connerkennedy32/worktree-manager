@@ -42,8 +42,16 @@ export function registerIpc(win: BrowserWindow) {
     ptys.write(p, 'lazygit\n')
   })
 
+  ipcMain.handle(IPC.listTerminals, () => ptys.list())
+
   ipcMain.on(IPC.termStart, (_e, p: string) => {
-    ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+    if (ptys.has(p)) {
+      // Session survived a renderer reload — replay its scrollback so the fresh
+      // xterm shows the existing terminal instead of a blank pane.
+      win.webContents.send(IPC.termData, p, ptys.getBuffer(p))
+    } else {
+      ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+    }
     watchers.watch(p, () => win.webContents.send(IPC.statusChanged, p))
   })
   ipcMain.on(IPC.termInput, (_e, p: string, data: string) => ptys.write(p, data))

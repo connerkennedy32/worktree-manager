@@ -3,6 +3,7 @@ import { useStore } from './state/store'
 import { Sidebar } from './components/Sidebar'
 import { TerminalView } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
+import backdrop from './assets/voyage-backdrop.jpg'
 
 const MIN_DIFF_WIDTH = 280
 const MAX_DIFF_WIDTH = 900
@@ -40,7 +41,12 @@ export function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#252526' }}>
+    <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
+      {/* Wezterm-style backdrop: darkened image + #282c35 overlay, faded behind the UI */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: -1,
+                    backgroundImage: `url(${backdrop})`, backgroundSize: 'cover',
+                    backgroundPosition: 'center', filter: 'brightness(0.5)' }} />
+      <div style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(40, 44, 53, 0.72)' }} />
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ padding: 6, borderBottom: '1px solid #333', display: 'flex', gap: 8,

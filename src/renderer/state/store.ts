@@ -19,6 +19,10 @@ export const useStore = create<State>((set, get) => ({
     set({ repos })
     await get().refreshWorktrees()
     window.api.onStatusChanged(p => get().refreshStatus(p))
+    // Restore the previously selected worktree after a reload so its terminal
+    // (still alive in the main process) reattaches and replays automatically.
+    const saved = localStorage.getItem('wtm.selected')
+    if (saved && get().worktrees.some(w => w.path === saved)) set({ selected: saved })
   },
   refreshWorktrees: async () => {
     const { repos } = get()
@@ -34,5 +38,5 @@ export const useStore = create<State>((set, get) => ({
   // Note: we do NOT call termStart here. The terminal is started by TerminalView
   // once its xterm instance exists and the onTermData handler is bound, so the
   // shell's initial prompt output can never arrive before the renderer is ready.
-  select: (p) => { set({ selected: p }) }
+  select: (p) => { set({ selected: p }); localStorage.setItem('wtm.selected', p) }
 }))

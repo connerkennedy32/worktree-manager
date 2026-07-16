@@ -49,6 +49,7 @@ export interface Api {
   commit(req: CommitRequest): Promise<void>
   openLazygit(worktreePath: string): void
   // terminal
+  listTerminals(): Promise<string[]>
   termStart(worktreePath: string): void
   termInput(worktreePath: string, data: string): void
   termResize(worktreePath: string, cols: number, rows: number): void
@@ -62,6 +63,7 @@ export const IPC = {
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   stage: 'diff:stage', stagePath: 'diff:stagePath', commit: 'diff:commit',
   openLazygit: 'term:lazygit',
+  listTerminals: 'term:list',
   termStart: 'term:start', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged'
 } as const
