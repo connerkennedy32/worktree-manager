@@ -37,6 +37,8 @@ functions are the only genuinely testable unit in this change — they get TDD.
   - `Row extends DiffTarget { code: string }` — exported from `changed-files.ts`.
   - `buildWorkingRows(status?: WorktreeStatus): Row[]`
   - `buildCommittedRows(committed: CommittedChanges | null): Row[]`
+  - `codeColor(c: string): string` — status-letter color, shared by both surfaces.
+  - `SectionId = 'staged' | 'unstaged' | 'committed'`
   - `useChangedFiles(selected?: string): { stagedRows: Row[]; unstagedRows: Row[]; committedRows: Row[]; committed: CommittedChanges | null; stagedCount: number; total: number }`
   - Store gains `openDiff: DiffTarget | null` and `setOpenDiff: (t: DiffTarget | null) => void`.
 
@@ -50,7 +52,7 @@ Create `tests/renderer/changed-files.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest'
-import { buildWorkingRows, buildCommittedRows } from '../../src/renderer/components/changed-files'
+import { buildWorkingRows, buildCommittedRows, codeColor } from '../../src/renderer/components/changed-files'
 import type { WorktreeStatus, CommittedChanges } from '@shared/ipc-types'
 
 const status = (files: WorktreeStatus['files']): WorktreeStatus =>
@@ -87,6 +89,22 @@ describe('buildWorkingRows', () => {
     expect(rows.map(r => r.key)).toEqual(['a.ts:s', 'a.ts:w'])
     expect(rows[0].code).toBe('A')
     expect(rows[1].code).toBe('M')
+  })
+})
+
+describe('codeColor', () => {
+  it('colors additions and untracked files green', () => {
+    expect(codeColor('A')).toBe('#6a9955')
+    expect(codeColor('?')).toBe('#6a9955')
+  })
+
+  it('colors deletions red', () => {
+    expect(codeColor('D')).toBe('#c94a4a')
+  })
+
+  it('colors every other status amber', () => {
+    expect(codeColor('M')).toBe('#c9a26a')
+    expect(codeColor('R')).toBe('#c9a26a')
   })
 })
 
@@ -155,9 +173,14 @@ import { useEffect, useMemo, useState } from 'react'
 import type { CommittedChanges, WorktreeStatus } from '@shared/ipc-types'
 import { useStore, type DiffTarget } from '../state/store'
 
+export type SectionId = 'staged' | 'unstaged' | 'committed'
+
 export interface Row extends DiffTarget {
   code: string // status letter: M A D R ? etc.
 }
+
+export const codeColor = (c: string) =>
+  c === 'A' || c === '?' ? '#6a9955' : c === 'D' ? '#c94a4a' : '#c9a26a'
 
 // Build the file list cheaply from `git status` — no diffs computed here. A file
 // staged and then modified again yields two rows, one per side of the split.
@@ -226,7 +249,7 @@ export function useChangedFiles(selected?: string) {
 
 Run: `npx vitest run tests/renderer/changed-files.test.ts`
 
-Expected: PASS — 7 tests.
+Expected: PASS — 10 tests.
 
 - [ ] **Step 6: Verify the whole suite and types are still green**
 
@@ -321,15 +344,11 @@ import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
-import { useChangedFiles, type Row } from './changed-files'
+import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
 
 type ViewType = 'unified' | 'split'
-type SectionId = 'staged' | 'unstaged' | 'committed'
 
 const VIEW_KEY = 'wtm.diffView'
-
-const codeColor = (c: string) =>
-  c === 'A' || c === '?' ? '#6a9955' : c === 'D' ? '#c94a4a' : '#c9a26a'
 
 export function DiffModal() {
   const selected = useStore(s => s.selected)
@@ -571,12 +590,7 @@ the entire contents of `src/renderer/components/DiffPanel.tsx` with:
 ```tsx
 import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
-import { useChangedFiles, type Row } from './changed-files'
-
-type SectionId = 'staged' | 'unstaged' | 'committed'
-
-const codeColor = (c: string) =>
-  c === 'A' || c === '?' ? '#6a9955' : c === 'D' ? '#c94a4a' : '#c9a26a'
+import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
 
 // Diffs are not rendered here — clicking a row opens DiffModal. This panel is the
 // file list, the staging surface, and the commit box.
