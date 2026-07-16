@@ -1,13 +1,38 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
+import { makeTmpRepo, withOrigin } from '../helpers/tmpRepo'
 import { resolveTrunk, clearTrunkCache, refExists } from '../../src/main/git/trunk'
 import simpleGit from 'simple-git'
+import { writeFileSync } from 'fs'
+import { join } from 'path'
 
 let cleanups: (() => void)[] = []
 afterEach(() => { cleanups.forEach(c => c()); cleanups = [] })
 beforeEach(() => clearTrunkCache())
 
 describe('resolveTrunk', () => {
+  it('prefers the remote trunk over the local branch', async () => {
+    const r = await makeTmpRepo()
+    cleanups.push(r.cleanup)
+    cleanups.push(await withOrigin(r.dir))
+    expect(await resolveTrunk(r.dir)).toBe('origin/main')
+  })
+
+  // The local trunk drifts constantly — an unpushed commit, a stale checkout —
+  // and every drift would otherwise land in a new branch and in its diff.
+  it('ignores commits the local trunk has but the remote does not', async () => {
+    const r = await makeTmpRepo()
+    cleanups.push(r.cleanup)
+    cleanups.push(await withOrigin(r.dir))
+    writeFileSync(join(r.dir, 'unpushed.txt'), 'local only\n')
+    await r.git.add('.')
+    await r.git.commit('unpushed work on main')
+
+    const trunk = await resolveTrunk(r.dir)
+    expect(trunk).toBe('origin/main')
+    const files = await r.git.raw(['diff', '--name-only', `${trunk}...main`])
+    expect(files.trim()).toBe('unpushed.txt')
+  })
+
   it('resolves a local main branch', async () => {
     const r = await makeTmpRepo()
     cleanups.push(r.cleanup)

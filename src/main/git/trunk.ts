@@ -23,9 +23,13 @@ async function resolve(git: SimpleGit): Promise<string | undefined> {
     .raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
     .then(r => r.trim().replace('refs/remotes/origin/', ''))
     .catch(() => '')
-  // Prefer the local branch so a stale/unfetched remote isn't the yardstick, but
-  // fall back to the remote ref for repos that never checked the trunk out.
-  for (const candidate of [originHead, `origin/${originHead}`, 'main', 'master']) {
+  // Prefer the remote ref. The local trunk is a personal copy that drifts — an
+  // unpushed commit, a checkout nobody has pulled in a week — and every drift
+  // would otherwise seed new branches and show up as their committed files.
+  // origin/<trunk> is what a PR is actually diffed against. Local branches are
+  // the fallback for repos with no remote.
+  const candidates = [`origin/${originHead}`, originHead, 'origin/main', 'main', 'origin/master', 'master']
+  for (const candidate of candidates) {
     if (candidate && candidate !== 'origin/' && await refExists(git, candidate)) return candidate
   }
   return undefined

@@ -1,6 +1,7 @@
 import simpleGit from 'simple-git'
 import { basename, dirname, join, isAbsolute, resolve } from 'path'
 import type { Worktree, NewWorktreeRequest } from '@shared/ipc-types'
+import { resolveTrunk } from './trunk'
 
 // Absolute path to a worktree's HEAD file (correct for linked worktrees, whose
 // real HEAD lives under the main repo's .git/worktrees/<id>/). Watching this
@@ -47,7 +48,22 @@ export async function createWorktree(req: NewWorktreeRequest): Promise<Worktree[
   const branch = req.createBranch ? sanitizeBranchName(req.branch) : req.branch
   const dir = worktreeDir(req.repoPath, branch)
   const args = ['worktree', 'add']
-  if (req.createBranch) args.push('-b', branch, dir)
+  if (req.createBranch) {
+    // Name the start-point explicitly. Left off, git silently starts the branch
+    // at the invoking repo's HEAD — and the invoking repo is the main checkout,
+    // which is routinely parked on some unrelated feature branch. That seeds the
+    // new worktree with that branch's commits, which then show up as this
+    // branch's own committed files. Trunk is the same ref getCommittedFiles
+    // diffs against, so a fresh worktree starts out genuinely empty.
+    //
+    // --no-track because trunk is a remote-tracking ref, and git's
+    // branch.autoSetupMerge default would make the new branch track origin/main.
+    // getPushState reads that upstream as "already has a remote" and the push
+    // button would then aim this branch's commits straight at the trunk.
+    const start = await resolveTrunk(req.repoPath)
+    args.push('--no-track', '-b', branch, dir)
+    if (start) args.push(start)
+  }
   else args.push(dir, branch)
   await git.raw(args)
   return listWorktrees(req.repoPath)
