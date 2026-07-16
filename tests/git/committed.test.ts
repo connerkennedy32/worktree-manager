@@ -24,8 +24,72 @@ async function repoWithBranchWorktree() {
   return { ...r, wtPath, wtGit }
 }
 
+// A repo whose *main* worktree is checked out on a feature branch — the common
+// case when you don't use linked worktrees at all.
+async function repoOnFeatureBranch() {
+  const r = await makeTmpRepo()
+  cleanups.push(r.cleanup)
+  await r.git.checkoutLocalBranch('feat')
+  return r
+}
+
+// Give a repo an `origin` remote with a real main branch, so origin/main resolves.
+async function withOrigin(dir: string) {
+  const remote = mkdtempSync(join(tmpdir(), 'wtm-remote-'))
+  cleanups.push(() => rmSync(remote, { recursive: true, force: true }))
+  await simpleGit(remote).init(['--bare', '--initial-branch=main'])
+  const git = simpleGit(dir)
+  await git.addRemote('origin', remote)
+  await git.push(['-u', 'origin', 'main'])
+  return remote
+}
+
 describe('getCommittedFiles', () => {
-  it('lists files committed on the branch against the main worktree branch', async () => {
+  it('uses the trunk as base even when the main worktree is on a feature branch', async () => {
+    const r = await repoOnFeatureBranch()
+    writeFileSync(join(r.dir, 'feature.txt'), 'hello\n')
+    await r.git.add('.')
+    await r.git.commit('add feature')
+
+    const res = await getCommittedFiles(r.dir)
+    expect(res.baseBranch).toBe('main')
+    expect(res.files).toEqual([{ code: 'A', path: 'feature.txt' }])
+  })
+
+  it('prefers origin/HEAD over a local main when naming the trunk', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    await withOrigin(r.dir)
+    await r.git.raw(['remote', 'set-head', 'origin', 'main'])
+    await r.git.checkoutLocalBranch('feat')
+    writeFileSync(join(r.dir, 'feature.txt'), 'hello\n')
+    await r.git.add('.')
+    await r.git.commit('add feature')
+
+    const res = await getCommittedFiles(r.dir)
+    expect(res.baseBranch).toBe('main')
+    expect(res.files.map(f => f.path)).toEqual(['feature.txt'])
+  })
+
+  it('on the trunk itself, lists unpushed commits against origin/<trunk>', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    await withOrigin(r.dir)
+    writeFileSync(join(r.dir, 'unpushed.txt'), 'local only\n')
+    await r.git.add('.')
+    await r.git.commit('not pushed yet')
+
+    const res = await getCommittedFiles(r.dir)
+    expect(res.baseBranch).toBe('origin/main')
+    expect(res.files).toEqual([{ code: 'A', path: 'unpushed.txt' }])
+  })
+
+  it('on the trunk with everything pushed, lists nothing', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    await withOrigin(r.dir)
+    const res = await getCommittedFiles(r.dir)
+    expect(res.files).toEqual([])
+  })
+
+  it('lists files committed on a linked worktree branch against the trunk', async () => {
     const { wtPath, wtGit } = await repoWithBranchWorktree()
     writeFileSync(join(wtPath, 'feature.txt'), 'hello\n')
     await wtGit.add('.')
@@ -60,7 +124,7 @@ describe('getCommittedFiles', () => {
     expect(res.files.map(f => f.path)).toContain('DOCS.md')
   })
 
-  it('returns an empty list for the main worktree itself', async () => {
+  it('returns an empty list on the trunk with no remote', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
     const res = await getCommittedFiles(r.dir)
     expect(res.files).toEqual([])

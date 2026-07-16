@@ -1,20 +1,28 @@
-import simpleGit from 'simple-git'
-import { dirname } from 'path'
-import { listWorktrees } from './worktrees'
+import simpleGit, { type SimpleGit } from 'simple-git'
 import type { CommittedChanges, CommittedFile } from '@shared/ipc-types'
 
 const EMPTY: CommittedChanges = { baseBranch: '', files: [] }
 
-// The base to compare a branch against is whatever branch the repo's *main*
-// worktree has checked out — not a hardcoded main/master, which is wrong for
-// repos using another trunk name.
-async function resolveBaseBranch(worktreePath: string): Promise<string | undefined> {
-  const git = simpleGit(worktreePath)
-  const commonDir = (await git.raw(['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim()
-  const repoPath = dirname(commonDir) // .git common dir's parent is the main worktree
-  const main = (await listWorktrees(repoPath)).find(w => w.isMain)
-  if (!main || main.branch === '(detached)') return undefined
-  return main.branch
+async function refExists(git: SimpleGit, ref: string): Promise<boolean> {
+  return git.raw(['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)
+}
+
+// The repo's trunk branch. Deliberately *not* "whatever the main worktree has
+// checked out" — people routinely check a feature branch out in the main
+// worktree, which would make the trunk look like the feature branch itself and
+// leave nothing to compare against. `origin/HEAD` is the remote's declared
+// default; local main/master are the fallback for remote-less repos.
+async function resolveTrunk(git: SimpleGit): Promise<string | undefined> {
+  const originHead = await git
+    .raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
+    .then(r => r.trim().replace('refs/remotes/origin/', ''))
+    .catch(() => '')
+  // Prefer the local branch so a stale/unfetched remote isn't the yardstick, but
+  // fall back to the remote ref for repos that never checked the trunk out.
+  for (const candidate of [originHead, `origin/${originHead}`, 'main', 'master']) {
+    if (candidate && candidate !== 'origin/' && await refExists(git, candidate)) return candidate
+  }
+  return undefined
 }
 
 // `--name-status` lines are "<code>\t<path>", except renames/copies which are
@@ -31,17 +39,26 @@ function parseNameStatus(raw: string): CommittedFile[] {
   return out
 }
 
-// Files this branch has committed relative to where it diverged from the base
-// branch (three-dot: commits landing on the base afterward are excluded, which
-// is what a PR shows). Best-effort — any failure yields an empty list so the
-// working-tree list, the panel's primary job, never breaks.
+// Files this branch has committed relative to where it diverged from its base
+// (three-dot: commits landing on the base afterward are excluded, which is what
+// a PR shows). On the trunk itself there is no divergence to show, so the base
+// becomes the remote tracking branch and the list means "committed but unpushed".
+// Best-effort — any failure yields an empty list so the working-tree list, the
+// panel's primary job, never breaks.
 export async function getCommittedFiles(worktreePath: string): Promise<CommittedChanges> {
   try {
     const git = simpleGit(worktreePath)
-    const base = await resolveBaseBranch(worktreePath)
-    if (!base) return EMPTY
+    const trunk = await resolveTrunk(git)
+    if (!trunk) return EMPTY
     const current = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
-    if (current === base) return EMPTY // the main worktree itself — nothing to compare
+
+    let base = trunk
+    if (current === trunk) {
+      const remote = `origin/${trunk}`
+      if (!await refExists(git, remote)) return EMPTY // no remote to be ahead of
+      base = remote
+    }
+
     const raw = await git.raw(['diff', '--name-status', `${base}...HEAD`])
     return { baseBranch: base, files: parseNameStatus(raw) }
   } catch {

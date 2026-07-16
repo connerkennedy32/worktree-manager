@@ -16,17 +16,27 @@ main worktree's branch, alongside the existing working-tree list.
 
 ## Base branch resolution
 
-The base is the branch checked out in the repo's **main worktree**, not a
-hardcoded `main`/`origin/main`. Resolution:
+> **Revised after implementation.** This originally specified the base as the
+> branch checked out in the repo's *main worktree*. That was wrong: people
+> routinely check a feature branch out in the main worktree rather than working
+> in linked worktrees, so the base resolved to the feature branch itself,
+> `current === base` held, and the section never appeared in any repo. The base
+> is the repo's **trunk**, resolved independently of any checkout.
 
-1. `git rev-parse --path-format=absolute --git-common-dir` in the worktree; the
-   common dir's parent is the main worktree path. This is the pattern already
-   used by `removeWorktree` in `src/main/git/worktrees.ts`.
-2. Call the existing `listWorktrees(repoPath)` and take the entry with
-   `isMain === true`; its `branch` is the base.
+Resolve the trunk by trying these in order and taking the first ref that exists:
 
-If the base branch equals the worktree's current branch (i.e. the user selected
-the main worktree itself), there is nothing to compare — return an empty result.
+1. `git symbolic-ref refs/remotes/origin/HEAD`, stripped to a bare name
+   (`refs/remotes/origin/main` → `main`). The local branch is preferred so an
+   unfetched remote isn't the yardstick.
+2. `origin/<that name>` — for repos that never checked the trunk out locally.
+3. Local `main`, then `master` — for repos with no remote.
+
+If none resolve, return an empty result.
+
+**When the current branch is the trunk**, there is no divergence to show, so the
+base becomes `origin/<trunk>` and the section reads as "committed but not yet
+pushed". If that remote ref doesn't exist, return an empty result — there is
+nothing to be ahead of.
 
 ## File list
 
