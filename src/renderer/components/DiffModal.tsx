@@ -9,6 +9,11 @@ type ViewType = 'unified' | 'split'
 
 const VIEW_KEY = 'wtm.diffView'
 
+// Split a repo-relative path for display. No separator means the whole path is the
+// filename, which both of these handle via lastIndexOf's -1.
+const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/') + 1)
+const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
 export function DiffModal() {
   const selected = useStore(s => s.selected)
   const openDiff = useStore(s => s.openDiff)
@@ -84,10 +89,18 @@ export function DiffModal() {
     const active = row.key === openDiff.key
     return (
       <div key={row.key} onClick={() => setOpenDiff(row)}
-           style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                    cursor: 'pointer', fontSize: 12,
-                    background: active ? '#37373d' : 'transparent',
-                    color: active ? '#fff' : '#d4d4d4' }}>
+           // Hover only matters for rows you can move to; the active row already
+           // owns its background.
+           onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#2a2d2e' }}
+           onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+           style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12,
+                    // The accent bar carries the selection; it reads at a glance even
+                    // against the hover tint, which a background alone did not.
+                    borderLeft: `3px solid ${active ? '#4daafc' : 'transparent'}`,
+                    padding: '5px 10px 5px 7px',
+                    background: active ? '#094771' : 'transparent',
+                    color: active ? '#fff' : '#d4d4d4',
+                    fontWeight: active ? 600 : 400 }}>
         <span style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                        direction: 'rtl', textAlign: 'left' }} title={row.path}>{row.path}</span>
@@ -95,10 +108,10 @@ export function DiffModal() {
         {!row.committed && (
           <button onClick={e => { e.stopPropagation(); stageRow(row) }}
                   title={row.staged ? 'Unstage' : 'Stage'}
-                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                           fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                  style={{ background: 'none', border: 'none', color: active ? '#cfe6ff' : '#999',
+                           cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+                  onMouseLeave={e => (e.currentTarget.style.color = active ? '#cfe6ff' : '#999')}>
             {row.staged ? '−' : '+'}
           </button>
         )}
@@ -163,10 +176,22 @@ export function DiffModal() {
           </div>
 
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '6px 12px', borderBottom: '1px solid #333', fontSize: 12,
+            <div style={{ padding: '7px 12px', borderBottom: '1px solid #333', fontSize: 13,
                           display: 'flex', alignItems: 'center', gap: 8, background: '#252526' }}>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
-                             whiteSpace: 'nowrap' }} title={openDiff.path}>{openDiff.path}</span>
+              {/* The filename is what identifies the diff, so it gets the weight; the
+                  directory is context and recedes. Ellipsis sits on the directory,
+                  which is the half that's expendable when the path is long. */}
+              <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline' }}
+                    title={openDiff.path}>
+                <span style={{ color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap', direction: 'rtl', textAlign: 'left' }}>{dirOf(openDiff.path)}</span>
+                <span style={{ color: '#fff', fontWeight: 600, flexShrink: 0 }}>{baseOf(openDiff.path)}</span>
+                {activeRow && (
+                  <span style={{ color: '#888', flexShrink: 0, marginLeft: 8, fontSize: 11 }}>
+                    {activeRow.committed ? 'committed' : activeRow.staged ? 'staged' : 'unstaged'}
+                  </span>
+                )}
+              </span>
               {activeRow && !activeRow.committed && (
                 <button onClick={() => stageRow(activeRow)}
                         style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
