@@ -60,6 +60,16 @@ export function TerminalView() {
         allowTransparency: true, theme: { background: 'rgba(0, 0, 0, 0)' }, cursorBlink: true })
       const fit = new FitAddon(); term.loadAddon(fit)
       term.onData(d => window.api.termInput(selected, d))
+      // Shift+Enter → send meta-enter (ESC + CR) instead of a plain CR, so TUIs
+      // like Claude Code insert a newline rather than submitting. xterm.js sends
+      // the same byte for Enter and Shift+Enter by default, hence the override.
+      term.attachCustomKeyEventHandler(e => {
+        if (e.type === 'keydown' && e.key === 'Enter' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+          window.api.termInput(selected, '\x1b\r')
+          return false
+        }
+        return true
+      })
       term.open(container)
       entry = { term, fit, container }
       terms.set(selected, entry)
