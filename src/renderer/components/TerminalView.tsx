@@ -66,6 +66,9 @@ export function TerminalView() {
       // while CR remains submit.
       term.attachCustomKeyEventHandler(e => {
         if (e.type === 'keydown' && e.key === 'Enter' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+          // preventDefault stops the follow-up keypress event, otherwise xterm
+          // would also send a plain CR (submit) right after our line feed.
+          e.preventDefault()
           window.api.termInput(selected, '\x0a')
           return false
         }
