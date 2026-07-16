@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c1533"/>
+      <stop offset="55%" stop-color="#241a44"/>
+      <stop offset="100%" stop-color="#0f0b21"/>
+    </linearGradient>
+    <linearGradient id="trunkGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#43e0c7"/>
+    </linearGradient>
+    <linearGradient id="branchGradA" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#ff7ad1"/>
+    </linearGradient>
+    <linearGradient id="branchGradB" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#ffd166"/>
+    </linearGradient>
+    <radialGradient id="nodeGlowCyan" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e8fffb"/>
+      <stop offset="45%" stop-color="#43e0c7"/>
+      <stop offset="100%" stop-color="#43e0c7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="nodeGlowPink" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff0fa"/>
+      <stop offset="45%" stop-color="#ff7ad1"/>
+      <stop offset="100%" stop-color="#ff7ad1" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="nodeGlowGold" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fffaf0"/>
+      <stop offset="45%" stop-color="#ffd166"/>
+      <stop offset="100%" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <!-- macOS icon templates leave real transparent margin around the squircle
+         (content sits at ~80% of the 1024 canvas); filling the whole canvas
+         made this icon render visibly larger than every other dock icon. -->
+    <clipPath id="squircle">
+      <rect x="100" y="100" width="824" height="824" rx="180" ry="180"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
+
+    <!-- subtle vignette glow behind the graph -->
+    <circle cx="512" cy="532" r="300" fill="#5b3df0" opacity="0.14" filter="url(#soft)"/>
+
+    <!-- graph content scaled down and re-centered so it doesn't crowd the squircle -->
+    <g transform="translate(512 532) scale(0.7) translate(-512 -532)">
+      <!-- branch lines: one trunk splitting into three worktrees -->
+      <g fill="none" stroke-linecap="round">
+        <path d="M 512 760 C 512 620, 340 560, 300 420" stroke="url(#branchGradA)" stroke-width="26"/>
+        <path d="M 512 760 C 512 600, 512 520, 512 300" stroke="url(#trunkGrad)" stroke-width="26"/>
+        <path d="M 512 760 C 512 620, 684 560, 724 420" stroke="url(#branchGradB)" stroke-width="26"/>
+      </g>
+
+      <!-- root commit -->
+      <circle cx="512" cy="800" r="54" fill="url(#nodeGlowCyan)"/>
+      <circle cx="512" cy="800" r="30" fill="#eafff9"/>
+
+      <!-- worktree tip nodes -->
+      <circle cx="300" cy="380" r="58" fill="url(#nodeGlowPink)"/>
+      <circle cx="300" cy="380" r="32" fill="#fff5fb"/>
+
+      <circle cx="512" cy="260" r="58" fill="url(#nodeGlowCyan)"/>
+      <circle cx="512" cy="260" r="32" fill="#f2fffb"/>
+
+      <circle cx="724" cy="380" r="58" fill="url(#nodeGlowGold)"/>
+      <circle cx="724" cy="380" r="32" fill="#fffaf0"/>
+    </g>
+  </g>
+
+  <!-- outer stroke for definition on light backgrounds -->
+  <rect x="102" y="102" width="820" height="820" rx="178" ry="178" fill="none" stroke="#0f0b21" stroke-opacity="0.35" stroke-width="6"/>
+</svg>

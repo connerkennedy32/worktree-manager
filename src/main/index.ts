@@ -1,11 +1,17 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { registerIpc } from './ipc'
 import { buildAppMenu } from './menu'
 
+const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
+// Set the dock icon explicitly since dev/preview runs are unpackaged and would
+// otherwise show Electron's default icon instead of the app's.
+if (process.platform === 'darwin' && !icon.isEmpty()) app.dock.setIcon(icon)
+
 async function createWindow() {
   const win = new BrowserWindow({
     width: 1300, height: 850,
+    icon,
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
   })
   await registerIpc(win)
