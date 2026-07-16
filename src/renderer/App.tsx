@@ -57,12 +57,6 @@ export function App() {
       <div style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(40, 44, 53, 0.72)' }} />
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ padding: 6, borderBottom: '1px solid #333', display: 'flex', gap: 8,
-                      color: '#ddd', fontFamily: 'system-ui', fontSize: 12, alignItems: 'center' }}>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {selected ?? 'No worktree selected'}
-          </span>
-        </div>
         <div style={{ flex: 1, minHeight: 0 }}>
           {selected && <TerminalView />}
         </div>

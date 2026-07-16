@@ -93,7 +93,7 @@ export function Sidebar() {
         {worktrees.map(w => {
           const count = statuses[w.path]?.changeCount ?? 0
           return (
-            <div key={w.path} onClick={() => select(w.path)}
+            <div key={w.path} onClick={() => select(w.path)} title={w.path}
                  style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
                           background: selected === w.path ? '#094771' : 'transparent' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
