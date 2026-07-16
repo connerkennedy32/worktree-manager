@@ -5,6 +5,8 @@ import './diff-theme.css'
 import { useStore } from '../state/store'
 import type { CommittedChanges } from '@shared/ipc-types'
 
+type SectionId = 'staged' | 'unstaged' | 'committed'
+
 interface Row {
   key: string
   path: string
@@ -30,7 +32,10 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
   const [committed, setCommitted] = useState<CommittedChanges | null>(null)
-  const [committedOpen, setCommittedOpen] = useState(false)
+  // Working changes are the panel's job, so they start open; committed files are
+  // reference material and start collapsed.
+  const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>(
+    { staged: true, unstaged: true, committed: false })
 
   const refreshCommitted = async (path: string) => {
     setCommitted(await window.api.getCommittedFiles(path))
@@ -40,7 +45,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   useEffect(() => {
     if (!selected) return
     setCommitted(null)
-    setCommittedOpen(false)
+    setOpenSections({ staged: true, unstaged: true, committed: false })
     refreshStatus(selected)
   }, [selected])
 
@@ -67,6 +72,9 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     }
     return out
   }, [status])
+
+  const stagedRows = useMemo(() => rows.filter(r => r.staged), [rows])
+  const unstagedRows = useMemo(() => rows.filter(r => !r.staged), [rows])
 
   const committedRows = useMemo<Row[]>(() =>
     (committed?.files ?? []).map(f => ({
@@ -112,6 +120,26 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
       setMsg(''); setPatches({}); setExpanded(new Set())
       await refreshStatus(selected)
     } finally { setCommitting(false) }
+  }
+
+  const renderSection = (id: SectionId, label: string, sectionRows: Row[]) => {
+    if (sectionRows.length === 0) return null
+    const open = openSections[id]
+    return (
+      <>
+        <div onClick={() => setOpenSections(s => ({ ...s, [id]: !s[id] }))}
+             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', cursor: 'pointer',
+                      position: 'sticky', top: 0, zIndex: 1,
+                      borderTop: '1px solid #333', borderBottom: '1px solid #2a2a2a',
+                      background: '#2d2d2d', fontSize: 11, fontWeight: 600,
+                      letterSpacing: 0.5, textTransform: 'uppercase', color: '#bbb' }}>
+          <span style={{ width: 12, color: '#888' }}>{open ? '▾' : '▸'}</span>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          <span style={{ color: '#888', fontWeight: 400 }}>{sectionRows.length}</span>
+        </div>
+        {open && sectionRows.map(renderRow)}
+      </>
+    )
   }
 
   const renderRow = (row: Row) => {
@@ -189,23 +217,9 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
             {committedRows.length ? 'No working changes.' : 'No changes.'}
           </div>
         )}
-        {rows.map(renderRow)}
-
-        {committedRows.length > 0 && (
-          <>
-            <div onClick={() => setCommittedOpen(o => !o)}
-                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', cursor: 'pointer',
-                          borderTop: '1px solid #333', borderBottom: committedOpen ? '1px solid #2a2a2a' : 'none',
-                          background: 'rgba(45, 45, 45, 0.5)', fontSize: 12, color: '#bbb' }}>
-              <span style={{ width: 12, color: '#888' }}>{committedOpen ? '▾' : '▸'}</span>
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                Committed vs {committed!.baseBranch}
-              </span>
-              <span style={{ color: '#888' }}>{committedRows.length}</span>
-            </div>
-            {committedOpen && committedRows.map(renderRow)}
-          </>
-        )}
+        {renderSection('staged', 'Staged', stagedRows)}
+        {renderSection('unstaged', 'Unstaged', unstagedRows)}
+        {renderSection('committed', `Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
       </div>
 
       <div style={{ borderTop: '1px solid #333', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
