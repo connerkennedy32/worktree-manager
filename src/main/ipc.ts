@@ -54,6 +54,12 @@ export function registerIpc(win: BrowserWindow) {
     }
     watchers.watch(p, () => win.webContents.send(IPC.statusChanged, p))
   })
+  ipcMain.handle(IPC.termReset, (_e, p: string) => {
+    // Kill the wedged shell and spawn a fresh one for the same worktree.
+    ptys.kill(p)
+    ptys.start(p, d => win.webContents.send(IPC.termData, p, d))
+  })
+
   ipcMain.on(IPC.termInput, (_e, p: string, data: string) => ptys.write(p, data))
   ipcMain.on(IPC.termResize, (_e, p: string, c: number, r: number) => ptys.resize(p, c, r))
 

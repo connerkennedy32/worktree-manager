@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './state/store'
 import { Sidebar } from './components/Sidebar'
-import { TerminalView } from './components/TerminalView'
+import { TerminalView, resetTerminal } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
 import backdrop from './assets/voyage-backdrop.jpg'
 
@@ -54,6 +54,12 @@ export function App() {
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {selected ?? 'No worktree selected'}
           </span>
+          {selected && (
+            <button onClick={() => resetTerminal(selected)}
+                    title="Kill this terminal's shell and start a fresh one">
+              Reset terminal
+            </button>
+          )}
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
           {selected && <TerminalView />}

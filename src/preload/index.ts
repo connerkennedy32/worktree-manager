@@ -18,6 +18,7 @@ const api: Api = {
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
   listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
   termStart: (p) => ipcRenderer.send(IPC.termStart, p),
+  termReset: (p) => ipcRenderer.invoke(IPC.termReset, p),
   termInput: (p, d) => ipcRenderer.send(IPC.termInput, p, d),
   termResize: (p, c, r) => ipcRenderer.send(IPC.termResize, p, c, r),
   onTermData: (cb) => {

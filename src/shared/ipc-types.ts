@@ -51,6 +51,7 @@ export interface Api {
   // terminal
   listTerminals(): Promise<string[]>
   termStart(worktreePath: string): void
+  termReset(worktreePath: string): Promise<void>
   termInput(worktreePath: string, data: string): void
   termResize(worktreePath: string, cols: number, rows: number): void
   onTermData(cb: (worktreePath: string, data: string) => void): () => void
@@ -64,6 +65,6 @@ export const IPC = {
   stage: 'diff:stage', stagePath: 'diff:stagePath', commit: 'diff:commit',
   openLazygit: 'term:lazygit',
   listTerminals: 'term:list',
-  termStart: 'term:start', termInput: 'term:input', termResize: 'term:resize',
+  termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged'
 } as const

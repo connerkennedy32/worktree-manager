@@ -22,6 +22,13 @@ export function disposeTerminal(worktreePath: string) {
   terms.delete(worktreePath)
 }
 
+// Reset a wedged terminal: clear the on-screen xterm, then have main kill the
+// shell and spawn a fresh one whose output streams into the same xterm.
+export async function resetTerminal(worktreePath: string) {
+  terms.get(worktreePath)?.term.reset()
+  await window.api.termReset(worktreePath)
+}
+
 function ensureDataBound() {
   if (dataBound) return
   window.api.onTermData((p, d) => terms.get(p)?.term.write(d))
