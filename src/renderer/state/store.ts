@@ -1,11 +1,23 @@
 import { create } from 'zustand'
 import type { Worktree, WorktreeStatus } from '@shared/ipc-types'
 
+// A file the diff modal can show. Renderer-only view state, so it stays out of
+// @shared/ipc-types — it never crosses the IPC boundary.
+export interface DiffTarget {
+  key: string
+  path: string
+  staged: boolean
+  untracked: boolean
+  committed: boolean
+}
+
 interface State {
   repos: string[]
   worktrees: Worktree[]
   statuses: Record<string, WorktreeStatus>
   selected?: string
+  openDiff: DiffTarget | null
+  setOpenDiff: (t: DiffTarget | null) => void
   init: () => Promise<void>
   refreshWorktrees: () => Promise<void>
   refreshWorktreeList: () => Promise<void>
@@ -14,7 +26,8 @@ interface State {
 }
 
 export const useStore = create<State>((set, get) => ({
-  repos: [], worktrees: [], statuses: {},
+  repos: [], worktrees: [], statuses: {}, openDiff: null,
+  setOpenDiff: (t) => set({ openDiff: t }),
   init: async () => {
     const repos = await window.api.listRepos()
     set({ repos })
