@@ -1,29 +1,8 @@
-import simpleGit, { type SimpleGit } from 'simple-git'
+import simpleGit from 'simple-git'
 import type { CommittedChanges, CommittedFile } from '@shared/ipc-types'
+import { refExists, resolveTrunk } from './trunk'
 
 const EMPTY: CommittedChanges = { baseBranch: '', files: [] }
-
-async function refExists(git: SimpleGit, ref: string): Promise<boolean> {
-  return git.raw(['rev-parse', '--verify', '--quiet', ref]).then(() => true, () => false)
-}
-
-// The repo's trunk branch. Deliberately *not* "whatever the main worktree has
-// checked out" — people routinely check a feature branch out in the main
-// worktree, which would make the trunk look like the feature branch itself and
-// leave nothing to compare against. `origin/HEAD` is the remote's declared
-// default; local main/master are the fallback for remote-less repos.
-async function resolveTrunk(git: SimpleGit): Promise<string | undefined> {
-  const originHead = await git
-    .raw(['symbolic-ref', 'refs/remotes/origin/HEAD'])
-    .then(r => r.trim().replace('refs/remotes/origin/', ''))
-    .catch(() => '')
-  // Prefer the local branch so a stale/unfetched remote isn't the yardstick, but
-  // fall back to the remote ref for repos that never checked the trunk out.
-  for (const candidate of [originHead, `origin/${originHead}`, 'main', 'master']) {
-    if (candidate && candidate !== 'origin/' && await refExists(git, candidate)) return candidate
-  }
-  return undefined
-}
 
 // `--name-status` lines are "<code>\t<path>", except renames/copies which are
 // "R100\told\tnew". Take the last field so renames report their new path, the
@@ -48,7 +27,7 @@ function parseNameStatus(raw: string): CommittedFile[] {
 export async function getCommittedFiles(worktreePath: string): Promise<CommittedChanges> {
   try {
     const git = simpleGit(worktreePath)
-    const trunk = await resolveTrunk(git)
+    const trunk = await resolveTrunk(worktreePath)
     if (!trunk) return EMPTY
     const current = (await git.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
 
