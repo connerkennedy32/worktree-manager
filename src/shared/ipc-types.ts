@@ -32,6 +32,10 @@ export interface CommittedFile {
   code: string          // name-status letter: M A D R etc.
 }
 
+// Push returns an outcome rather than throwing: Electron wraps a thrown
+// main-process error, which would bury git's rejection message in framing.
+export type PushOutcome = { ok: true } | { ok: false; message: string }
+
 export interface CommittedChanges {
   baseBranch: string    // branch of the repo's main worktree; '' when unresolvable
   files: CommittedFile[]
@@ -64,6 +68,10 @@ export interface Api {
   stage(req: StageRequest): Promise<void>
   stagePath(req: StagePathRequest): Promise<void>
   commit(req: CommitRequest): Promise<void>
+  // Commits this worktree has that the remote doesn't. Fetched per worktree
+  // rather than carried on WorktreeStatus — see the push-button design spec.
+  getPendingCount(worktreePath: string): Promise<number>
+  push(worktreePath: string): Promise<PushOutcome>
   openLazygit(worktreePath: string): void
   // terminal
   listTerminals(): Promise<string[]>
@@ -85,6 +93,7 @@ export const IPC = {
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   getCommittedFiles: 'diff:committed',
   stage: 'diff:stage', stagePath: 'diff:stagePath', commit: 'diff:commit',
+  pendingCount: 'push:pending', push: 'push:run',
   openLazygit: 'term:lazygit',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
