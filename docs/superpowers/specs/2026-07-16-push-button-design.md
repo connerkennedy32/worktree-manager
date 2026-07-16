@@ -31,14 +31,25 @@ ref, which is a different feature.
 
 ## Components
 
-### 1. `src/main/git/trunk.ts` (new — extraction)
+### 1. `src/main/git/trunk.ts` (new — extraction + cache)
 
-`refExists` and `resolveTrunk` currently live in `committed.ts:6-26`. Move them here
-verbatim; `committed.ts` imports them.
+`refExists` and `resolveTrunk` currently live in `committed.ts:6-26`. Move them here;
+`committed.ts` imports them.
 
 Rationale: `push.ts` needs `resolveTrunk` for the no-upstream count. Two consumers, and
 reaching into a module about committed-file diffs for trunk resolution would be the
 wrong dependency. This is the only refactor in scope.
+
+**Add a cache**, keyed by worktree path: `Map<string, string | undefined>`. Trunk
+resolution costs ~15 ms (measured) because it runs `symbolic-ref` plus up to four
+`rev-parse --verify` probes, and it currently re-runs on *every* `getCommittedFiles`
+call — which means on every status change. Trunk does not move during a session.
+
+Caching is a net win for existing code, not just this feature: `getCommittedFiles`
+(`committed.ts:51`) resolves trunk on every status change today and gets ~15 ms faster.
+
+Accepted staleness: if `origin/HEAD` is repointed mid-session, the cache is wrong until
+restart. That is rare, and the failure is a wrong diff base rather than data loss.
 
 ### 2. `src/main/git/push.ts` (new)
 
@@ -83,44 +94,101 @@ verbatim. This intentionally diverges from the bare pass-through handlers in
 
 ### 3. `src/shared/ipc-types.ts`
 
-- `WorktreeStatus` gains `ahead: number`.
 - `PushOutcome` exported.
-
-`hasUpstream` deliberately does **not** cross the IPC boundary. The button's visibility
-keys off `ahead > 0`, and `push` re-derives upstream state in the main process to pick
-its arguments, so exposing it to the renderer would add a field with no consumer.
+- `IPC.pendingCount: 'push:pending'`; `Api.getPendingCount(worktreePath: string): Promise<number>`.
 - `IPC.push: 'diff:push'`; `Api.push(worktreePath: string): Promise<PushOutcome>`.
 
-### 4. `src/main/git/status.ts`
+**`WorktreeStatus` is unchanged.** Neither `ahead` nor `hasUpstream` crosses on it. The
+count is fetched on demand, for the selected worktree only, by its own call — see below.
 
-`getStatus` calls `getPushState` and includes its `ahead` in the result.
+`getPendingCount` returns a bare `number`, not `PushState`: the panel needs only the
+count, and `push` re-derives `branch` / `hasUpstream` in the main process to choose its
+arguments. `PushState` stays internal to `push.ts`.
 
-This rides the existing refresh plumbing: `refreshStatus` (`store.ts:69-72`) already
-re-fetches on commit, on watcher events, and every 3s for the selected worktree, so the
-button appears after a commit and disappears after a push with no extra wiring.
+### 4. Why the count is NOT part of `getStatus`
 
-**Cost:** `refreshWorktrees` (`store.ts:57-60`) fans out `getStatus` per worktree, so
-every worktree pays ~2 extra local git calls per refresh. `rev-list --count` is local
-and single-digit milliseconds; at this app's scale that's noise. It also means a future
-sidebar badge needs no new plumbing.
+The obvious design is folding `getPushState` into `getStatus` so the count rides the
+existing `refreshStatus` plumbing and updates for free. **Measurements ruled this out.**
+
+Measured on this repo:
+
+| call | cost |
+|---|---|
+| `getStatus` today | 68.5 ms |
+| `getPushState`, upstream exists | +18.4 ms |
+| `getPushState`, no upstream (the common case here) | +40.3 ms |
+| └ of which `resolveTrunk` (now cached) | 15.1 ms |
+
+`git status --porcelain -uall` already dominates at 68 ms because it stat-walks the
+working tree; the added `rev-parse`/`rev-list` calls are ~6 ms each. So the increase is
++27% with tracking, +59% without.
+
+That increase is not paid once. `watchers.watch(p, …)` is registered in `termStart`
+(`ipc.ts:85`), so **every worktree selected during a session stays watched for the rest
+of it**, and is only released when the worktree is removed (`ipc.ts:58`). Any file
+change in any watched worktree debounces 300 ms (`watcher.ts`) and fires
+`statusChanged` → `refreshStatus` for that worktree — regardless of which one is
+selected. Several worktrees with builds or agents writing files therefore drive multiple
+`getStatus` calls per second, continuously.
+
+This is a known sore spot. The comment at the top of `watcher.ts` records that watching
+`node_modules` "stalls the main event loop — starving the terminal IPC and causing
+multi-second typing lag". Inflating every `getStatus` by up to 59% spends the headroom
+that fix bought, in the same place, for a number only the selected worktree displays.
+
+So the count is fetched per-worktree, on demand. Background and unvisited worktrees pay
+nothing. The cost lands only on the worktree whose panel is on screen.
+
+**Consequence:** a future sidebar badge no longer gets the data for free — it would need
+its own fan-out and would reintroduce exactly this cost. That is accepted; the badge is
+out of scope, and the trade favours not regressing terminal latency.
 
 ### 5. `src/main/ipc.ts` + `src/preload/index.ts`
 
-One `ipcMain.handle(IPC.push, (_e, p) => push(p))` and one `push: (p) => ipcRenderer.invoke(IPC.push, p)`,
-following the existing shapes.
+Two handlers and two bridges, following the existing shapes:
+
+```
+ipcMain.handle(IPC.pendingCount, (_e, p) => getPushState(p).then(s => s.ahead))
+ipcMain.handle(IPC.push, (_e, p) => push(p))
+```
 
 ### 6. `src/renderer/components/DiffPanel.tsx`
 
-In the footer (`:127`, already `flexDirection: 'column', gap: 6`), below Commit,
-rendered only when `status.ahead > 0`:
+Local state: `pending: number` (default `0`), `pushing: boolean`, `pushError?: string`.
 
-- Label: `Push {ahead} commit{s}`; `Pushing…` while in flight; disabled while pushing.
+**Fetching the count.** A `useEffect` keyed on `[selected, status]` calls
+`getPendingCount(selected)` and stores the result. Keying on `status` is what keeps it
+current: `status` is a new object on every `refreshStatus`, so the count re-fetches
+after a commit, after a watcher event, and on the 3s poll for the selected worktree —
+the same cadence it would have had inside `getStatus`, without the fan-out cost.
+
+The effect must guard against races. `selected` can change while a fetch is in flight,
+and a stale response would show the previous worktree's count against the new one. Use
+a `cancelled` flag in the cleanup, as is standard:
+
+```ts
+useEffect(() => {
+  if (!selected) return
+  let cancelled = false
+  window.api.getPendingCount(selected).then(n => { if (!cancelled) setPending(n) })
+  return () => { cancelled = true }
+}, [selected, status])
+```
+
+Also reset `pushError` when `selected` changes — an error from one worktree must not
+linger over another.
+
+**The button**, in the footer (`:127`, already `flexDirection: 'column', gap: 6`), below
+Commit, rendered only when `pending > 0`:
+
+- Label: `Push {pending} commit{s}`; `Pushing…` while in flight; disabled while pushing.
 - Styling: inline, matching the panel; accent `#0e639c`, disabled `#3a3a3a`.
 - On failure: git's message below the button in `#f28b82` with `whiteSpace: 'pre-wrap'`,
   `maxHeight` + `overflow: 'auto'` (rejection messages are long and multi-line). Same
   red `ConfirmModal.tsx:25` uses.
 - Error state clears on the next press.
-- On success: `refreshStatus(selected)` → `ahead` → 0 → button unmounts.
+- On success: clear `pushError` and call `refreshStatus(selected)`, which produces a new
+  `status` object → the effect re-runs → `pending` → 0 → button unmounts.
 
 Unlike `doCommit` (`DiffPanel.tsx:35-43`), which has no `catch`, this path must handle
 failure: a silently failed push looks identical to a successful one, and the user would
@@ -146,16 +214,24 @@ Real git via `makeTmpRepo` (`tests/helpers/tmpRepo.ts`) plus a bare remote, not 
 - non-fast-forward rejection → `{ ok: false }` with git's message preserved (assert it
   mentions the rejection rather than matching exact text, which varies by git version)
 
-**Not covered:** the DiffPanel footer. No component test setup exists in this repo, and
-adding one for a single button isn't warranted. Verified by running the app: commit,
-confirm the button appears with the right count, push, confirm it disappears; then push
-a rejected branch and confirm the message renders.
+`resolveTrunk` cache:
+- resolving twice for the same worktree path hits the cache the second time (assert by
+  observing that a `resolveTrunk` call after deleting the trunk ref still returns the
+  cached value — proving no re-resolution occurred)
+
+**Not covered:** the DiffPanel footer, including the count-fetch effect and its race
+guard. No component test setup exists in this repo, and adding one for a single button
+isn't warranted. Verified by running the app: commit, confirm the button appears with
+the right count, push, confirm it disappears; switch worktrees rapidly and confirm the
+count doesn't bleed across; then push a rejected branch and confirm the message renders.
 
 ## Out of Scope
 
 - Force push, and any `--force-with-lease` affordance.
 - Pull / fetch / sync.
-- Sidebar per-worktree badges (deferred; the data will already be on `WorktreeStatus`).
+- Sidebar per-worktree badges. Deferred, and now genuinely more expensive: the count is
+  no longer carried on `WorktreeStatus`, so a badge would need its own per-worktree
+  fan-out — reintroducing the cost that section 4 exists to avoid.
 - Pushing a detached HEAD.
 - Remotes other than `origin`.
 - Choosing or editing the upstream branch name (always `origin/<branch>`).
