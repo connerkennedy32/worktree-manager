@@ -1,0 +1,35 @@
+/* Dark, compact theme for react-diff-view inside the narrow changes panel. */
+.diff {
+  font-family: Menlo, monospace;
+  font-size: 11.5px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-collapse: collapse;
+  width: 100%;
+}
+.diff td { border: 0; }
+.diff-gutter {
+  background: #1e1e1e;
+  color: #6b6b6b;
+  min-width: 2.2em;
+  padding: 0 6px;
+  text-align: right;
+}
+.diff-gutter-col { width: 2.2em; }
+.diff-code { padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
+
+.diff-code-insert { background: rgba(70, 149, 74, 0.18); }
+.diff-gutter-insert { background: rgba(70, 149, 74, 0.25); }
+.diff-code-delete { background: rgba(201, 60, 55, 0.18); }
+.diff-gutter-delete { background: rgba(201, 60, 55, 0.25); }
+
+.diff-code-insert .diff-code-edit { background: rgba(70, 149, 74, 0.4); }
+.diff-code-delete .diff-code-edit { background: rgba(201, 60, 55, 0.4); }
+
+.diff-hunk-header {
+  background: #252526;
+  color: #7a9bc4;
+  padding: 1px 8px;
+}
+.diff-hunk-header-content { color: #7a9bc4; }
+.diff-gutter:empty { background: #1e1e1e; }
