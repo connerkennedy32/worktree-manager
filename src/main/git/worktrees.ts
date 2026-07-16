@@ -10,6 +10,12 @@ export async function headPath(worktreePath: string): Promise<string> {
   return isAbsolute(raw) ? raw : resolve(worktreePath, raw)
 }
 
+// Git ref names can't contain spaces; collapse whitespace runs into a single dash
+// so typing "my new feature" yields branch/dir name "my-new-feature" instead of failing.
+export function sanitizeBranchName(branch: string): string {
+  return branch.trim().replace(/\s+/g, '-')
+}
+
 export function worktreeDir(repoPath: string, branch: string): string {
   const repoName = basename(repoPath)
   const safe = branch.replace(/[/\\]/g, '-')
@@ -38,10 +44,11 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
 
 export async function createWorktree(req: NewWorktreeRequest): Promise<Worktree[]> {
   const git = simpleGit(req.repoPath)
-  const dir = worktreeDir(req.repoPath, req.branch)
+  const branch = req.createBranch ? sanitizeBranchName(req.branch) : req.branch
+  const dir = worktreeDir(req.repoPath, branch)
   const args = ['worktree', 'add']
-  if (req.createBranch) args.push('-b', req.branch, dir)
-  else args.push(dir, req.branch)
+  if (req.createBranch) args.push('-b', branch, dir)
+  else args.push(dir, branch)
   await git.raw(args)
   return listWorktrees(req.repoPath)
 }

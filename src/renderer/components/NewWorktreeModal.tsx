@@ -18,7 +18,7 @@ export function NewWorktreeModal({ repoPath, onClose }: { repoPath: string; onCl
     try {
       const worktrees = await window.api.createWorktree({ repoPath, branch: name, createBranch: true })
       await refresh()
-      const created = worktrees.find(w => w.branch === name)
+      const created = worktrees.find(w => w.branch === name.replace(/\s+/g, '-'))
       if (created) select(created.path)
       onClose()
     } catch (e: any) {
