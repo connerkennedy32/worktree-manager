@@ -49,3 +49,48 @@
 }
 .diff-hunk-header-content { color: #7a9bc4; }
 .diff-gutter:empty { background: #1e1e1e; }
+
+/* Syntax tokens — VS Code Dark+, applied to the token trees diff-tokens.ts feeds
+   to react-diff-view. Everything is scoped under .diff: Prism's class names are
+   generic enough ("string", "property", "tag") to collide with app markup, and
+   nothing outside the diff should inherit these. Unmatched text keeps the .diff
+   default of #d4d4d4, which is Dark+'s plain-identifier colour, so a language we
+   have no grammar for still looks deliberate rather than broken. */
+.diff .token.comment,
+.diff .token.prolog,
+.diff .token.cdata { color: #6a9955; font-style: italic; }
+.diff .token.doctype { color: #808080; }
+.diff .token.punctuation { color: #d4d4d4; }
+.diff .token.keyword,
+.diff .token.atrule,
+.diff .token.boolean,
+.diff .token.important { color: #569cd6; }
+.diff .token.tag { color: #569cd6; }
+/* The name inside <div> is its own token; without this it inherits tag blue and
+   the angle brackets stop reading as punctuation. */
+.diff .token.tag .token.punctuation { color: #808080; }
+.diff .token.string,
+.diff .token.char,
+.diff .token.attr-value { color: #ce9178; }
+.diff .token.number { color: #b5cea8; }
+/* function-variable is an arrow function bound to a name (`const dirOf = …`),
+   which Dark+ colours like any other function rather than like a variable. */
+.diff .token.function,
+.diff .token.function-variable { color: #dcdcaa; }
+.diff .token.class-name,
+.diff .token.builtin { color: #4ec9b0; }
+.diff .token.attr-name,
+.diff .token.property,
+.diff .token.variable,
+.diff .token.parameter { color: #9cdcfe; }
+.diff .token.constant { color: #4fc1ff; }
+.diff .token.selector { color: #d7ba7d; }
+.diff .token.regex { color: #d16969; }
+/* Prism's stock operator/entity rules ship a background swatch that reads as a
+   stray highlight over the insert/delete tints. */
+.diff .token.operator,
+.diff .token.entity,
+.diff .token.url { color: #d4d4d4; background: none; }
+.diff .token.namespace { opacity: 0.8; }
+.diff .token.italic { font-style: italic; }
+.diff .token.bold { font-weight: 600; }
