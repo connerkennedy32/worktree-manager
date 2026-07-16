@@ -88,8 +88,9 @@ staged/unstaged split.
 Stage/unstage in the modal calls the same `window.api.stagePath` + `refreshStatus`
 sequence the panel uses.
 
-View preference: read `localStorage.getItem('diffView')` on mount, falling back to
-`'split'`; write on each toggle.
+View preference: read `localStorage.getItem('wtm.diffView')` on mount, falling back
+to `'split'`; write on each toggle. The `wtm.` prefix matches the existing
+`wtm.selected` key in `store.ts`.
 
 ### `src/renderer/components/DiffPanel.tsx` (changed)
 
