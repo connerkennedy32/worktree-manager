@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
+import { makeTmpRepo, withOrigin } from '../helpers/tmpRepo'
 import { getCommittedFiles } from '../../src/main/git/committed'
 import { getFileDiff } from '../../src/main/git/diff'
 import { createWorktree, worktreeDir } from '../../src/main/git/worktrees'
@@ -33,15 +33,9 @@ async function repoOnFeatureBranch() {
   return r
 }
 
-// Give a repo an `origin` remote with a real main branch, so origin/main resolves.
-async function withOrigin(dir: string) {
-  const remote = mkdtempSync(join(tmpdir(), 'wtm-remote-'))
-  cleanups.push(() => rmSync(remote, { recursive: true, force: true }))
-  await simpleGit(remote).init(['--bare', '--initial-branch=main'])
-  const git = simpleGit(dir)
-  await git.addRemote('origin', remote)
-  await git.push(['-u', 'origin', 'main'])
-  return remote
+// Registers the bare remote's cleanup, so callers can ignore the return value.
+async function addOrigin(dir: string) {
+  cleanups.push(await withOrigin(dir))
 }
 
 describe('getCommittedFiles', () => {
@@ -56,9 +50,9 @@ describe('getCommittedFiles', () => {
     expect(res.files).toEqual([{ code: 'A', path: 'feature.txt' }])
   })
 
-  it('prefers origin/HEAD over a local main when naming the trunk', async () => {
+  it('uses origin/HEAD, not a local branch, as the base when a remote exists', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await withOrigin(r.dir)
+    await addOrigin(r.dir)
     await r.git.raw(['remote', 'set-head', 'origin', 'main'])
     await r.git.checkoutLocalBranch('feat')
     writeFileSync(join(r.dir, 'feature.txt'), 'hello\n')
@@ -66,13 +60,13 @@ describe('getCommittedFiles', () => {
     await r.git.commit('add feature')
 
     const res = await getCommittedFiles(r.dir)
-    expect(res.baseBranch).toBe('main')
+    expect(res.baseBranch).toBe('origin/main')
     expect(res.files.map(f => f.path)).toEqual(['feature.txt'])
   })
 
   it('on the trunk itself, lists unpushed commits against origin/<trunk>', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await withOrigin(r.dir)
+    await addOrigin(r.dir)
     writeFileSync(join(r.dir, 'unpushed.txt'), 'local only\n')
     await r.git.add('.')
     await r.git.commit('not pushed yet')
@@ -84,7 +78,7 @@ describe('getCommittedFiles', () => {
 
   it('on the trunk with everything pushed, lists nothing', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await withOrigin(r.dir)
+    await addOrigin(r.dir)
     const res = await getCommittedFiles(r.dir)
     expect(res.files).toEqual([])
   })

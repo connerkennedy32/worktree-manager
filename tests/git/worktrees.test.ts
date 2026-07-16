@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
-import { listWorktrees, createWorktree, removeWorktree, headPath } from '../../src/main/git/worktrees'
-import { existsSync, writeFileSync } from 'fs'
+import { makeTmpRepo, withOrigin } from '../helpers/tmpRepo'
+import { listWorktrees, createWorktree, removeWorktree, headPath, worktreeDir } from '../../src/main/git/worktrees'
+import { existsSync, writeFileSync, rmSync } from 'fs'
 import { join } from 'path'
+import simpleGit from 'simple-git'
 
 let cleanups: (() => void)[] = []
 afterEach(() => { cleanups.forEach(c => c()); cleanups = [] })
@@ -24,6 +25,39 @@ describe('worktrees', () => {
     expect(created).toBeDefined()
     expect(existsSync(created.path)).toBe(true)
     expect(created.path).toContain('.worktrees')
+  })
+
+  // The bug this guards: `worktree add -b` with no start-point silently uses the
+  // invoking repo's HEAD, so a main checkout parked on a feature branch seeds
+  // every new worktree with that branch's commits.
+  it('starts a new branch at the trunk, not at the main checkout HEAD', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    cleanups.push(await withOrigin(r.dir))
+    cleanups.push(() => rmSync(join(r.dir, '..', '.worktrees'), { recursive: true, force: true }))
+    const trunkTip = (await r.git.revparse(['HEAD'])).trim()
+
+    // Park the main checkout on a feature branch with a commit of its own.
+    await r.git.checkoutLocalBranch('other-feature')
+    writeFileSync(join(r.dir, 'other.txt'), 'not mine\n')
+    await r.git.add('.')
+    await r.git.commit('work on another branch')
+
+    await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
+    const tip = (await simpleGit(worktreeDir(r.dir, 'feat-x')).revparse(['HEAD'])).trim()
+    expect(tip).toBe(trunkTip)
+  })
+
+  it('leaves a new branch with no upstream, so it is never pushed at the trunk', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    cleanups.push(await withOrigin(r.dir))
+    cleanups.push(() => rmSync(join(r.dir, '..', '.worktrees'), { recursive: true, force: true }))
+
+    await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
+    const wtGit = simpleGit(worktreeDir(r.dir, 'feat-x'))
+    const upstream = await wtGit
+      .raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
+      .then(o => o.trim(), () => '')
+    expect(upstream).toBe('')
   })
 
   it('removes a worktree', async () => {

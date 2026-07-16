@@ -17,6 +17,25 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
 
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
+  const [pending, setPending] = useState(0)
+  const [pushing, setPushing] = useState(false)
+  const [pushError, setPushError] = useState<string>()
+
+  // Commits this worktree has that the remote doesn't. Fetched on demand rather
+  // than carried on WorktreeStatus: getStatus already runs for every *watched*
+  // worktree several times a second, and only the selected one shows this count.
+  const status = useStore(s => (selected ? s.statuses[selected] : undefined))
+  useEffect(() => {
+    if (!selected) { setPending(0); return }
+    let cancelled = false
+    // Keyed on `status` too: it's a fresh object per refreshStatus, so the count
+    // re-fetches after a commit, a watcher event, or the 3s poll.
+    window.api.getPendingCount(selected).then(n => { if (!cancelled) setPending(n) })
+    return () => { cancelled = true }
+  }, [selected, status])
+
+  // An error from one worktree must not linger over another.
+  useEffect(() => { setPushError(undefined) }, [selected])
   // Working changes are the panel's job, so they start open; committed files are
   // reference material and start collapsed.
   const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>(
@@ -40,6 +59,19 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
       setMsg('')
       await refreshStatus(selected)
     } finally { setCommitting(false) }
+  }
+
+  // Unlike doCommit, this must surface failure: a silently failed push looks
+  // exactly like a successful one, and you'd believe your work was on the remote.
+  const doPush = async () => {
+    if (!selected) return
+    setPushing(true)
+    setPushError(undefined)
+    try {
+      const result = await window.api.push(selected)
+      if (result.ok) await refreshStatus(selected)
+      else setPushError(result.message)
+    } finally { setPushing(false) }
   }
 
   const renderRow = (row: Row) => (
@@ -133,6 +165,22 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
                          border: 'none', borderRadius: 4, padding: '6px', cursor: 'pointer', fontSize: 12 }}>
           {committing ? 'Committing…' : `Commit ${stagedCount} file${stagedCount === 1 ? '' : 's'}`}
         </button>
+
+        {pending > 0 && (
+          <button onClick={doPush} disabled={pushing}
+                  style={{ background: pushing ? '#3a3a3a' : '#0e639c', color: '#fff',
+                           border: 'none', borderRadius: 4, padding: '6px',
+                           cursor: pushing ? 'default' : 'pointer', fontSize: 12 }}>
+            {pushing ? 'Pushing…' : `Push ${pending} commit${pending === 1 ? '' : 's'}`}
+          </button>
+        )}
+
+        {pushError && (
+          <div style={{ color: '#f28b82', fontSize: 11, whiteSpace: 'pre-wrap',
+                        maxHeight: 120, overflow: 'auto', fontFamily: 'Menlo, monospace' }}>
+            {pushError}
+          </div>
+        )}
       </div>
     </div>
   )
