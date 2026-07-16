@@ -162,8 +162,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
                 title={row.path}>{row.path}</span>
           {/* Staging an already-committed file is meaningless. */}
           {!row.committed && (
-            <button onClick={() => stageRow(row)} style={{ fontSize: 11 }}>
-              {row.staged ? 'Unstage' : 'Stage'}
+            <button onClick={() => stageRow(row)}
+                    title={row.staged ? 'Unstage' : 'Stage'}
+                    style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                             fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                    onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+              {row.staged ? '−' : '+'}
             </button>
           )}
         </div>
