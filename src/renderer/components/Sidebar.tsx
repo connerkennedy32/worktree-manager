@@ -104,11 +104,18 @@ export function Sidebar() {
           return (
             <div key={w.path} onClick={() => select(w.path)}
                  onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}
-                 style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between',
+                 style={{ padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                          gap: 6, justifyContent: 'space-between',
                           background: selected === w.path ? '#094771' : 'transparent' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {w.isMain ? '● ' : '▸ '}{w.branch}
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {w.isMain ? '● ' : '▸ '}{w.path.split('/').filter(Boolean).pop()}
+                </span>
+                <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap', paddingLeft: 14 }}>
+                  {w.branch}
+                </span>
+              </div>
               <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                 {count > 0 && <span style={{ background: '#c93', color: '#000', borderRadius: 8,
                                              padding: '0 6px', fontSize: 11 }}>{count}</span>}
