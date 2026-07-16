@@ -12,11 +12,12 @@ export function NewWorktreeForm({ repoPath }: { repoPath: string }) {
     if (!branch.trim() || busy) return
     setBusy(true)
     try {
+      const name = branch.trim().replace(/\s+/g, '-')
       const worktrees = await window.api.createWorktree({ repoPath, branch: branch.trim(), createBranch: true })
       setBranch('')
       await refresh()
       // Navigate to the newly created worktree so its terminal opens automatically.
-      const created = worktrees.find(w => w.branch === branch.trim())
+      const created = worktrees.find(w => w.branch === name)
       if (created) select(created.path)
     } finally { setBusy(false) }
   }
