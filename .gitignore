@@ -3,3 +3,4 @@ out/
 dist/
 release/
 .DS_Store
+.worktrees/
