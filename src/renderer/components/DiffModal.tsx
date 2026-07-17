@@ -46,6 +46,9 @@ export function DiffModal() {
   const [original, setOriginal] = useState('')
   const [saving, setSaving] = useState(false)
   const dirty = editing && draft !== original
+  // Shared guard for every path that navigates away from an in-progress edit
+  // (Escape, backdrop, ✕, rail row switch, Cancel): asks once, consistently.
+  const confirmDiscard = () => !dirty || window.confirm('Discard your edits?')
 
   const allRows = useMemo(
     () => [...stagedRows, ...unstagedRows, ...committedRows],
@@ -55,7 +58,7 @@ export function DiffModal() {
     if (!openDiff) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      if (dirty && !window.confirm('Discard your edits?')) return
+      if (!confirmDiscard()) return
       setOpenDiff(null)
     }
     window.addEventListener('keydown', onKey)
@@ -68,6 +71,9 @@ export function DiffModal() {
   useEffect(() => {
     if (!openDiff || !loaded) return
     const next = reconcileTarget(openDiff, allRows)
+    // Accepted edge case: this can close/switch (next possibly null) while dirty,
+    // bypassing the discard confirm. It's watcher-driven (the file disappeared or
+    // moved out from under the modal), so it shouldn't block on a confirm prompt.
     if (next !== openDiff) setOpenDiff(next)
   }, [allRows, openDiff, setOpenDiff, loaded])
 
@@ -112,14 +118,18 @@ export function DiffModal() {
 
   const startEdit = async () => {
     if (!selected || !openDiff) return
-    const content = await window.api.readFile({ worktreePath: selected, path: openDiff.path })
-    setOriginal(content)
-    setDraft(content)
-    setEditing(true)
+    try {
+      const content = await window.api.readFile({ worktreePath: selected, path: openDiff.path })
+      setOriginal(content)
+      setDraft(content)
+      setEditing(true)
+    } catch (e) {
+      window.alert('Failed to read file: ' + (e as Error).message)
+    }
   }
 
   const cancelEdit = () => {
-    if (draft !== original && !window.confirm('Discard your edits?')) return
+    if (!confirmDiscard()) return
     setEditing(false)
   }
 
@@ -129,6 +139,9 @@ export function DiffModal() {
     try {
       await window.api.writeFile({ worktreePath: selected, path: openDiff.path, content: draft })
       setEditing(false)  // watcher-driven status refresh updates the diff
+    } catch (e) {
+      window.alert('Failed to save: ' + (e as Error).message)
+      // Leave editing true and the draft intact so the edit isn't lost.
     } finally { setSaving(false) }
   }
 
@@ -155,7 +168,7 @@ export function DiffModal() {
   const renderRailRow = (row: Row) => {
     const active = row.key === openDiff.key
     return (
-      <div key={row.key} onClick={() => setOpenDiff(row)}
+      <div key={row.key} onClick={() => { if (confirmDiscard()) setOpenDiff(row) }}
            // Hover only matters for rows you can move to; the active row already
            // owns its background.
            onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#2a2d2e' }}
@@ -224,7 +237,7 @@ export function DiffModal() {
   const activeRow = allRows.find(r => r.key === openDiff.key)
 
   return (
-    <div onClick={() => { if (!dirty || window.confirm('Discard your edits?')) setOpenDiff(null) }}
+    <div onClick={() => { if (confirmDiscard()) setOpenDiff(null) }}
          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()}
@@ -241,7 +254,7 @@ export function DiffModal() {
             {viewBtn('unified', 'Inline')}
             {viewBtn('split', 'Side by side')}
           </div>
-          <button onClick={() => { if (!dirty || window.confirm('Discard your edits?')) setOpenDiff(null) }} title="Close (Esc)"
+          <button onClick={() => { if (confirmDiscard()) setOpenDiff(null) }} title="Close (Esc)"
                   style={{ background: 'none', border: 'none', color: '#ddd', cursor: 'pointer',
                            fontSize: 16, lineHeight: 1, padding: '0 4px' }}>✕</button>
         </div>
