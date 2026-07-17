@@ -474,6 +474,17 @@ git commit -m "Add claude process detection for the agent status backstop"
 
 ### Task 3: settings.json merge (pure)
 
+> **CORRECTION (shipped in commit 3380d13):** the code and two tests below
+> described cross-path "stale install cleanup", identifying our entries by a
+> substring/loose match. That was found unsafe on the user's global config (it
+> could delete a user's own hook whose path contains `notify-hook.sh`) and was
+> traced to a contradiction in this task's own text. Per human decision, the
+> shipped implementation identifies our entries **by exact `command ===
+> scriptPath` only** and does **not** do cross-path cleanup. The
+> "drops our entry from a stale install path" test was removed and the
+> empty-husk test rewritten to reinstall at the same path. Treat the exact-path
+> behavior as the requirement; the code block below is retained for history.
+
 This edits the user's **global** Claude config. Getting it wrong damages something we do not own, so the merge is a pure function tested hard before it is ever wired to a real file.
 
 **Files:**
