@@ -34,15 +34,16 @@ export class AgentTracker {
     const status = mapHookEvent(event)
     if (!status) return // an event we do not model; never guess
 
+    const at = this.now()
     if (status === 'none') {
       this.reports.delete(path)
     } else {
-      this.reports.set(path, { status, at: this.now() })
+      this.reports.set(path, { status, at })
     }
     // Always emit, even when the status is unchanged: `at` advancing is itself
     // meaningful, since the renderer gates `done` against when the user last
     // looked at that worktree.
-    this.emit(path, { status, at: this.now() })
+    this.emit(path, { status, at })
   }
 
   /**

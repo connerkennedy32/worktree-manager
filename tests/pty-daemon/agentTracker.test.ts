@@ -66,6 +66,19 @@ describe('handleHook', () => {
     tracker.handleHook('id-a', 'StopFailure')
     expect(tracker.snapshot()['/wt/a'].status).toBe('failed')
   })
+
+  it('uses a single timestamp for the stored and emitted report', () => {
+    let clock = 1000
+    const seen: any[] = []
+    const tracker = new AgentTracker(
+      { list: () => ['/wt/a'], pid: () => 100, pathForId: (id: string) => (id === 'id-a' ? '/wt/a' : undefined) },
+      (_p, r) => seen.push(r),
+      async () => '',
+      () => clock++
+    )
+    tracker.handleHook('id-a', 'Stop')
+    expect(seen[0].at).toBe(tracker.snapshot()['/wt/a'].at)
+  })
 })
 
 describe('sweep', () => {
