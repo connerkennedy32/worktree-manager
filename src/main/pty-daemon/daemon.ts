@@ -10,6 +10,7 @@ import { PtyManager } from './sessionStore'
 import { PROTOCOL_VERSION, encodeFrame, FrameDecoder, type ClientMessage, type ServerMessage } from './protocol'
 import { AgentTracker } from './agentTracker'
 import { startHookServer } from './hookServer'
+import { ensureTmuxUpdateEnvironment } from './tmuxEnv'
 
 function configDir(): string {
   const dir = process.env.WTM_DAEMON_CONFIG_DIR || process.env.WTM_CONFIG_DIR
@@ -42,6 +43,10 @@ function startSession(worktreePath: string) {
   sessions.start(worktreePath, chunk => broadcast({ type: 'data', path: worktreePath, chunk }), {
     WTM_HOOK_SOCKET: hookSocketPath
   })
+  // Best-effort: if the user already runs a tmux server, let sessions/panes
+  // created inside this pty pick up these two vars too. No-op if tmux isn't
+  // installed or no server is running yet.
+  void ensureTmuxUpdateEnvironment()
 }
 
 function handleMessage(sock: net.Socket, message: ClientMessage) {
