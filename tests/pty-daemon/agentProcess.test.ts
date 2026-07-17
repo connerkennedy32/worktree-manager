@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  parseProcessTable, isAgentComm, hasAgentDescendant
+  parseProcessTable, isAgentComm, hasAgentDescendant,
+  isTmuxComm, detachedTmuxServerPids, hasAgentDescendantThroughTmux
 } from '../../src/main/pty-daemon/agentProcess'
 
 const PS_SAMPLE = [
@@ -109,5 +110,68 @@ describe('hasAgentDescendant', () => {
       { pid: 10, ppid: 11, comm: 'a' },
       { pid: 11, ppid: 10, comm: 'b' }
     ], 10)).toBe(false)
+  })
+})
+
+describe('isTmuxComm', () => {
+  it('matches a bare tmux', () => { expect(isTmuxComm('tmux')).toBe(true) })
+  it('matches an absolute path to tmux', () => { expect(isTmuxComm('/opt/homebrew/bin/tmux')).toBe(true) })
+  it('does not match a command that merely contains tmux', () => { expect(isTmuxComm('not-tmux')).toBe(false) })
+})
+
+describe('detachedTmuxServerPids', () => {
+  it('finds a tmux process reparented to pid 1', () => {
+    expect(detachedTmuxServerPids([
+      { pid: 1, ppid: 0, comm: '/sbin/launchd' },
+      { pid: 500, ppid: 1, comm: 'tmux' },
+      { pid: 100, ppid: 1, comm: '/bin/zsh' }
+    ])).toEqual([500])
+  })
+
+  it('does not match a tmux client, which has a normal shell parent', () => {
+    expect(detachedTmuxServerPids([
+      { pid: 1, ppid: 0, comm: '/sbin/launchd' },
+      { pid: 100, ppid: 1, comm: '/bin/zsh' },
+      { pid: 200, ppid: 100, comm: 'tmux' }
+    ])).toEqual([])
+  })
+})
+
+describe('hasAgentDescendantThroughTmux', () => {
+  it('finds a plain claude, same as hasAgentDescendant', () => {
+    expect(hasAgentDescendantThroughTmux([
+      { pid: 100, ppid: 1, comm: '/bin/zsh' },
+      { pid: 200, ppid: 100, comm: 'claude' }
+    ], 100)).toBe(true)
+  })
+
+  it('does not search a detached tmux server when the pty never attached to tmux', () => {
+    expect(hasAgentDescendantThroughTmux([
+      { pid: 1, ppid: 0, comm: '/sbin/launchd' },
+      { pid: 100, ppid: 1, comm: '/bin/zsh' }, // never runs tmux
+      { pid: 500, ppid: 1, comm: 'tmux' }, // an unrelated detached server
+      { pid: 600, ppid: 500, comm: 'claude' } // claude on that unrelated server
+    ], 100)).toBe(false)
+  })
+
+  it('finds claude inside a tmux pane by searching every detached server once a tmux client is seen', () => {
+    expect(hasAgentDescendantThroughTmux([
+      { pid: 1, ppid: 0, comm: '/sbin/launchd' },
+      { pid: 100, ppid: 1, comm: '/bin/zsh' },
+      { pid: 150, ppid: 100, comm: 'tmux' }, // the client this pty ran
+      { pid: 500, ppid: 1, comm: 'tmux' }, // the detached server
+      { pid: 600, ppid: 500, comm: '/bin/zsh' }, // the pane's shell
+      { pid: 700, ppid: 600, comm: 'claude' } // claude inside the pane
+    ], 100)).toBe(true)
+  })
+
+  it('reports gone when the pty ran tmux but no server has a live claude anywhere', () => {
+    expect(hasAgentDescendantThroughTmux([
+      { pid: 1, ppid: 0, comm: '/sbin/launchd' },
+      { pid: 100, ppid: 1, comm: '/bin/zsh' },
+      { pid: 150, ppid: 100, comm: 'tmux' },
+      { pid: 500, ppid: 1, comm: 'tmux' },
+      { pid: 600, ppid: 500, comm: '/bin/zsh' }
+    ], 100)).toBe(false)
   })
 })

@@ -6,7 +6,7 @@
 // It may only clear a status, never set one.
 
 import { mapHookEvent, type AgentReport } from '@shared/agent-status'
-import { hasAgentDescendant, parseProcessTable, readProcessTable } from './agentProcess'
+import { hasAgentDescendantThroughTmux, parseProcessTable, readProcessTable } from './agentProcess'
 
 const SWEEP_MS = 2000
 
@@ -63,7 +63,7 @@ export class AgentTracker {
     const live = new Set(this.sessions.list())
     for (const path of [...this.reports.keys()]) {
       const pid = this.sessions.pid(path)
-      const gone = !live.has(path) || pid === undefined || !hasAgentDescendant(entries, pid)
+      const gone = !live.has(path) || pid === undefined || !hasAgentDescendantThroughTmux(entries, pid)
       if (!gone) continue
       this.reports.delete(path)
       this.emit(path, { status: 'none', at: this.now() })
