@@ -1,7 +1,7 @@
 // Merges our notify-hook into a Claude Code settings object.
 //
 // This touches the user's GLOBAL config, so the contract is strict: preserve
-// everything we did not put there, identify our own entries solely by script
+// everything we did not put there, identify our own entries by EXACT script
 // path, and never throw on malformed input. Pure — the caller owns all fs.
 
 // Events we register. Order mirrors a turn's lifecycle. SessionStart is
@@ -23,39 +23,31 @@ const NEEDS_MATCHER = new Set<string>(['PostToolUse', 'PostToolUseFailure', 'Per
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
+/** Strips every command entry whose command is exactly `scriptPath`, dropping husks left behind. */
+function withoutOurs(matchers: unknown, scriptPath: string): unknown[] {
+  if (!Array.isArray(matchers)) return []
+  const kept: unknown[] = []
+  for (const matcher of matchers) {
+    if (!isObject(matcher)) { kept.push(matcher); continue }
+    if (!Array.isArray(matcher.hooks)) { kept.push(matcher); continue }
+    const hooks = matcher.hooks.filter(h => !(isObject(h) && h.command === scriptPath))
+    // A matcher whose only hook was ours is now empty — drop it rather than
+    // leave an empty shell in the user's config.
+    if (hooks.length > 0) kept.push({ ...matcher, hooks })
+  }
+  return kept
+}
+
 export function mergeHooks(existing: unknown, scriptPath: string): Record<string, unknown> {
   const settings: Record<string, unknown> = isObject(existing) ? { ...existing } : {}
   const existingHooks = isObject(settings.hooks) ? settings.hooks : {}
 
   const hooks: Record<string, unknown> = {}
 
-  // Carry every event forward minus our entries. This both preserves the user's
-  // hooks and cleans up our own stale installs from a previous script path.
+  // Carry every event forward minus our exact entry. This preserves the user's
+  // hooks and collapses a duplicate of ours before we re-add a single clean one.
   for (const [event, matchers] of Object.entries(existingHooks)) {
-    const kept: unknown[] = []
-    if (Array.isArray(matchers)) {
-      for (const matcher of matchers) {
-        if (!isObject(matcher)) { kept.push(matcher); continue }
-        if (!Array.isArray(matcher.hooks)) { kept.push(matcher); continue }
-
-        // Check if all command hooks in this matcher are ours (identified by 'notify-hook.sh')
-        const commandHooks = matcher.hooks.filter(h => isObject(h) && h.type === 'command')
-        const ourCommandHooks = commandHooks.filter(h =>
-          typeof (h as any).command === 'string' && (h as any).command.includes('notify-hook.sh')
-        )
-
-        // If all command hooks are ours (stale from old install), skip this matcher entirely
-        if (ourCommandHooks.length === commandHooks.length && commandHooks.length > 0) {
-          continue
-        }
-
-        // Otherwise, filter out our current scriptPath and keep the rest
-        const filteredHooks = matcher.hooks.filter(h => !(isObject(h) && (h as any).command === scriptPath))
-        // A matcher whose only hook was ours is now empty — drop it rather than
-        // leave an empty shell in the user's config.
-        if (filteredHooks.length > 0) kept.push({ ...matcher, hooks: filteredHooks })
-      }
-    }
+    const kept = withoutOurs(matchers, scriptPath)
     if (kept.length > 0) hooks[event] = kept
   }
 

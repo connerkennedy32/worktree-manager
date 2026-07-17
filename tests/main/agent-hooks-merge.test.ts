@@ -61,19 +61,17 @@ describe('mergeHooks', () => {
     expect(twice).toEqual(once)
   })
 
-  it('drops our entry from a stale install path', () => {
-    const stale: any = mergeHooks({}, '/old/path/notify-hook.sh')
-    const out: any = mergeHooks(stale, SCRIPT)
-    const commands = entryFor(out, 'Stop').map((h: any) => h.command)
-    expect(commands).toEqual([SCRIPT])
-  })
-
-  it('removes an event key entirely when we were its only hook', () => {
-    const stale: any = mergeHooks({}, '/old/path/notify-hook.sh')
-    // Pretend a stale event we no longer register still holds only our entry.
-    stale.hooks.PreCompact = [{ hooks: [{ type: 'command', command: '/old/path/notify-hook.sh' }] }]
-    const out: any = mergeHooks(stale, SCRIPT)
-    expect(out.hooks).not.toHaveProperty('PreCompact')
+  it('drops a matcher husk rather than leaving it empty', () => {
+    // A prior install of OURS at the same path is the only hook on an event we
+    // also register: merging must collapse it to a single clean entry, never an
+    // empty matcher.
+    const prior: any = mergeHooks({}, SCRIPT)
+    const out: any = mergeHooks(prior, SCRIPT)
+    for (const matcher of out.hooks.Stop) {
+      expect(Array.isArray(matcher.hooks)).toBe(true)
+      expect(matcher.hooks.length).toBeGreaterThan(0)
+    }
+    expect(entryFor(out, 'Stop').filter((h: any) => h.command === SCRIPT)).toHaveLength(1)
   })
 
   it('tolerates a null or non-object input', () => {
