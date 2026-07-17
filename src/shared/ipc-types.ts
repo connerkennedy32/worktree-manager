@@ -53,6 +53,8 @@ export interface FileDiffRequest {
 }
 export interface StagePathRequest { worktreePath: string; path: string; unstage: boolean }
 export interface DiscardPathRequest { worktreePath: string; path: string }
+export interface ReadFileRequest { worktreePath: string; path: string }
+export interface WriteFileRequest { worktreePath: string; path: string; content: string }
 export interface CommitRequest { worktreePath: string; message: string }
 export interface NewWorktreeRequest { repoPath: string; branch: string; createBranch: boolean }
 
@@ -68,6 +70,8 @@ export interface Api {
   getDiff(worktreePath: string): Promise<DiffFile[]>
   getCommittedFiles(worktreePath: string): Promise<CommittedChanges>
   getFileDiff(req: FileDiffRequest): Promise<string>
+  readFile(req: ReadFileRequest): Promise<string>
+  writeFile(req: WriteFileRequest): Promise<void>
   stage(req: StageRequest): Promise<void>
   stagePath(req: StagePathRequest): Promise<void>
   stageAll(worktreePath: string): Promise<void>
@@ -96,6 +100,7 @@ export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
   listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
+  readFile: 'file:read', writeFile: 'file:write',
   getCommittedFiles: 'diff:committed',
   stage: 'diff:stage', stagePath: 'diff:stagePath', stageAll: 'diff:stageAll',
   discardPath: 'diff:discardPath', commit: 'diff:commit',

@@ -37,16 +37,33 @@ export function DiffModal() {
 
   const setViewPref = (v: ViewType) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
 
+  // Edit mode: load the working-tree file into a textarea so minor changes
+  // (deleting a comment, a one-line fix) can happen here instead of an external
+  // editor. `original` is kept to detect unsaved edits; the file watcher refreshes
+  // the diff after a save, so no manual refetch is needed.
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [original, setOriginal] = useState('')
+  const [saving, setSaving] = useState(false)
+  const dirty = editing && draft !== original
+  // Shared guard for every path that navigates away from an in-progress edit
+  // (Escape, backdrop, ✕, rail row switch, Cancel): asks once, consistently.
+  const confirmDiscard = () => !dirty || window.confirm('Discard your edits?')
+
   const allRows = useMemo(
     () => [...stagedRows, ...unstagedRows, ...committedRows],
     [stagedRows, unstagedRows, committedRows])
 
   useEffect(() => {
     if (!openDiff) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenDiff(null) }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (!confirmDiscard()) return
+      setOpenDiff(null)
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openDiff, setOpenDiff])
+  }, [openDiff, setOpenDiff, dirty])
 
   // Staging changes a row's key, so follow the file rather than the key; close
   // only when it is genuinely gone. Identity compare: reconcileTarget returns the
@@ -54,8 +71,15 @@ export function DiffModal() {
   useEffect(() => {
     if (!openDiff || !loaded) return
     const next = reconcileTarget(openDiff, allRows)
+    // Accepted edge case: this can close/switch (next possibly null) while dirty,
+    // bypassing the discard confirm. It's watcher-driven (the file disappeared or
+    // moved out from under the modal), so it shouldn't block on a confirm prompt.
     if (next !== openDiff) setOpenDiff(next)
   }, [allRows, openDiff, setOpenDiff, loaded])
+
+  // Switching to a different file (or closing) must abandon any edit session;
+  // otherwise the textarea would show one file's draft against another's diff.
+  useEffect(() => { setEditing(false) }, [openDiff?.path, selected])
 
   // Fetch the open file's patch, scoped by worktree + row key. Refetches whenever
   // status changes, so an open diff tracks edits on disk instead of freezing.
@@ -92,6 +116,35 @@ export function DiffModal() {
     await refreshStatus(selected)
   }
 
+  const startEdit = async () => {
+    if (!selected || !openDiff) return
+    try {
+      const content = await window.api.readFile({ worktreePath: selected, path: openDiff.path })
+      setOriginal(content)
+      setDraft(content)
+      setEditing(true)
+    } catch (e) {
+      window.alert('Failed to read file: ' + (e as Error).message)
+    }
+  }
+
+  const cancelEdit = () => {
+    if (!confirmDiscard()) return
+    setEditing(false)
+  }
+
+  const saveEdit = async () => {
+    if (!selected || !openDiff) return
+    setSaving(true)
+    try {
+      await window.api.writeFile({ worktreePath: selected, path: openDiff.path, content: draft })
+      setEditing(false)  // watcher-driven status refresh updates the diff
+    } catch (e) {
+      window.alert('Failed to save: ' + (e as Error).message)
+      // Leave editing true and the draft intact so the edit isn't lost.
+    } finally { setSaving(false) }
+  }
+
   // A refetch of the SAME file keeps showing the old text (no "Loading…" flicker
   // on every status tick); switching files shows "Loading…" immediately.
   const patchText = patch && patch.key === patchKey ? patch.text : undefined
@@ -115,7 +168,7 @@ export function DiffModal() {
   const renderRailRow = (row: Row) => {
     const active = row.key === openDiff.key
     return (
-      <div key={row.key} onClick={() => setOpenDiff(row)}
+      <div key={row.key} onClick={() => { if (confirmDiscard()) setOpenDiff(row) }}
            // Hover only matters for rows you can move to; the active row already
            // owns its background.
            onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#2a2d2e' }}
@@ -184,7 +237,7 @@ export function DiffModal() {
   const activeRow = allRows.find(r => r.key === openDiff.key)
 
   return (
-    <div onClick={() => setOpenDiff(null)}
+    <div onClick={() => { if (confirmDiscard()) setOpenDiff(null) }}
          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div onClick={e => e.stopPropagation()}
@@ -201,7 +254,7 @@ export function DiffModal() {
             {viewBtn('unified', 'Inline')}
             {viewBtn('split', 'Side by side')}
           </div>
-          <button onClick={() => setOpenDiff(null)} title="Close (Esc)"
+          <button onClick={() => { if (confirmDiscard()) setOpenDiff(null) }} title="Close (Esc)"
                   style={{ background: 'none', border: 'none', color: '#ddd', cursor: 'pointer',
                            fontSize: 16, lineHeight: 1, padding: '0 4px' }}>✕</button>
         </div>
@@ -238,8 +291,13 @@ export function DiffModal() {
                   </span>
                 )}
               </span>
-              {activeRow && !activeRow.committed && (
+              {activeRow && !activeRow.committed && !editing && (
                 <>
+                  <button onClick={startEdit}
+                          style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    Edit
+                  </button>
                   <button onClick={() => discardRow(activeRow)}
                           style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
                                    borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
@@ -252,16 +310,40 @@ export function DiffModal() {
                   </button>
                 </>
               )}
+              {editing && (
+                <>
+                  <button onClick={cancelEdit} disabled={saving}
+                          style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    Cancel
+                  </button>
+                  <button onClick={saveEdit} disabled={saving || draft === original}
+                          style={{ background: draft === original ? '#3a3a3a' : '#0e639c', color: '#fff',
+                                   border: 'none', borderRadius: 4, padding: '2px 10px',
+                                   cursor: saving || draft === original ? 'default' : 'pointer', fontSize: 11 }}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </>
+              )}
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: '#1e1e1e' }}>
-              {patchText === undefined && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Loading…</div>}
-              {patchText !== undefined && parsed.length === 0 &&
-                <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No textual diff (binary or empty).</div>}
-              {parsed.map((d: any, di: number) => (
-                <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks} tokens={tokens[di]}>
-                  {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
-                </Diff>
-              ))}
+              {editing ? (
+                <textarea value={draft} onChange={e => setDraft(e.target.value)} spellCheck={false}
+                          style={{ width: '100%', height: '100%', boxSizing: 'border-box', resize: 'none',
+                                   background: '#1e1e1e', color: '#d4d4d4', border: 'none', outline: 'none',
+                                   padding: 12, fontFamily: 'Menlo, monospace', fontSize: 12, lineHeight: 1.5 }} />
+              ) : (
+                <>
+                  {patchText === undefined && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Loading…</div>}
+                  {patchText !== undefined && parsed.length === 0 &&
+                    <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No textual diff (binary or empty).</div>}
+                  {parsed.map((d: any, di: number) => (
+                    <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks} tokens={tokens[di]}>
+                      {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
+                    </Diff>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         </div>
