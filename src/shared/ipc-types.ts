@@ -4,6 +4,7 @@ export interface Worktree {
   head: string          // short sha
   isMain: boolean
   repoName: string
+  locked?: boolean      // worktree marked locked via `git worktree lock`
 }
 
 export interface FileChange {
@@ -30,6 +31,7 @@ export interface DiffFile {
 export interface CommittedFile {
   path: string          // repo-relative
   code: string          // name-status letter: M A D R etc.
+  oldPath?: string      // set for renames (code 'R')
 }
 
 // Push returns an outcome rather than throwing: Electron wraps a thrown
@@ -50,6 +52,7 @@ export interface FileDiffRequest {
   baseRef?: string      // when set, diff <baseRef>...HEAD instead of the working tree
 }
 export interface StagePathRequest { worktreePath: string; path: string; unstage: boolean }
+export interface DiscardPathRequest { worktreePath: string; path: string }
 export interface CommitRequest { worktreePath: string; message: string }
 export interface NewWorktreeRequest { repoPath: string; branch: string; createBranch: boolean }
 
@@ -67,6 +70,8 @@ export interface Api {
   getFileDiff(req: FileDiffRequest): Promise<string>
   stage(req: StageRequest): Promise<void>
   stagePath(req: StagePathRequest): Promise<void>
+  stageAll(worktreePath: string): Promise<void>
+  discardPath(req: DiscardPathRequest): Promise<void>
   commit(req: CommitRequest): Promise<void>
   // Commits this worktree has that the remote doesn't. Fetched per worktree
   // rather than carried on WorktreeStatus — see the push-button design spec.
@@ -92,7 +97,8 @@ export const IPC = {
   listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   getCommittedFiles: 'diff:committed',
-  stage: 'diff:stage', stagePath: 'diff:stagePath', commit: 'diff:commit',
+  stage: 'diff:stage', stagePath: 'diff:stagePath', stageAll: 'diff:stageAll',
+  discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run',
   openLazygit: 'term:lazygit',
   listTerminals: 'term:list',

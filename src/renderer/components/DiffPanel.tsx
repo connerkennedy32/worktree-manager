@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
 import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
 
@@ -51,6 +51,20 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     await refreshStatus(selected)
   }
 
+  const stageAll = async () => {
+    if (!selected) return
+    await window.api.stageAll(selected)
+    await refreshStatus(selected)
+  }
+
+  // Discarding throws work away irrecoverably, so it must confirm first.
+  const discardRow = async (row: Row) => {
+    if (!selected) return
+    if (!window.confirm(`Discard all changes to ${row.path}? This cannot be undone.`)) return
+    await window.api.discardPath({ worktreePath: selected, path: row.path })
+    await refreshStatus(selected)
+  }
+
   const doCommit = async () => {
     if (!selected || !msg.trim()) return
     setCommitting(true)
@@ -83,21 +97,31 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
             style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                      direction: 'rtl', textAlign: 'left' }}>{row.path}</span>
-      {/* Staging an already-committed file is meaningless. */}
+      {/* Staging and discarding an already-committed file are both meaningless. */}
       {!row.committed && (
-        <button onClick={e => { e.stopPropagation(); stageRow(row) }}
-                title={row.staged ? 'Unstage' : 'Stage'}
-                style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                         fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
-          {row.staged ? '−' : '+'}
-        </button>
+        <>
+          <button onClick={e => { e.stopPropagation(); discardRow(row) }}
+                  title="Discard changes"
+                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                           fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#f28b82')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+            ↩
+          </button>
+          <button onClick={e => { e.stopPropagation(); stageRow(row) }}
+                  title={row.staged ? 'Unstage' : 'Stage'}
+                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                           fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+            {row.staged ? '−' : '+'}
+          </button>
+        </>
       )}
     </div>
   )
 
-  const renderSection = (id: SectionId, label: string, sectionRows: Row[]) => {
+  const renderSection = (id: SectionId, label: string, sectionRows: Row[], action?: ReactNode) => {
     if (sectionRows.length === 0) return null
     const open = openSections[id]
     return (
@@ -110,6 +134,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
                       letterSpacing: 0.5, textTransform: 'uppercase', color: '#bbb' }}>
           <span style={{ width: 12, color: '#888' }}>{open ? '▾' : '▸'}</span>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          {action}
           <span style={{ color: '#888', fontWeight: 400 }}>{sectionRows.length}</span>
         </div>
         {open && sectionRows.map(renderRow)}
@@ -152,7 +177,15 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
           </div>
         )}
         {renderSection('staged', 'Staged', stagedRows)}
-        {renderSection('unstaged', 'Unstaged', unstagedRows)}
+        {renderSection('unstaged', 'Unstaged', unstagedRows,
+          <button onClick={e => { e.stopPropagation(); stageAll() }} title="Stage all"
+                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                           fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                           letterSpacing: 0.5, padding: '0 2px' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+            Stage all
+          </button>)}
         {renderSection('committed', `Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
       </div>
 

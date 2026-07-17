@@ -67,6 +67,8 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
   ipcMain.handle(IPC.stage, (_e, req) => diff.stage(req))
   ipcMain.handle(IPC.stagePath, (_e, req) => diff.stagePath(req))
+  ipcMain.handle(IPC.stageAll, (_e, p: string) => diff.stageAll(p))
+  ipcMain.handle(IPC.discardPath, (_e, req) => diff.discardPath(req))
   ipcMain.handle(IPC.commit, (_e, req) => diff.commit(req))
 
   ipcMain.on(IPC.openLazygit, (_e, p: string) => {

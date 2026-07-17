@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { parseDiff, Diff, Hunk } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
@@ -78,6 +78,20 @@ export function DiffModal() {
     await refreshStatus(selected)
   }
 
+  const stageAll = async () => {
+    if (!selected) return
+    await window.api.stageAll(selected)
+    await refreshStatus(selected)
+  }
+
+  // Discarding throws work away irrecoverably, so it must confirm first.
+  const discardRow = async (row: Row) => {
+    if (!selected) return
+    if (!window.confirm(`Discard all changes to ${row.path}? This cannot be undone.`)) return
+    await window.api.discardPath({ worktreePath: selected, path: row.path })
+    await refreshStatus(selected)
+  }
+
   // A refetch of the SAME file keeps showing the old text (no "Loading…" flicker
   // on every status tick); switching files shows "Loading…" immediately.
   const patchText = patch && patch.key === patchKey ? patch.text : undefined
@@ -117,30 +131,41 @@ export function DiffModal() {
         <span style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                        direction: 'rtl', textAlign: 'left' }} title={row.path}>{row.path}</span>
-        {/* Staging an already-committed file is meaningless. */}
+        {/* Staging and discarding an already-committed file are both meaningless. */}
         {!row.committed && (
-          <button onClick={e => { e.stopPropagation(); stageRow(row) }}
-                  title={row.staged ? 'Unstage' : 'Stage'}
-                  style={{ background: 'none', border: 'none', color: active ? '#cfe6ff' : '#999',
-                           cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                  onMouseLeave={e => (e.currentTarget.style.color = active ? '#cfe6ff' : '#999')}>
-            {row.staged ? '−' : '+'}
-          </button>
+          <>
+            <button onClick={e => { e.stopPropagation(); discardRow(row) }}
+                    title="Discard changes"
+                    style={{ background: 'none', border: 'none', color: active ? '#cfe6ff' : '#999',
+                             cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#f28b82')}
+                    onMouseLeave={e => (e.currentTarget.style.color = active ? '#cfe6ff' : '#999')}>
+              ↩
+            </button>
+            <button onClick={e => { e.stopPropagation(); stageRow(row) }}
+                    title={row.staged ? 'Unstage' : 'Stage'}
+                    style={{ background: 'none', border: 'none', color: active ? '#cfe6ff' : '#999',
+                             cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
+                    onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                    onMouseLeave={e => (e.currentTarget.style.color = active ? '#cfe6ff' : '#999')}>
+              {row.staged ? '−' : '+'}
+            </button>
+          </>
         )}
       </div>
     )
   }
 
-  const renderRailSection = (label: string, rows: Row[]) => {
+  const renderRailSection = (label: string, rows: Row[], action?: ReactNode) => {
     if (rows.length === 0) return null
     return (
       <div>
         <div style={{ padding: '5px 10px', position: 'sticky', top: 0, zIndex: 1,
                       borderTop: '1px solid #333', borderBottom: '1px solid #2a2a2a',
                       background: '#2d2d2d', fontSize: 11, fontWeight: 600, letterSpacing: 0.5,
-                      textTransform: 'uppercase', color: '#bbb', display: 'flex', gap: 6 }}>
+                      textTransform: 'uppercase', color: '#bbb', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+          {action}
           <span style={{ color: '#888', fontWeight: 400 }}>{rows.length}</span>
         </div>
         {rows.map(renderRailRow)}
@@ -184,7 +209,15 @@ export function DiffModal() {
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <div style={{ width: 260, borderRight: '1px solid #333', overflowY: 'auto', flexShrink: 0 }}>
             {renderRailSection('Staged', stagedRows)}
-            {renderRailSection('Unstaged', unstagedRows)}
+            {renderRailSection('Unstaged', unstagedRows,
+              <button onClick={e => { e.stopPropagation(); stageAll() }} title="Stage all"
+                      style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
+                               fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                               letterSpacing: 0.5, padding: '0 2px' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+                Stage all
+              </button>)}
             {renderRailSection(`Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
           </div>
 
@@ -206,11 +239,18 @@ export function DiffModal() {
                 )}
               </span>
               {activeRow && !activeRow.committed && (
-                <button onClick={() => stageRow(activeRow)}
-                        style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
-                                 borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
-                  {activeRow.staged ? 'Unstage' : 'Stage'}
-                </button>
+                <>
+                  <button onClick={() => discardRow(activeRow)}
+                          style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    Discard
+                  </button>
+                  <button onClick={() => stageRow(activeRow)}
+                          style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    {activeRow.staged ? 'Unstage' : 'Stage'}
+                  </button>
+                </>
               )}
             </div>
             <div style={{ flex: 1, overflow: 'auto', background: '#1e1e1e' }}>

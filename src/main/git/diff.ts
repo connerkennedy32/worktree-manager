@@ -2,7 +2,7 @@ import simpleGit from 'simple-git'
 import { mkdtempSync, writeFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import type { DiffFile, StageRequest, CommitRequest, FileDiffRequest, StagePathRequest } from '@shared/ipc-types'
+import type { DiffFile, StageRequest, CommitRequest, FileDiffRequest, StagePathRequest, DiscardPathRequest } from '@shared/ipc-types'
 
 // Split `git diff` output into one unified patch per file.
 function splitPatches(raw: string): { path: string; oldPath: string; rawPatch: string }[] {
@@ -52,6 +52,25 @@ export async function stagePath(req: StagePathRequest): Promise<void> {
   const git = simpleGit(req.worktreePath)
   if (req.unstage) await git.raw(['reset', '-q', '--', req.path])
   else await git.raw(['add', '--', req.path])
+}
+
+// Stage every working change at once (tracked edits, deletions, and untracked
+// files) — the "stage all" affordance on the Unstaged section.
+export async function stageAll(worktreePath: string): Promise<void> {
+  const git = simpleGit(worktreePath)
+  await git.raw(['add', '-A'])
+}
+
+// Discard a file's working changes entirely, whichever state it's in. The three
+// steps compose to cover every case: reset unstages, checkout restores tracked
+// edits/deletions from HEAD, clean removes what's left untracked (including a
+// newly-added file that reset just turned back into an untracked one). Each step
+// is a no-op or harmless error for states it doesn't apply to.
+export async function discardPath(req: DiscardPathRequest): Promise<void> {
+  const git = simpleGit(req.worktreePath)
+  await git.raw(['reset', '-q', '--', req.path]).catch(() => {})
+  await git.raw(['checkout', '--', req.path]).catch(() => {})
+  await git.raw(['clean', '-fd', '--', req.path]).catch(() => {})
 }
 
 export async function stage(req: StageRequest): Promise<void> {
