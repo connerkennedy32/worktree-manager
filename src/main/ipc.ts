@@ -6,6 +6,7 @@ import { getStatus } from './git/status'
 import { getCommittedFiles } from './git/committed'
 import { getPushState, push } from './git/push'
 import * as diff from './git/diff'
+import * as files from './files'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
 import { WatcherManager } from './watcher'
@@ -65,6 +66,8 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.pendingCount, (_e, p: string) => getPushState(p).then(s => s.ahead))
   ipcMain.handle(IPC.push, (_e, p: string) => push(p))
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
+  ipcMain.handle(IPC.readFile, (_e, req) => files.readFile(req))
+  ipcMain.handle(IPC.writeFile, (_e, req) => files.writeFile(req))
   ipcMain.handle(IPC.stage, (_e, req) => diff.stage(req))
   ipcMain.handle(IPC.stagePath, (_e, req) => diff.stagePath(req))
   ipcMain.handle(IPC.stageAll, (_e, p: string) => diff.stageAll(p))

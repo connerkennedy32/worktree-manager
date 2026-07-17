@@ -55,3 +55,46 @@ describe('shortcutFor off macOS', () => {
     expect(other({ key: 'ArrowDown', meta: true })).toBeNull()
   })
 })
+
+describe('shortcutFor Ctrl+J/Ctrl+K, on both platforms', () => {
+  it('maps Ctrl+J to next on macOS', () => {
+    expect(shortcutFor(key({ key: 'j', control: true }), true)).toBe('next')
+  })
+
+  it('maps Ctrl+K to prev on macOS', () => {
+    expect(shortcutFor(key({ key: 'k', control: true }), true)).toBe('prev')
+  })
+
+  it('maps Ctrl+J to next off macOS', () => {
+    expect(shortcutFor(key({ key: 'j', control: true }), false)).toBe('next')
+  })
+
+  it('maps Ctrl+K to prev off macOS', () => {
+    expect(shortcutFor(key({ key: 'k', control: true }), false)).toBe('prev')
+  })
+
+  it('ignores Ctrl+Meta+J, leaving it free for other bindings', () => {
+    expect(shortcutFor(key({ key: 'j', control: true, meta: true }), true)).toBeNull()
+  })
+
+  it('ignores bare J/K without Ctrl', () => {
+    expect(shortcutFor(key({ key: 'j' }), true)).toBeNull()
+    expect(shortcutFor(key({ key: 'k' }), true)).toBeNull()
+  })
+
+  it('maps Ctrl+W to new on macOS', () => {
+    expect(shortcutFor(key({ key: 'w', control: true }), true)).toBe('new')
+  })
+
+  it('maps Ctrl+W to new off macOS', () => {
+    expect(shortcutFor(key({ key: 'w', control: true }), false)).toBe('new')
+  })
+
+  it('ignores Cmd+W, which closes the window on macOS', () => {
+    expect(shortcutFor(key({ key: 'w', meta: true }), true)).toBeNull()
+  })
+
+  it('ignores bare W without Ctrl', () => {
+    expect(shortcutFor(key({ key: 'w' }), true)).toBeNull()
+  })
+})

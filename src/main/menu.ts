@@ -16,6 +16,12 @@ export function buildAppMenu(win: BrowserWindow) {
           accelerator: 'CmdOrCtrl+N',
           click: () => win.webContents.send(IPC.menuNewWorktree)
         },
+        {
+          label: 'New Worktree… (Ctrl+W)',
+          accelerator: 'Ctrl+W',
+          registerAccelerator: false,
+          click: () => win.webContents.send(IPC.menuNewWorktree)
+        },
         { type: 'separator' },
         // registerAccelerator: false — these shortcuts are handled in
         // shortcuts.ts via before-input-event, because a registered accelerator
@@ -31,6 +37,18 @@ export function buildAppMenu(win: BrowserWindow) {
         {
           label: 'Next Worktree',
           accelerator: 'CmdOrCtrl+Down',
+          registerAccelerator: false,
+          click: () => win.webContents.send(IPC.menuSelectNext)
+        },
+        {
+          label: 'Previous Worktree (Ctrl+K)',
+          accelerator: 'Ctrl+K',
+          registerAccelerator: false,
+          click: () => win.webContents.send(IPC.menuSelectPrev)
+        },
+        {
+          label: 'Next Worktree (Ctrl+J)',
+          accelerator: 'Ctrl+J',
           registerAccelerator: false,
           click: () => win.webContents.send(IPC.menuSelectNext)
         }
