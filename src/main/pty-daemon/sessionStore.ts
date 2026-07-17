@@ -17,7 +17,7 @@ export class PtyManager {
     const id = randomUUID()
     const proc = pty.spawn(shell, args, {
       name: 'xterm-color', cols: 100, rows: 30, cwd: worktreePath,
-      env: { ...process.env, ...extraEnv } as any
+      env: { ...process.env, ...extraEnv, WTM_TERMINAL_ID: id } as any
     })
     const session: Session = { proc, buffer: '', id }
     proc.onData(d => {

@@ -8,6 +8,8 @@ import * as net from 'net'
 import * as path from 'path'
 import { PtyManager } from './sessionStore'
 import { PROTOCOL_VERSION, encodeFrame, FrameDecoder, type ClientMessage, type ServerMessage } from './protocol'
+import { AgentTracker } from './agentTracker'
+import { startHookServer } from './hookServer'
 
 function configDir(): string {
   const dir = process.env.WTM_DAEMON_CONFIG_DIR || process.env.WTM_CONFIG_DIR
@@ -17,6 +19,7 @@ function configDir(): string {
 
 const socketPath = path.join(configDir(), 'pty-daemon.sock')
 const manifestPath = path.join(configDir(), 'pty-daemon.json')
+const hookSocketPath = path.join(configDir(), 'agent-hook.sock')
 
 const sessions = new PtyManager()
 const clients = new Set<net.Socket>()
@@ -26,15 +29,31 @@ function broadcast(message: ServerMessage) {
   for (const sock of clients) sock.write(frame)
 }
 
+// Hooks report what the agent is doing; the tracker's sweep only clears status
+// when an agent dies without firing SessionEnd.
+const agents = new AgentTracker(sessions, (p, report) => broadcast({ type: 'agentStatus', path: p, report }))
+agents.start()
+startHookServer(hookSocketPath, (id, event) => agents.handleHook(id, event))
+
+// The notify-hook script reads WTM_HOOK_SOCKET (here) and WTM_TERMINAL_ID (set
+// by PtyManager) out of its inherited environment to report which terminal it
+// belongs to.
+function startSession(worktreePath: string) {
+  sessions.start(worktreePath, chunk => broadcast({ type: 'data', path: worktreePath, chunk }), {
+    WTM_HOOK_SOCKET: hookSocketPath
+  })
+}
+
 function handleMessage(sock: net.Socket, message: ClientMessage) {
   switch (message.type) {
     case 'hello':
       sock.write(encodeFrame({ type: 'welcome', version: PROTOCOL_VERSION } satisfies ServerMessage))
+      for (const [p, report] of Object.entries(agents.snapshot())) {
+        sock.write(encodeFrame({ type: 'agentStatus', path: p, report } satisfies ServerMessage))
+      }
       return
     case 'start':
-      if (!sessions.has(message.path)) {
-        sessions.start(message.path, chunk => broadcast({ type: 'data', path: message.path, chunk }))
-      }
+      if (!sessions.has(message.path)) startSession(message.path)
       return
     case 'input':
       sessions.write(message.path, message.data)
@@ -44,7 +63,7 @@ function handleMessage(sock: net.Socket, message: ClientMessage) {
       return
     case 'reset':
       sessions.kill(message.path)
-      sessions.start(message.path, chunk => broadcast({ type: 'data', path: message.path, chunk }))
+      startSession(message.path)
       return
     case 'kill':
       sessions.kill(message.path)
