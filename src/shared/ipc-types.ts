@@ -1,3 +1,5 @@
+import type { AgentReport } from './agent-status'
+
 export interface Worktree {
   path: string
   branch: string        // e.g. "feat-auth" or "(detached)"
@@ -90,6 +92,8 @@ export interface Api {
   termResize(worktreePath: string, cols: number, rows: number): void
   onTermData(cb: (worktreePath: string, data: string) => void): () => void
   onStatusChanged(cb: (worktreePath: string) => void): () => void
+  getAgentStatuses(): Promise<Record<string, AgentReport>>
+  onAgentStatus(cb: (worktreePath: string, report: AgentReport) => void): () => void
   onMenuResetTerminal(cb: () => void): () => void
   onMenuNewWorktree(cb: () => void): () => void
   onMenuSelectPrev(cb: () => void): () => void
@@ -109,6 +113,7 @@ export const IPC = {
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
+  getAgentStatuses: 'agent:list', agentStatus: 'agent:status',
   menuResetTerminal: 'menu:resetTerminal', menuNewWorktree: 'menu:newWorktree',
   menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext'
 } as const

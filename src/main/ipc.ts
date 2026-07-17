@@ -39,7 +39,10 @@ export async function registerIpc(w: BrowserWindow) {
   if (registered) return
   registered = true
 
-  ptys = await PtyDaemonClient.connect((p, d) => send(IPC.termData, p, d))
+  ptys = await PtyDaemonClient.connect(
+    (p, d) => send(IPC.termData, p, d),
+    (p, r) => send(IPC.agentStatus, p, r)
+  )
   watchers = new WatcherManager()
 
   ipcMain.handle(IPC.listRepos, () => config.listRepos())
@@ -80,6 +83,7 @@ export async function registerIpc(w: BrowserWindow) {
   })
 
   ipcMain.handle(IPC.listTerminals, () => ptys.list())
+  ipcMain.handle(IPC.getAgentStatuses, () => ptys.agentStatuses())
 
   ipcMain.on(IPC.termStart, async (_e, p: string) => {
     if (ptys.has(p)) {

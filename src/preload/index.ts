@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type Api } from '@shared/ipc-types'
+import type { AgentReport } from '@shared/agent-status'
 
 const api: Api = {
   listRepos: () => ipcRenderer.invoke(IPC.listRepos),
@@ -24,6 +25,7 @@ const api: Api = {
   push: (p) => ipcRenderer.invoke(IPC.push, p),
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
   listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
+  getAgentStatuses: () => ipcRenderer.invoke(IPC.getAgentStatuses),
   termStart: (p) => ipcRenderer.send(IPC.termStart, p),
   termReset: (p) => ipcRenderer.invoke(IPC.termReset, p),
   termInput: (p, d) => ipcRenderer.send(IPC.termInput, p, d),
@@ -37,6 +39,11 @@ const api: Api = {
     const h = (_e: unknown, p: string) => cb(p)
     ipcRenderer.on(IPC.statusChanged, h as any)
     return () => ipcRenderer.removeListener(IPC.statusChanged, h as any)
+  },
+  onAgentStatus: (cb) => {
+    const h = (_e: unknown, p: string, r: AgentReport) => cb(p, r)
+    ipcRenderer.on(IPC.agentStatus, h as any)
+    return () => ipcRenderer.removeListener(IPC.agentStatus, h as any)
   },
   onMenuResetTerminal: (cb) => {
     const h = () => cb()
