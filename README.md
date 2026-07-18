@@ -24,6 +24,8 @@ commit changes without leaving the app.
 
 - Node.js 20+
 - git
+- Claude Code CLI (`claude`) — required for the sidebar's live agent-status
+  highlighting; the rest of the app works without it
 - (optional) `lazygit` on your PATH for the lazygit button
 
 ## Getting started
@@ -44,6 +46,41 @@ select one to get a terminal, or open the **Diff** tab to review and commit chan
 | `npm run build` | build main/preload/renderer bundles |
 | `npm start` | preview a production build |
 | `npm test` | run the Vitest suite |
+
+## Agent status monitoring
+
+Each sidebar row highlights (pulsing yellow while working, amber while
+waiting on a permission prompt, red tint on failure, green until you select
+it when done) based on **Claude Code hooks**, not process polling. This is
+self-installing — no manual setup is required on a new machine, but it's
+worth knowing what it does since it touches global config:
+
+- On every app start, `installAgentHooks()` (`src/main/agent-hooks/install.ts`)
+  writes a script to `<userData>/notify-hook.sh` and merges hook entries for
+  `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`,
+  `Stop`, `StopFailure`, and `SessionEnd` into your **global**
+  `~/.claude/settings.json`. It preserves everything else already in that
+  file and backs it up once to `settings.json.wtm-backup` before ever
+  touching it.
+- The script is a no-op for any `claude` invocation not launched from this
+  app's own embedded terminals — it exits immediately unless the
+  `WTM_TERMINAL_ID` / `WTM_HOOK_SOCKET` env vars (injected only into this
+  app's ptys) are present, so it's safe to have installed even if you also
+  run `claude` elsewhere on the same machine.
+- These events flow over a local unix socket to a small background daemon
+  (`src/main/pty-daemon/`), which is what the sidebar actually reads from.
+
+If the row highlighting ever stops updating after a fix or update, it's
+almost always one of these:
+
+- **A `claude` session already running when the app started** won't have the
+  hooks yet — restart that terminal session.
+- **A stale background daemon** from a previous run/build can keep serving
+  old behavior, since it's deliberately long-lived so terminals survive an
+  app restart. Find and kill it with `ps aux | grep pty-daemon.js`, then
+  reopen a terminal in the app to respawn a fresh one.
+- Check `~/.claude/settings.json` directly for a `notify-hook.sh` entry per
+  event above if you want to confirm the install took.
 
 ## Architecture
 
