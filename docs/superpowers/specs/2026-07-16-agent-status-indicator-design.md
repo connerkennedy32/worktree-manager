@@ -73,7 +73,7 @@ Merging is the risky part — this is the user's global config and must never be
 
 - Read and parse; **on any parse error, abort and log**. Never overwrite a file we could not read.
 - Back up once to `settings.json.wtm-backup` if no backup exists.
-- Identify our entries by the script path. Remove stale ones, then append current ones. Preserve every other hook untouched.
+- Identify our entries by their exact script path (`command === scriptPath`). Collapse any duplicate of ours, then append one current entry. Preserve every other hook untouched. (We deliberately do not attempt cross-path cleanup of hooks from an old install location: the script always lives at a stable `configDir()/notify-hook.sh`, and loose matching risks deleting a user's own hook in this global file.)
 - Write atomically: temp file in the same directory, then `rename`.
 
 **Scope caveat:** `~/.claude/settings.json` applies to *every* project, so this script runs on every `claude` invocation anywhere on the machine. It must therefore be near-free and silent when it is not ours — hence the env-var guard as the very first line.

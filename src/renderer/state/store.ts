@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import type { Worktree, WorktreeStatus } from '@shared/ipc-types'
+import type { AgentReport } from '@shared/agent-status'
+import { loadSeenAt, saveSeenAt } from './seen'
 
 // A file the diff modal can show. Renderer-only view state, so it stays out of
 // @shared/ipc-types — it never crosses the IPC boundary.
@@ -15,6 +17,8 @@ interface State {
   repos: string[]
   worktrees: Worktree[]
   statuses: Record<string, WorktreeStatus>
+  agentStatuses: Record<string, AgentReport>
+  seenAt: Record<string, number>
   selected?: string
   openDiff: DiffTarget | null
   setOpenDiff: (t: DiffTarget | null) => void
@@ -32,7 +36,8 @@ interface State {
 }
 
 export const useStore = create<State>((set, get) => ({
-  repos: [], worktrees: [], statuses: {}, openDiff: null, modalOpen: 0,
+  repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
+  openDiff: null, modalOpen: 0,
   setOpenDiff: (t) => set({ openDiff: t }),
   pushModal: () => set(st => ({ modalOpen: st.modalOpen + 1 })),
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
@@ -43,6 +48,11 @@ export const useStore = create<State>((set, get) => ({
     // On any change (files or branch HEAD), refresh that worktree's status and
     // re-list worktrees so branch renames/switches show in the sidebar.
     window.api.onStatusChanged(p => { get().refreshStatus(p); get().refreshWorktreeList() })
+    // Agent status is pushed on change only, so seed it once: the main process
+    // connects to the daemon a single time (ipc.ts:37), so a window reload does
+    // not re-trigger the daemon's connect-time snapshot.
+    set({ agentStatuses: await window.api.getAgentStatuses() })
+    window.api.onAgentStatus((p, r) => set(st => ({ agentStatuses: { ...st.agentStatuses, [p]: r } })))
     // Safety net: periodically re-list worktrees (branch names) and refresh the
     // selected worktree's status, so the sidebar stays current even if a file
     // event is missed. Cheap: `git worktree list` / `git status` per tick.
@@ -73,7 +83,12 @@ export const useStore = create<State>((set, get) => ({
   // Note: we do NOT call termStart here. The terminal is started by TerminalView
   // once its xterm instance exists and the onTermData handler is bound, so the
   // shell's initial prompt output can never arrive before the renderer is ready.
-  select: (p) => { set({ selected: p }); localStorage.setItem('wtm.selected', p) },
+  select: (p) => {
+    const seenAt = { ...get().seenAt, [p]: Date.now() }
+    saveSeenAt(seenAt)
+    set({ selected: p, seenAt })
+    localStorage.setItem('wtm.selected', p)
+  },
   // Step through the flat worktree list, wrapping at both ends. The list is built
   // in `repos` order and the sidebar groups by repo in that same order, so this
   // walks the sidebar top-to-bottom as it appears on screen.

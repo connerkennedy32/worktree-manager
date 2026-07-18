@@ -2,6 +2,8 @@
 // node-pty imports — this file must be requireable from the daemon's plain
 // Node process as well as the Electron main process.
 
+import type { AgentReport } from '@shared/agent-status'
+
 export const PROTOCOL_VERSION = 1
 
 export type ClientMessage =
@@ -20,6 +22,7 @@ export type ServerMessage =
   | { type: 'data'; path: string; chunk: string }
   | { type: 'list'; reqId: number; paths: string[] }
   | { type: 'replayResponse'; reqId: number; path: string; buffer: string }
+  | { type: 'agentStatus'; path: string; report: AgentReport }
 
 const LENGTH_PREFIX_BYTES = 4
 

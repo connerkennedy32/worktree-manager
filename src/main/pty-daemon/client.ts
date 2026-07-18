@@ -9,6 +9,7 @@ import * as net from 'net'
 import { join } from 'path'
 import { configDir } from '../config'
 import { PROTOCOL_VERSION, encodeFrame, FrameDecoder, type ClientMessage, type ServerMessage } from './protocol'
+import type { AgentReport } from '@shared/agent-status'
 
 const MAX_BUFFER = 200_000
 
@@ -57,10 +58,17 @@ export class PtyDaemonClient {
   private nextReqId = 1
   private pendingList: ((paths: string[]) => void)[] = []
   private pendingReplay = new Map<number, (buffer: string) => void>()
+  private agents = new Map<string, AgentReport>()
+  private onAgentStatus: (path: string, report: AgentReport) => void
 
-  private constructor(socket: net.Socket, onData: (path: string, data: string) => void) {
+  private constructor(
+    socket: net.Socket,
+    onData: (path: string, data: string) => void,
+    onAgentStatus: (path: string, report: AgentReport) => void
+  ) {
     this.socket = socket
     this.onData = onData
+    this.onAgentStatus = onAgentStatus
     this.socket.on('data', chunk => {
       for (const message of this.decoder.push(chunk)) this.handleMessage(message as ServerMessage)
     })
@@ -89,6 +97,12 @@ export class PtyDaemonClient {
         if (resolve) { this.pendingReplay.delete(message.reqId); resolve(message.buffer) }
         return
       }
+      case 'agentStatus': {
+        if (message.report.status === 'none') this.agents.delete(message.path)
+        else this.agents.set(message.path, message.report)
+        this.onAgentStatus(message.path, message.report)
+        return
+      }
     }
   }
 
@@ -111,7 +125,10 @@ export class PtyDaemonClient {
     })
   }
 
-  static async connect(onData: (path: string, data: string) => void): Promise<PtyDaemonClient> {
+  static async connect(
+    onData: (path: string, data: string) => void,
+    onAgentStatus: (path: string, report: AgentReport) => void
+  ): Promise<PtyDaemonClient> {
     mkdirSync(configDir(), { recursive: true })
     const manifest = readManifest()
 
@@ -134,7 +151,7 @@ export class PtyDaemonClient {
       if (!socket) throw new Error('pty-daemon did not become ready within 5s')
     }
 
-    const client = new PtyDaemonClient(socket, onData)
+    const client = new PtyDaemonClient(socket, onData, onAgentStatus)
     client.send({ type: 'hello', clientVersion: PROTOCOL_VERSION })
 
     const knownPaths = await client.requestList()
@@ -155,6 +172,7 @@ export class PtyDaemonClient {
   has(path: string): boolean { return this.knownPaths.has(path) }
   getBuffer(path: string): string { return this.buffers.get(path) ?? '' }
   list(): string[] { return [...this.knownPaths] }
+  agentStatuses(): Record<string, AgentReport> { return Object.fromEntries(this.agents) }
 
   write(path: string, data: string) { this.send({ type: 'input', path, data }) }
   resize(path: string, cols: number, rows: number) { this.send({ type: 'resize', path, cols, rows }) }
@@ -163,11 +181,13 @@ export class PtyDaemonClient {
     this.send({ type: 'kill', path })
     this.knownPaths.delete(path)
     this.buffers.delete(path)
+    this.agents.delete(path)
   }
 
   killAll() {
     this.send({ type: 'killAll' })
     this.knownPaths.clear()
     this.buffers.clear()
+    this.agents.clear()
   }
 }
