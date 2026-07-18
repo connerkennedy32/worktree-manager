@@ -4,7 +4,7 @@ import { NewWorktreeForm } from './NewWorktreeForm'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
-import { deriveDot, type DotState } from '@shared/agent-status'
+import { deriveDot } from '@shared/agent-status'
 import './sidebar-theme.css'
 
 function MainDotIcon() {
@@ -27,17 +27,8 @@ function BranchIcon() {
   )
 }
 
-const DOT_TITLE: Record<DotState, string> = {
-  working: 'Agent working',
-  permission: 'Agent waiting for permission',
-  failed: 'Agent stopped on an error',
-  done: 'Agent finished'
-}
-
-// Renders even when there is no dot: a fixed-width slot keeps every row's label
-// at the same x position, so a starting agent never shifts the list sideways.
-function AgentDot({ state }: { state: DotState | null }) {
-  return <span className={`wt-agent-dot${state ? ` ${state}` : ''}`} title={state ? DOT_TITLE[state] : ''} />
+function WorkingSpinner() {
+  return <span className="wt-row-spinner" title="Agent working" />
 }
 
 export function Sidebar() {
@@ -140,14 +131,13 @@ export function Sidebar() {
                 const count = statuses[w.path]?.changeCount ?? 0
                 const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
                 return (
-                  <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}`}
+                  <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}`}
                        onClick={() => select(w.path)}
                        onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}>
                     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6,
                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <AgentDot state={dot} />
-                        {w.isMain ? <MainDotIcon /> : <BranchIcon />}
+                        {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
                         {w.path.split('/').filter(Boolean).pop()}
                       </span>
                       <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',

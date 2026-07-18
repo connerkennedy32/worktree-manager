@@ -81,6 +81,41 @@
   background: rgba(14, 99, 156, 0.22);
   border-left-color: #2a9df4;
 }
+.wt-row.working { animation: wt-row-pulse-working 1.2s ease-in-out infinite; }
+.wt-row.permission { animation: wt-row-pulse-permission 1.2s ease-in-out infinite; }
+.wt-row.failed { background: rgba(242, 139, 130, 0.16); }
+.wt-row.done { background: rgba(63, 185, 80, 0.22); }
+
+@keyframes wt-row-pulse-working {
+  0%, 100% { background-color: rgba(224, 224, 61, 0.32); }
+  50% { background-color: rgba(224, 224, 61, 0.1); }
+}
+@keyframes wt-row-pulse-permission {
+  0%, 100% { background-color: rgba(224, 185, 125, 0.32); }
+  50% { background-color: rgba(224, 185, 125, 0.1); }
+}
+
+/* Without motion the pulse cannot carry the state, so a steady tint takes over. */
+@media (prefers-reduced-motion: reduce) {
+  .wt-row.working { animation: none; background: rgba(224, 224, 61, 0.22); }
+  .wt-row.permission { animation: none; background: rgba(224, 185, 125, 0.22); }
+}
+
+.wt-row-spinner {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(224, 224, 61, 0.3);
+  border-top-color: #e0e03d;
+  animation: wt-row-spin 0.7s linear infinite;
+}
+@keyframes wt-row-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wt-row-spinner { animation: none; }
+}
 .wt-row-remove {
   opacity: 0;
   color: #888;
@@ -99,30 +134,3 @@
   font-weight: 500;
 }
 
-.wt-agent-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: transparent;
-}
-.wt-agent-dot.working {
-  background: #3fb950;
-  animation: wt-agent-pulse 1.2s ease-in-out infinite;
-}
-.wt-agent-dot.permission {
-  background: #e0b97d;
-  animation: wt-agent-pulse 1.2s ease-in-out infinite;
-}
-.wt-agent-dot.failed { background: #f28b82; }
-.wt-agent-dot.done { background: #7d8590; }
-
-@keyframes wt-agent-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.75); }
-}
-
-/* Without motion the pulse cannot carry the state, so colour must. */
-@media (prefers-reduced-motion: reduce) {
-  .wt-agent-dot.working, .wt-agent-dot.permission { animation: none; }
-}
