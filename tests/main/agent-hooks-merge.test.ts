@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mergeHooks, HOOK_EVENTS } from '../../src/main/agent-hooks/merge'
 
 const SCRIPT = '/cfg/notify-hook.sh'
+const QUOTED_SCRIPT = `"${SCRIPT}"`
 const OTHER = '/somewhere/user-own-hook.sh'
 
 const entryFor = (settings: any, event: string) =>
@@ -11,7 +12,7 @@ describe('mergeHooks', () => {
   it('registers every event we rely on', () => {
     const out = mergeHooks({}, SCRIPT)
     for (const event of HOOK_EVENTS) {
-      expect(entryFor(out, event).map((h: any) => h.command)).toContain(SCRIPT)
+      expect(entryFor(out, event).map((h: any) => h.command)).toContain(QUOTED_SCRIPT)
     }
   })
 
@@ -27,9 +28,9 @@ describe('mergeHooks', () => {
     expect(out.hooks.Stop[0]).not.toHaveProperty('matcher')
   })
 
-  it('builds command entries of type command', () => {
+  it('builds command entries of type command, quoting the path so a space in it cannot split the shell command', () => {
     const out: any = mergeHooks({}, SCRIPT)
-    expect(out.hooks.Stop[0].hooks[0]).toEqual({ type: 'command', command: SCRIPT })
+    expect(out.hooks.Stop[0].hooks[0]).toEqual({ type: 'command', command: QUOTED_SCRIPT })
   })
 
   it('preserves unrelated top-level settings', () => {
@@ -44,7 +45,7 @@ describe('mergeHooks', () => {
     }, SCRIPT)
     const commands = entryFor(out, 'Stop').map((h: any) => h.command)
     expect(commands).toContain(OTHER)
-    expect(commands).toContain(SCRIPT)
+    expect(commands).toContain(QUOTED_SCRIPT)
   })
 
   it('preserves the user hooks on events we never touch', () => {
@@ -57,7 +58,7 @@ describe('mergeHooks', () => {
   it('is idempotent: installing twice does not duplicate our entry', () => {
     const once: any = mergeHooks({}, SCRIPT)
     const twice: any = mergeHooks(once, SCRIPT)
-    expect(entryFor(twice, 'Stop').filter((h: any) => h.command === SCRIPT)).toHaveLength(1)
+    expect(entryFor(twice, 'Stop').filter((h: any) => h.command === QUOTED_SCRIPT)).toHaveLength(1)
     expect(twice).toEqual(once)
   })
 
@@ -71,13 +72,22 @@ describe('mergeHooks', () => {
       expect(Array.isArray(matcher.hooks)).toBe(true)
       expect(matcher.hooks.length).toBeGreaterThan(0)
     }
-    expect(entryFor(out, 'Stop').filter((h: any) => h.command === SCRIPT)).toHaveLength(1)
+    expect(entryFor(out, 'Stop').filter((h: any) => h.command === QUOTED_SCRIPT)).toHaveLength(1)
+  })
+
+  it('cleans up a stale unquoted duplicate left by an older version of the installer', () => {
+    const stale: any = {
+      hooks: { Stop: [{ hooks: [{ type: 'command', command: SCRIPT }] }] }
+    }
+    const out: any = mergeHooks(stale, SCRIPT)
+    const commands = entryFor(out, 'Stop').map((h: any) => h.command)
+    expect(commands.filter((c: string) => c === SCRIPT || c === QUOTED_SCRIPT)).toEqual([QUOTED_SCRIPT])
   })
 
   it('tolerates a null or non-object input', () => {
     expect(() => mergeHooks(null, SCRIPT)).not.toThrow()
     expect(() => mergeHooks('garbage', SCRIPT)).not.toThrow()
-    expect(entryFor(mergeHooks(null, SCRIPT), 'Stop').map((h: any) => h.command)).toContain(SCRIPT)
+    expect(entryFor(mergeHooks(null, SCRIPT), 'Stop').map((h: any) => h.command)).toContain(QUOTED_SCRIPT)
   })
 
   it('tolerates a malformed hooks section without throwing', () => {
