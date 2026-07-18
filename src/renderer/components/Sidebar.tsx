@@ -4,6 +4,7 @@ import { NewWorktreeForm } from './NewWorktreeForm'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
+import { deriveDot, type DotState } from '@shared/agent-status'
 import './sidebar-theme.css'
 
 function MainDotIcon() {
@@ -26,8 +27,21 @@ function BranchIcon() {
   )
 }
 
+const DOT_TITLE: Record<DotState, string> = {
+  working: 'Agent working',
+  permission: 'Agent waiting for permission',
+  failed: 'Agent stopped on an error',
+  done: 'Agent finished'
+}
+
+// Renders even when there is no dot: a fixed-width slot keeps every row's label
+// at the same x position, so a starting agent never shifts the list sideways.
+function AgentDot({ state }: { state: DotState | null }) {
+  return <span className={`wt-agent-dot${state ? ` ${state}` : ''}`} title={state ? DOT_TITLE[state] : ''} />
+}
+
 export function Sidebar() {
-  const { worktrees, statuses, selected, select, refreshWorktrees, repos } = useStore()
+  const { worktrees, statuses, agentStatuses, seenAt, selected, select, refreshWorktrees, repos } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string>()
@@ -124,6 +138,7 @@ export function Sidebar() {
               </div>
               {repoWorktrees.map(w => {
                 const count = statuses[w.path]?.changeCount ?? 0
+                const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
                 return (
                   <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}`}
                        onClick={() => select(w.path)}
@@ -131,11 +146,12 @@ export function Sidebar() {
                     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6,
                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <AgentDot state={dot} />
                         {w.isMain ? <MainDotIcon /> : <BranchIcon />}
                         {w.path.split('/').filter(Boolean).pop()}
                       </span>
                       <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
-                                     whiteSpace: 'nowrap', paddingLeft: 16 }}>
+                                     whiteSpace: 'nowrap', paddingLeft: 29 }}>
                         {w.branch}
                       </span>
                     </div>

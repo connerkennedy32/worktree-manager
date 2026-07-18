@@ -474,6 +474,17 @@ git commit -m "Add claude process detection for the agent status backstop"
 
 ### Task 3: settings.json merge (pure)
 
+> **CORRECTION (shipped in commit 3380d13):** the code and two tests below
+> described cross-path "stale install cleanup", identifying our entries by a
+> substring/loose match. That was found unsafe on the user's global config (it
+> could delete a user's own hook whose path contains `notify-hook.sh`) and was
+> traced to a contradiction in this task's own text. Per human decision, the
+> shipped implementation identifies our entries **by exact `command ===
+> scriptPath` only** and does **not** do cross-path cleanup. The
+> "drops our entry from a stale install path" test was removed and the
+> empty-husk test rewritten to reinstall at the same path. Treat the exact-path
+> behavior as the requirement; the code block below is retained for history.
+
 This edits the user's **global** Claude config. Getting it wrong damages something we do not own, so the merge is a pure function tested hard before it is ever wired to a real file.
 
 **Files:**
@@ -1235,15 +1246,17 @@ export class AgentTracker {
     const status = mapHookEvent(event)
     if (!status) return // an event we do not model; never guess
 
+    const at = this.now()
     if (status === 'none') {
       this.reports.delete(path)
     } else {
-      this.reports.set(path, { status, at: this.now() })
+      this.reports.set(path, { status, at })
     }
     // Always emit, even when the status is unchanged: `at` advancing is itself
     // meaningful, since the renderer gates `done` against when the user last
-    // looked at that worktree.
-    this.emit(path, { status, at: this.now() })
+    // looked at that worktree. One timestamp, shared by the stored and emitted
+    // report so snapshot() and the push never disagree.
+    this.emit(path, { status, at })
   }
 
   /**

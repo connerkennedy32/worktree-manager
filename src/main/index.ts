@@ -3,6 +3,7 @@ import { join } from 'path'
 import { registerIpc } from './ipc'
 import { buildAppMenu } from './menu'
 import { attachShortcuts } from './shortcuts'
+import { installAgentHooks } from './agent-hooks/install'
 
 const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
 // Set the dock icon explicitly since dev/preview runs are unpackaged and would
@@ -23,6 +24,8 @@ async function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Idempotent, never throws — the app must start even if hook install fails.
+  installAgentHooks()
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
