@@ -34,11 +34,11 @@ function broadcast(message: ServerMessage) {
 // when an agent dies without firing SessionEnd.
 const agents = new AgentTracker(sessions, (p, report) => broadcast({ type: 'agentStatus', path: p, report }))
 agents.start()
-startHookServer(hookSocketPath, (id, event) => agents.handleHook(id, event))
+startHookServer(hookSocketPath, (cwd, event) => agents.handleHook(cwd, event))
 
-// The notify-hook script reads WTM_HOOK_SOCKET (here) and WTM_TERMINAL_ID (set
-// by PtyManager) out of its inherited environment to report which terminal it
-// belongs to.
+// The notify-hook identifies its worktree by the agent's cwd and falls back to
+// a baked-in socket path, so it works even under tmux. We still export
+// WTM_HOOK_SOCKET as a fast path for non-tmux shells that inherit it directly.
 function startSession(worktreePath: string) {
   sessions.start(worktreePath, chunk => broadcast({ type: 'data', path: worktreePath, chunk }), {
     WTM_HOOK_SOCKET: hookSocketPath

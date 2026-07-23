@@ -47,7 +47,7 @@ describe('getCommittedFiles', () => {
 
     const res = await getCommittedFiles(r.dir)
     expect(res.baseBranch).toBe('main')
-    expect(res.files).toEqual([{ code: 'A', path: 'feature.txt' }])
+    expect(res.files).toEqual([{ code: 'A', path: 'feature.txt', add: 1, del: 0 }])
   })
 
   it('uses origin/HEAD, not a local branch, as the base when a remote exists', async () => {
@@ -73,7 +73,7 @@ describe('getCommittedFiles', () => {
 
     const res = await getCommittedFiles(r.dir)
     expect(res.baseBranch).toBe('origin/main')
-    expect(res.files).toEqual([{ code: 'A', path: 'unpushed.txt' }])
+    expect(res.files).toEqual([{ code: 'A', path: 'unpushed.txt', add: 1, del: 0 }])
   })
 
   it('on the trunk with everything pushed, lists nothing', async () => {
@@ -91,7 +91,7 @@ describe('getCommittedFiles', () => {
 
     const res = await getCommittedFiles(wtPath)
     expect(res.baseBranch).toBe('main')
-    expect(res.files).toEqual([{ code: 'A', path: 'feature.txt' }])
+    expect(res.files).toEqual([{ code: 'A', path: 'feature.txt', add: 1, del: 0 }])
   })
 
   it('excludes commits made on the base branch after divergence (three-dot)', async () => {

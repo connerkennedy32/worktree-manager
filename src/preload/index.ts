@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type Api } from '@shared/ipc-types'
 import type { AgentReport } from '@shared/agent-status'
 
@@ -24,6 +24,7 @@ const api: Api = {
   getPendingCount: (p) => ipcRenderer.invoke(IPC.pendingCount, p),
   push: (p) => ipcRenderer.invoke(IPC.push, p),
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
   getAgentStatuses: () => ipcRenderer.invoke(IPC.getAgentStatuses),
   termStart: (p) => ipcRenderer.send(IPC.termStart, p),

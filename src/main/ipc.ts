@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, app } from 'electron'
+import type { AgentReport } from '@shared/agent-status'
 import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
@@ -30,6 +31,19 @@ function send(channel: string, ...args: unknown[]) {
   if (!win.isDestroyed()) win.webContents.send(channel, ...args)
 }
 
+// Bounce the macOS Dock icon when an agent finishes a turn, so a task that
+// completed while the user was in another app is noticed. Only 'done' bounces
+// ('working'/'permission'/'failed' are handled by the in-app row indicators),
+// and only when the app is in the background — bouncing what the user is
+// already looking at is pure noise. 'informational' bounces once rather than
+// until focus, matching a "task done" nudge rather than an alarm.
+function bounceOnDone(r: AgentReport) {
+  if (process.platform !== 'darwin') return
+  if (r.status !== 'done') return
+  if (win && !win.isDestroyed() && win.isFocused()) return
+  app.dock?.bounce('informational')
+}
+
 export async function registerIpc(w: BrowserWindow) {
   win = w
   // Sessions live in the pty-daemon process, not this window — closing (or
@@ -41,7 +55,7 @@ export async function registerIpc(w: BrowserWindow) {
 
   ptys = await PtyDaemonClient.connect(
     (p, d) => send(IPC.termData, p, d),
-    (p, r) => send(IPC.agentStatus, p, r)
+    (p, r) => { send(IPC.agentStatus, p, r); bounceOnDone(r) }
   )
   watchers = new WatcherManager()
 

@@ -6,6 +6,8 @@ export type SectionId = 'staged' | 'unstaged' | 'committed'
 
 export interface Row extends DiffTarget {
   code: string // status letter: M A D R ? etc.
+  add?: number // lines added (undefined when no line-level diff, e.g. binary)
+  del?: number // lines removed
 }
 
 export const codeColor = (c: string) =>
@@ -17,16 +19,21 @@ export function buildWorkingRows(status?: WorktreeStatus): Row[] {
   if (!status) return []
   const out: Row[] = []
   for (const f of status.files) {
+    const staged = status.staged[f.path]
+    const unstaged = status.unstaged[f.path]
     const untracked = f.index === '?' && f.working === '?'
     if (untracked) {
-      out.push({ key: f.path + ':u', path: f.path, staged: false, untracked: true, committed: false, code: '?' })
+      out.push({ key: f.path + ':u', path: f.path, staged: false, untracked: true, committed: false, code: '?',
+                 add: unstaged?.add, del: unstaged?.del })
       continue
     }
     if (f.index !== ' ' && f.index !== '?') {
-      out.push({ key: f.path + ':s', path: f.path, staged: true, untracked: false, committed: false, code: f.index })
+      out.push({ key: f.path + ':s', path: f.path, staged: true, untracked: false, committed: false, code: f.index,
+                 add: staged?.add, del: staged?.del })
     }
     if (f.working !== ' ' && f.working !== '?') {
-      out.push({ key: f.path + ':w', path: f.path, staged: false, untracked: false, committed: false, code: f.working })
+      out.push({ key: f.path + ':w', path: f.path, staged: false, untracked: false, committed: false, code: f.working,
+                 add: unstaged?.add, del: unstaged?.del })
     }
   }
   return out
@@ -43,7 +50,8 @@ export function reconcileTarget(open: DiffTarget, rows: Row[]): DiffTarget | nul
 
 export function buildCommittedRows(committed: CommittedChanges | null): Row[] {
   return (committed?.files ?? []).map(f => ({
-    key: f.path + ':c', path: f.path, staged: false, untracked: false, committed: true, code: f.code
+    key: f.path + ':c', path: f.path, staged: false, untracked: false, committed: true, code: f.code,
+    add: f.add, del: f.del
   }))
 }
 

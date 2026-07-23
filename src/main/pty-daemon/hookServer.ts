@@ -12,7 +12,7 @@ const MAX_BODY = 64 * 1024
 
 export function startHookServer(
   socketPath: string,
-  onHook: (id: string, event: string) => void
+  onHook: (cwd: string, event: string) => void
 ): http.Server {
   // A crashed daemon leaves the socket file behind and bind would fail with
   // EADDRINUSE, so clear it first.
@@ -31,8 +31,8 @@ export function startHookServer(
       res.end('ok')
       if (tooBig) return
       try {
-        const { id, event } = JSON.parse(body)
-        if (typeof id === 'string' && typeof event === 'string') onHook(id, event)
+        const { cwd, event } = JSON.parse(body)
+        if (typeof cwd === 'string' && typeof event === 'string') onHook(cwd, event)
       } catch {
         // Malformed input must never take the daemon down.
       }

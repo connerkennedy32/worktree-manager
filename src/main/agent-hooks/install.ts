@@ -19,23 +19,34 @@ export function claudeSettingsPath(): string {
 // Installed in the user's GLOBAL settings, so this runs for every `claude` on the
 // machine, not just ours. The env guard must therefore be the very first thing it
 // does, and every path must exit 0 — a broken hook must never disturb a session.
-const SCRIPT = `#!/bin/bash
+// The script identifies its worktree by the agent's `cwd` (present in every hook
+// payload) rather than an inherited env var, and finds the daemon socket from a
+// baked-in default when $WTM_HOOK_SOCKET is absent. Both matter under tmux, which
+// does not propagate per-pane env into the agent's process — so relying on
+// WTM_TERMINAL_ID/WTM_HOOK_SOCKET left the indicator blank or attributed events
+// to the wrong tab.
+function script(socketPath: string): string {
+  return `#!/bin/bash
 # Worktree Manager agent hook. Generated — edits will be overwritten.
-[ -z "$WTM_TERMINAL_ID" ] && exit 0
-[ -S "$WTM_HOOK_SOCKET" ] || exit 0
+SOCKET="\${WTM_HOOK_SOCKET:-${socketPath}}"
+[ -S "$SOCKET" ] || exit 0
 
-EVENT=$(cat | grep -oE '"hook_event_name"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+INPUT=$(cat)
+EVENT=$(printf '%s' "$INPUT" | grep -oE '"hook_event_name"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
 # Never guess an event on a parse failure: a wrong "Stop" would falsely clear a
 # working indicator. Dropping the event is always safer.
 [ -z "$EVENT" ] && exit 0
+CWD=$(printf '%s' "$INPUT" | grep -oE '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
+[ -z "$CWD" ] && exit 0
 
-curl -sS --unix-socket "$WTM_HOOK_SOCKET" \\
+curl -sS --unix-socket "$SOCKET" \\
   -X POST -H 'Content-Type: application/json' \\
-  -d "{\\"id\\":\\"$WTM_TERMINAL_ID\\",\\"event\\":\\"$EVENT\\"}" \\
+  -d "{\\"cwd\\":\\"$CWD\\",\\"event\\":\\"$EVENT\\"}" \\
   --connect-timeout 1 --max-time 2 \\
   http://localhost/hook >/dev/null 2>&1
 exit 0
 `
+}
 
 /**
  * Idempotent. Safe to call on every app start.
@@ -46,7 +57,7 @@ exit 0
 export function installAgentHooks(): void {
   try {
     mkdirSync(configDir(), { recursive: true })
-    writeFileSync(hookScriptPath(), SCRIPT, { mode: 0o755 })
+    writeFileSync(hookScriptPath(), script(hookSocketPath()), { mode: 0o755 })
 
     const settingsFile = claudeSettingsPath()
     mkdirSync(dirname(settingsFile), { recursive: true })

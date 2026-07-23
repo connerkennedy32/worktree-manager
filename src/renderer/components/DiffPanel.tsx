@@ -97,6 +97,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
             style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                      direction: 'rtl', textAlign: 'left' }}>{row.path}</span>
+      {(row.add || row.del) && (
+        <span style={{ flexShrink: 0, display: 'flex', gap: 5, fontFamily: 'Menlo, monospace',
+                       fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+          {row.add ? <span style={{ color: '#6a9955' }}>+{row.add}</span> : null}
+          {row.del ? <span style={{ color: '#c94a4a' }}>−{row.del}</span> : null}
+        </span>
+      )}
       {/* Staging and discarding an already-committed file are both meaningless. */}
       {!row.committed && (
         <>
