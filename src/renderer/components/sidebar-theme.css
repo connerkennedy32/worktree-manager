@@ -73,13 +73,15 @@
   align-items: center;
   gap: 6px;
   justify-content: space-between;
-  border-left: 2px solid transparent;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  margin: 0 4px;
   transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 .wt-row:hover { background: rgba(255, 255, 255, 0.05); }
 .wt-row.selected {
   background: rgba(14, 99, 156, 0.22);
-  border-left-color: #2a9df4;
+  border-color: #2a9df4;
 }
 .wt-row.working { animation: wt-row-pulse-working 1.2s ease-in-out infinite; }
 .wt-row.permission { animation: wt-row-pulse-permission 1.2s ease-in-out infinite; }
