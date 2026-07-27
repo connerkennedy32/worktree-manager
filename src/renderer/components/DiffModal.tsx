@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { parseDiff, Diff, Hunk } from 'react-diff-view'
+import { parseDiff, Diff, Hunk, Decoration } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
 import { useStore } from '../state/store'
@@ -57,13 +57,28 @@ export function DiffModal() {
   useEffect(() => {
     if (!openDiff) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
+      if (e.key === 'Escape') {
+        if (!confirmDiscard()) return
+        setOpenDiff(null)
+        return
+      }
+      // j/k step through the file rail. Skip while editing (or when a text field
+      // has focus) so the keys type into the textarea instead of navigating.
+      if (e.key !== 'j' && e.key !== 'k') return
+      if (editing || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const i = allRows.findIndex(r => r.key === openDiff.key)
+      if (i === -1) return
+      const next = allRows[e.key === 'j' ? i + 1 : i - 1]
+      if (!next) return
+      e.preventDefault()
       if (!confirmDiscard()) return
-      setOpenDiff(null)
+      setOpenDiff(next)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openDiff, setOpenDiff, dirty])
+  }, [openDiff, setOpenDiff, dirty, editing, allRows])
 
   // Staging changes a row's key, so follow the file rather than the key; close
   // only when it is genuinely gone. Identity compare: reconcileTarget returns the
@@ -184,6 +199,13 @@ export function DiffModal() {
         <span style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                        direction: 'rtl', textAlign: 'left' }} title={row.path}>{row.path}</span>
+        {(row.add || row.del) && (
+          <span style={{ flexShrink: 0, display: 'flex', gap: 5, fontFamily: 'Menlo, monospace',
+                         fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+            {row.add ? <span style={{ color: active ? '#a6e3a1' : '#6a9955' }}>+{row.add}</span> : null}
+            {row.del ? <span style={{ color: active ? '#f28b82' : '#c94a4a' }}>−{row.del}</span> : null}
+          </span>
+        )}
         {/* Staging and discarding an already-committed file are both meaningless. */}
         {!row.committed && (
           <>
@@ -339,7 +361,23 @@ export function DiffModal() {
                     <div style={{ padding: 12, color: '#888', fontSize: 12 }}>No textual diff (binary or empty).</div>}
                   {parsed.map((d: any, di: number) => (
                     <Diff key={di} viewType={view} diffType={d.type} hunks={d.hunks} tokens={tokens[di]}>
-                      {(hunks: any[]) => hunks.map((h, hi) => <Hunk key={hi} hunk={h} />)}
+                      {(hunks: any[]) => hunks.reduce((acc: any[], h, hi) => {
+                        const prev = hunks[hi - 1]
+                        const skipped = prev ? h.oldStart - (prev.oldStart + prev.oldLines) : 0
+                        if (skipped > 0) {
+                          acc.push(
+                            <Decoration key={`gap-${hi}`}>
+                              <div className="diff-gap">
+                                <span className="diff-gap-line" />
+                                <span className="diff-gap-label">{skipped} unchanged {skipped === 1 ? 'line' : 'lines'} skipped</span>
+                                <span className="diff-gap-line" />
+                              </div>
+                            </Decoration>
+                          )
+                        }
+                        acc.push(<Hunk key={hi} hunk={h} />)
+                        return acc
+                      }, [])}
                     </Diff>
                   ))}
                 </>
