@@ -24,6 +24,7 @@ const api: Api = {
   getPendingCount: (p) => ipcRenderer.invoke(IPC.pendingCount, p),
   push: (p) => ipcRenderer.invoke(IPC.push, p),
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
+  openInEditor: (p) => ipcRenderer.send(IPC.openInEditor, p),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
   getAgentStatuses: () => ipcRenderer.invoke(IPC.getAgentStatuses),

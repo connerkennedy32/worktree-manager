@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
+import { spawn } from 'node:child_process'
 import type { AgentReport } from '@shared/agent-status'
 import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
@@ -94,6 +95,17 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.on(IPC.openLazygit, (_e, p: string) => {
     ptys.start(p)
     ptys.write(p, 'lazygit\n')
+  })
+
+  ipcMain.on(IPC.openInEditor, (_e, p: string) => {
+    // GUI-launched apps don't inherit a login shell's PATH, so the `code` CLI
+    // usually isn't resolvable directly. On macOS `open -a` finds VS Code by app
+    // name regardless of PATH; elsewhere fall back to `code` on PATH.
+    if (process.platform === 'darwin') {
+      spawn('open', ['-a', 'Visual Studio Code', p], { detached: true, stdio: 'ignore' }).unref()
+    } else {
+      spawn('code', [p], { detached: true, stdio: 'ignore' }).unref()
+    }
   })
 
   ipcMain.handle(IPC.listTerminals, () => ptys.list())

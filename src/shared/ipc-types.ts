@@ -92,6 +92,8 @@ export interface Api {
   getPendingCount(worktreePath: string): Promise<number>
   push(worktreePath: string): Promise<PushOutcome>
   openLazygit(worktreePath: string): void
+  // Open the worktree folder in VS Code via the `code` CLI.
+  openInEditor(worktreePath: string): void
   // Absolute path of a dropped File. Uses Electron's webUtils under the hood
   // since renderer File objects don't expose a filesystem path on their own.
   getPathForFile(file: File): string
@@ -121,6 +123,7 @@ export const IPC = {
   discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run',
   openLazygit: 'term:lazygit',
+  openInEditor: 'editor:open',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
