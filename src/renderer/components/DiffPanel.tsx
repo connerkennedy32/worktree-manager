@@ -97,6 +97,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
             style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                      direction: 'rtl', textAlign: 'left' }}>{row.path}</span>
+      {(row.add || row.del) && (
+        <span style={{ flexShrink: 0, display: 'flex', gap: 5, fontFamily: 'Menlo, monospace',
+                       fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+          {row.add ? <span style={{ color: '#6a9955' }}>+{row.add}</span> : null}
+          {row.del ? <span style={{ color: '#c94a4a' }}>−{row.del}</span> : null}
+        </span>
+      )}
       {/* Staging and discarding an already-committed file are both meaningless. */}
       {!row.committed && (
         <>
@@ -166,6 +173,15 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
         <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           Changes {branch ? `· ${branch}` : ''}
         </span>
+        {selected && (
+          <button onClick={() => window.api.openInEditor(selected)} title="Open worktree in VS Code"
+                  style={{ background: 'none', border: '1px solid #444', borderRadius: 4, color: '#ddd',
+                           cursor: 'pointer', fontSize: 11, padding: '2px 8px', whiteSpace: 'nowrap' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#3c424e' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+            VS Code
+          </button>
+        )}
         <span style={{ color: '#888' }}>{stagedCount}/{total} staged</span>
       </div>
 

@@ -1,6 +1,7 @@
 import simpleGit from 'simple-git'
 import type { CommittedChanges, CommittedFile } from '@shared/ipc-types'
 import { refExists, resolveTrunk } from './trunk'
+import { parseNumstat } from './numstat'
 
 const EMPTY: CommittedChanges = { baseBranch: '', files: [] }
 
@@ -38,8 +39,13 @@ export async function getCommittedFiles(worktreePath: string): Promise<Committed
       base = remote
     }
 
-    const raw = await git.raw(['diff', '--name-status', `${base}...HEAD`])
-    return { baseBranch: base, files: parseNameStatus(raw) }
+    const [raw, numstatRaw] = await Promise.all([
+      git.raw(['diff', '--name-status', `${base}...HEAD`]),
+      git.raw(['diff', '--numstat', `${base}...HEAD`])
+    ])
+    const stats = parseNumstat(numstatRaw)
+    const files = parseNameStatus(raw).map(f => ({ ...f, ...stats[f.path] }))
+    return { baseBranch: base, files }
   } catch {
     return EMPTY
   }

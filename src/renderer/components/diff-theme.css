@@ -94,3 +94,27 @@
 .diff .token.namespace { opacity: 0.8; }
 .diff .token.italic { font-style: italic; }
 .diff .token.bold { font-weight: 600; }
+
+/* Visual break between hunks so a large skipped span reads as a real gap rather
+   than two adjacent lines that happen to be far apart in the file. */
+.diff-gap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px;
+  background: #181818;
+  border-top: 1px solid #2a2a2a;
+  border-bottom: 1px solid #2a2a2a;
+  user-select: none;
+}
+.diff-gap-line {
+  flex: 1;
+  height: 1px;
+  background: #333;
+}
+.diff-gap-label {
+  color: #6b6b6b;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}

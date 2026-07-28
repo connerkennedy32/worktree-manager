@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { buildWorkingRows, buildCommittedRows, codeColor, reconcileTarget, type Row } from '../../src/renderer/components/changed-files'
 import type { WorktreeStatus, CommittedChanges } from '@shared/ipc-types'
 
-const status = (files: WorktreeStatus['files']): WorktreeStatus =>
-  ({ worktreePath: '/wt', files, changeCount: files.length })
+const status = (files: WorktreeStatus['files'],
+                stats: Partial<Pick<WorktreeStatus, 'staged' | 'unstaged'>> = {}): WorktreeStatus =>
+  ({ worktreePath: '/wt', files, changeCount: files.length, staged: {}, unstaged: {}, ...stats })
 
 describe('buildWorkingRows', () => {
   it('returns nothing when status is missing', () => {
@@ -29,6 +30,14 @@ describe('buildWorkingRows', () => {
     expect(rows).toEqual([
       { key: 'a.ts:w', path: 'a.ts', staged: false, untracked: false, committed: false, code: 'M' }
     ])
+  })
+
+  it('attaches per-side line counts from the staged and unstaged maps', () => {
+    const rows = buildWorkingRows(status(
+      [{ path: 'a.ts', index: 'M', working: 'M' }],
+      { staged: { 'a.ts': { add: 3, del: 1 } }, unstaged: { 'a.ts': { add: 5, del: 2 } } }))
+    expect(rows.find(r => r.staged)).toMatchObject({ add: 3, del: 1 })
+    expect(rows.find(r => !r.staged)).toMatchObject({ add: 5, del: 2 })
   })
 
   it('splits a partially staged file into both a staged and an unstaged row', () => {

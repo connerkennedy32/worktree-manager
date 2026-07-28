@@ -13,7 +13,7 @@ const SWEEP_MS = 2000
 export interface TrackerSessions {
   list(): string[]
   pid(worktreePath: string): number | undefined
-  pathForId(id: string): string | undefined
+  pathForCwd(cwd: string): string | undefined
 }
 
 export class AgentTracker {
@@ -27,10 +27,10 @@ export class AgentTracker {
     private now: () => number = Date.now
   ) {}
 
-  /** Called for each hook POST. `id` is the pty's opaque WTM_TERMINAL_ID. */
-  handleHook(id: string, event: string): void {
-    const path = this.sessions.pathForId(id)
-    if (!path) return // a stale id from a pty that has since exited
+  /** Called for each hook POST. `cwd` is the agent's working directory. */
+  handleHook(cwd: string, event: string): void {
+    const path = this.sessions.pathForCwd(cwd)
+    if (!path) return // a cwd outside any live worktree session
     const status = mapHookEvent(event)
     if (!status) return // an event we do not model; never guess
 

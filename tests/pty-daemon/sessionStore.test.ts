@@ -40,6 +40,17 @@ describe('PtyManager', () => {
     expect(mgr.pid(p)).toBeGreaterThan(0)
   })
 
+  it('resolves a cwd to its owning worktree by longest prefix', async () => {
+    mgr = new PtyManager()
+    const p = homedir()
+    mgr.start(p, () => {})
+
+    expect(mgr.pathForCwd(p)).toBe(p)
+    expect(mgr.pathForCwd(`${p}/src/nested`)).toBe(p) // subdirectory of the worktree
+    expect(mgr.pathForCwd('/somewhere/else')).toBeUndefined()
+    expect(mgr.pathForCwd(`${p}-sibling`)).toBeUndefined() // prefix string but not a subpath
+  })
+
   it('injects extra env into the pty', async () => {
     mgr = new PtyManager()
     const p = homedir()

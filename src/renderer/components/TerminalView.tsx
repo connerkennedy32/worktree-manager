@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type DragEvent } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -36,6 +36,12 @@ function ensureDataBound() {
   dataBound = true
 }
 
+// Wrap a path in single quotes so spaces and shell metacharacters survive being
+// typed at a prompt; an embedded single quote is closed, escaped, and reopened.
+function shellQuote(path: string): string {
+  return `'${path.replace(/'/g, `'\\''`)}'`
+}
+
 function fitEntry(entry: Entry, worktreePath: string) {
   if (!entry.container.clientWidth || !entry.container.clientHeight) return
   try { entry.fit.fit() } catch { /* ignore transient sizing errors */ }
@@ -58,7 +64,17 @@ export function TerminalView() {
       container.style.inset = '0'
       wrap.appendChild(container)
       const term = new Terminal({ fontFamily: 'Menlo, monospace', fontSize: 13,
-        allowTransparency: true, theme: { background: 'rgba(0, 0, 0, 0)' }, cursorBlink: true })
+        allowTransparency: true, cursorBlink: true,
+        // ANSI palette matched to macOS Terminal.app's "Basic" profile so
+        // indexed colors (e.g. orange) render the same as the native terminal.
+        theme: {
+          background: 'rgba(0, 0, 0, 0)',
+          black: '#000000', red: '#990000', green: '#00a600', yellow: '#999900',
+          blue: '#0000b2', magenta: '#b200b2', cyan: '#00a6b2', white: '#bfbfbf',
+          brightBlack: '#666666', brightRed: '#e50000', brightGreen: '#00d900',
+          brightYellow: '#e5e500', brightBlue: '#0000ff', brightMagenta: '#e500e5',
+          brightCyan: '#00e5e5', brightWhite: '#e5e5e5'
+        } })
       const fit = new FitAddon(); term.loadAddon(fit)
       term.onData(d => window.api.termInput(selected, d))
       // Shift+Enter → send Ctrl+J (line feed, 0x0a) instead of a plain CR (0x0d).
@@ -104,5 +120,23 @@ export function TerminalView() {
     return () => ro.disconnect()
   }, [selected])
 
-  return <div ref={wrapRef} style={{ position: 'relative', height: '100%', width: '100%' }} />
+  // Dragging files onto the terminal types their quoted absolute paths at the
+  // prompt (space-separated), so e.g. Claude Code receives real file references.
+  // Both handlers must preventDefault: without it Electron navigates the window
+  // to the dropped file, blowing away the app.
+  const onDragOver = (e: DragEvent) => {
+    if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
+  }
+  const onDrop = (e: DragEvent) => {
+    if (!selected) return
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length === 0) return
+    e.preventDefault()
+    const text = files.map(f => shellQuote(window.api.getPathForFile(f))).join(' ') + ' '
+    window.api.termInput(selected, text)
+    terms.get(selected)?.term.focus()
+  }
+
+  return <div ref={wrapRef} onDragOver={onDragOver} onDrop={onDrop}
+              style={{ position: 'relative', height: '100%', width: '100%' }} />
 }

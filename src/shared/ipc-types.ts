@@ -16,10 +16,16 @@ export interface FileChange {
   changeCount?: number
 }
 
+export interface LineStat { add: number; del: number }
+
 export interface WorktreeStatus {
   worktreePath: string
   files: FileChange[]
   changeCount: number
+  // Line counts keyed by path, per side of the split. Untracked files are folded
+  // into `unstaged` (all additions). Missing entries mean no line-level diff.
+  staged: Record<string, LineStat>
+  unstaged: Record<string, LineStat>
 }
 
 export interface DiffFile {
@@ -34,6 +40,8 @@ export interface CommittedFile {
   path: string          // repo-relative
   code: string          // name-status letter: M A D R etc.
   oldPath?: string      // set for renames (code 'R')
+  add?: number          // lines added vs base
+  del?: number          // lines removed vs base
 }
 
 // Push returns an outcome rather than throwing: Electron wraps a thrown
@@ -84,6 +92,11 @@ export interface Api {
   getPendingCount(worktreePath: string): Promise<number>
   push(worktreePath: string): Promise<PushOutcome>
   openLazygit(worktreePath: string): void
+  // Open the worktree folder in VS Code via the `code` CLI.
+  openInEditor(worktreePath: string): void
+  // Absolute path of a dropped File. Uses Electron's webUtils under the hood
+  // since renderer File objects don't expose a filesystem path on their own.
+  getPathForFile(file: File): string
   // terminal
   listTerminals(): Promise<string[]>
   termStart(worktreePath: string): void
@@ -110,6 +123,7 @@ export const IPC = {
   discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run',
   openLazygit: 'term:lazygit',
+  openInEditor: 'editor:open',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',

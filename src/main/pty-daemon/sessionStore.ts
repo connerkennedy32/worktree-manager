@@ -15,9 +15,13 @@ export class PtyManager {
     const shell = process.env.SHELL || (platform() === 'win32' ? 'powershell.exe' : 'bash')
     const args = platform() === 'win32' ? [] : ['-l']
     const id = randomUUID()
+    // The daemon runs under `ELECTRON_RUN_AS_NODE=1`; if it leaks into a shell,
+    // launching Electron from that shell (e.g. `npm start`) boots the app as
+    // plain Node and crashes. Strip it so shells get a clean environment.
+    const { ELECTRON_RUN_AS_NODE, ...baseEnv } = process.env
     const proc = pty.spawn(shell, args, {
-      name: 'xterm-color', cols: 100, rows: 30, cwd: worktreePath,
-      env: { ...process.env, ...extraEnv, WTM_TERMINAL_ID: id } as any
+      name: 'xterm-256color', cols: 100, rows: 30, cwd: worktreePath,
+      env: { ...baseEnv, COLORTERM: 'truecolor', ...extraEnv, WTM_TERMINAL_ID: id } as any
     })
     const session: Session = { proc, buffer: '', id }
     proc.onData(d => {
@@ -38,6 +42,21 @@ export class PtyManager {
   pathForId(id: string) {
     for (const [path, s] of this.sessions) if (s.id === id) return path
     return undefined
+  }
+
+  // Resolve a hook's reported cwd to the worktree that owns it. The agent may
+  // run in a subdirectory of the worktree, so match by longest path prefix
+  // rather than exact equality. Identifying by cwd (from the hook payload)
+  // instead of an inherited env var is what makes status survive tmux, which
+  // does not propagate per-pane env into the agent's process.
+  pathForCwd(cwd: string) {
+    let best: string | undefined
+    for (const path of this.sessions.keys()) {
+      if (cwd === path || cwd.startsWith(`${path}/`)) {
+        if (!best || path.length > best.length) best = path
+      }
+    }
+    return best
   }
 
   write(worktreePath: string, data: string) { this.sessions.get(worktreePath)?.proc.write(data) }

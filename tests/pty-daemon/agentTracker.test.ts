@@ -8,7 +8,7 @@ const NO_AGENT = ['  PID  PPID COMM', '100 1 /bin/zsh'].join('\n')
 const sessions = (paths = ['/wt/a']) => ({
   list: () => paths,
   pid: (p: string) => (paths.includes(p) ? 100 : undefined),
-  pathForId: (id: string) => (id === 'id-a' ? '/wt/a' : undefined)
+  pathForCwd: (cwd: string) => (cwd === '/wt/a' ? '/wt/a' : undefined)
 })
 
 function make(table = WITH_AGENT, paths = ['/wt/a']) {
@@ -26,44 +26,44 @@ function make(table = WITH_AGENT, paths = ['/wt/a']) {
 describe('handleHook', () => {
   it('maps an event onto the right worktree and emits', () => {
     const { tracker, seen } = make()
-    tracker.handleHook('id-a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
     expect(seen).toEqual([['/wt/a', { status: 'working', at: 1000 }]])
   })
 
-  it('ignores an unknown terminal id', () => {
+  it('ignores a cwd outside any live worktree', () => {
     const { tracker, seen } = make()
-    tracker.handleHook('bogus-id', 'Stop')
+    tracker.handleHook('/wt/nope', 'Stop')
     expect(seen).toEqual([])
   })
 
   it('ignores an event that carries no status', () => {
     const { tracker, seen } = make()
-    tracker.handleHook('id-a', 'SessionStart')
+    tracker.handleHook('/wt/a', 'SessionStart')
     expect(seen).toEqual([])
     expect(tracker.snapshot()).toEqual({})
   })
 
   it('re-emits Stop even though the status is unchanged, because `at` moved', () => {
     const { tracker, seen, tick } = make()
-    tracker.handleHook('id-a', 'Stop')
+    tracker.handleHook('/wt/a', 'Stop')
     tick(50)
-    tracker.handleHook('id-a', 'Stop')
+    tracker.handleHook('/wt/a', 'Stop')
     expect(seen).toHaveLength(2)
     expect(seen[1][1].at).toBe(1050)
   })
 
   it('walks a full turn: prompt -> tool -> permission -> stop', () => {
     const { tracker, seen } = make()
-    tracker.handleHook('id-a', 'UserPromptSubmit')
-    tracker.handleHook('id-a', 'PostToolUse')
-    tracker.handleHook('id-a', 'PermissionRequest')
-    tracker.handleHook('id-a', 'Stop')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'PostToolUse')
+    tracker.handleHook('/wt/a', 'PermissionRequest')
+    tracker.handleHook('/wt/a', 'Stop')
     expect(seen.map(([, r]) => r.status)).toEqual(['working', 'working', 'permission', 'done'])
   })
 
   it('records StopFailure as failed', () => {
     const { tracker } = make()
-    tracker.handleHook('id-a', 'StopFailure')
+    tracker.handleHook('/wt/a', 'StopFailure')
     expect(tracker.snapshot()['/wt/a'].status).toBe('failed')
   })
 
@@ -71,12 +71,12 @@ describe('handleHook', () => {
     let clock = 1000
     const seen: any[] = []
     const tracker = new AgentTracker(
-      { list: () => ['/wt/a'], pid: () => 100, pathForId: (id: string) => (id === 'id-a' ? '/wt/a' : undefined) },
+      { list: () => ['/wt/a'], pid: () => 100, pathForCwd: (cwd: string) => (cwd === '/wt/a' ? '/wt/a' : undefined) },
       (_p, r) => seen.push(r),
       async () => '',
       () => clock++
     )
-    tracker.handleHook('id-a', 'Stop')
+    tracker.handleHook('/wt/a', 'Stop')
     expect(seen[0].at).toBe(tracker.snapshot()['/wt/a'].at)
   })
 })
@@ -93,7 +93,7 @@ describe('sweep', () => {
 
   it('leaves a working status alone while claude is alive', async () => {
     const { tracker, seen } = make(WITH_AGENT)
-    tracker.handleHook('id-a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
     await tracker.sweep()
     expect(seen).toHaveLength(1)
     expect(tracker.snapshot()['/wt/a'].status).toBe('working')
@@ -101,7 +101,7 @@ describe('sweep', () => {
 
   it('clears a stale working status when claude is gone', async () => {
     const { tracker, seen } = make(NO_AGENT)
-    tracker.handleHook('id-a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
     await tracker.sweep()
     expect(seen[1]).toEqual(['/wt/a', { status: 'none', at: 1000 }])
     expect(tracker.snapshot()['/wt/a']).toBeUndefined()
@@ -118,7 +118,7 @@ describe('sweep', () => {
     const tracker = new AgentTracker(
       sessions(), (p, r) => seen.push([p, r]), async () => { throw new Error('ps exploded') }, () => 1000
     )
-    tracker.handleHook('id-a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
     await expect(tracker.sweep()).resolves.toBeUndefined()
     expect(tracker.snapshot()['/wt/a'].status).toBe('working')
   })
@@ -127,12 +127,12 @@ describe('sweep', () => {
     const seen: [string, AgentReport][] = []
     let paths = ['/wt/a']
     const tracker = new AgentTracker(
-      { list: () => paths, pid: () => 100, pathForId: () => '/wt/a' },
+      { list: () => paths, pid: () => 100, pathForCwd: () => '/wt/a' },
       (p, r) => seen.push([p, r]),
       async () => WITH_AGENT,
       () => 1000
     )
-    tracker.handleHook('id-a', 'UserPromptSubmit')
+    tracker.handleHook('/wt/a', 'UserPromptSubmit')
     paths = []
     await tracker.sweep()
     expect(tracker.snapshot()).toEqual({})

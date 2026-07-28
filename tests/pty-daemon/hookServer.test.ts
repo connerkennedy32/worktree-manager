@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile)
 let server: Server | undefined
 afterEach(() => { server?.close(); server = undefined })
 
-function serve(onHook: (id: string, event: string) => void) {
+function serve(onHook: (cwd: string, event: string) => void) {
   const sock = join(mkdtempSync(join(tmpdir(), 'wtm-hook-')), 'agent-hook.sock')
   return new Promise<string>(resolve => {
     server = startHookServer(sock, onHook)
@@ -33,35 +33,35 @@ const post = (sock: string, body: string) =>
 describe('startHookServer', () => {
   it('receives a hook posted over the unix socket', async () => {
     const got: [string, string][] = []
-    const sock = await serve((id, event) => got.push([id, event]))
-    await post(sock, JSON.stringify({ id: 'id-a', event: 'Stop' }))
-    expect(got).toEqual([['id-a', 'Stop']])
+    const sock = await serve((cwd, event) => got.push([cwd, event]))
+    await post(sock, JSON.stringify({ cwd: '/wt/a', event: 'Stop' }))
+    expect(got).toEqual([['/wt/a', 'Stop']])
   })
 
   it('ignores a malformed body without crashing', async () => {
     const got: [string, string][] = []
-    const sock = await serve((id, event) => got.push([id, event]))
+    const sock = await serve((cwd, event) => got.push([cwd, event]))
     await expect(post(sock, 'not json at all')).resolves.toBeDefined()
     expect(got).toEqual([])
   })
 
   it('ignores a body missing its fields', async () => {
     const got: [string, string][] = []
-    const sock = await serve((id, event) => got.push([id, event]))
-    await post(sock, JSON.stringify({ id: 'id-a' }))
+    const sock = await serve((cwd, event) => got.push([cwd, event]))
+    await post(sock, JSON.stringify({ cwd: '/wt/a' }))
     await post(sock, JSON.stringify({ event: 'Stop' }))
-    await post(sock, JSON.stringify({ id: 5, event: [] }))
+    await post(sock, JSON.stringify({ cwd: 5, event: [] }))
     expect(got).toEqual([])
   })
 
   it('rebinds over a stale socket file left by a crash', async () => {
     const got: [string, string][] = []
-    const sock = await serve((id, event) => got.push([id, event]))
+    const sock = await serve((cwd, event) => got.push([cwd, event]))
     server!.close()
     // The socket file still exists on disk; a fresh bind must reclaim it.
-    server = startHookServer(sock, (id, event) => got.push([id, event]))
+    server = startHookServer(sock, (cwd, event) => got.push([cwd, event]))
     await new Promise(r => server!.on('listening', r))
-    await post(sock, JSON.stringify({ id: 'id-a', event: 'Stop' }))
-    expect(got).toEqual([['id-a', 'Stop']])
+    await post(sock, JSON.stringify({ cwd: '/wt/a', event: 'Stop' }))
+    expect(got).toEqual([['/wt/a', 'Stop']])
   })
 })

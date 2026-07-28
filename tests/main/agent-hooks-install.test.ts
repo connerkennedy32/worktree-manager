@@ -26,7 +26,9 @@ describe('installAgentHooks', () => {
     const { installAgentHooks, hookScriptPath } = await import('../../src/main/agent-hooks/install')
     installAgentHooks()
     const out = JSON.parse(readFileSync(settings, 'utf8'))
-    expect(out.hooks.Stop[0].hooks[0].command).toBe(hookScriptPath())
+    // The command is shell-quoted so a path with spaces (macOS's "Application
+    // Support") survives /bin/sh -c.
+    expect(out.hooks.Stop[0].hooks[0].command).toBe(`"${hookScriptPath()}"`)
   })
 
   it("preserves the user's existing settings", async () => {
@@ -65,30 +67,36 @@ describe('installAgentHooks', () => {
 })
 
 describe('the hook script', () => {
-  it('exits silently when not launched from one of our terminals', async () => {
+  it('exits silently when the daemon socket is absent', async () => {
     const { installAgentHooks, hookScriptPath } = await import('../../src/main/agent-hooks/install')
     installAgentHooks()
     const { execFileSync } = await import('child_process')
-    // No WTM_TERMINAL_ID: must exit 0 and emit nothing.
+    // No env at all: the baked-in default socket path does not exist here, so
+    // the script must exit 0 and emit nothing.
     const out = execFileSync('bash', [hookScriptPath()], {
-      input: JSON.stringify({ hook_event_name: 'Stop' }),
+      input: JSON.stringify({ hook_event_name: 'Stop', cwd: '/wt/a' }),
       env: { PATH: process.env.PATH ?? '' }
     })
     expect(out.toString()).toBe('')
   })
 
-  it('exits silently when the socket does not exist', async () => {
+  it('exits silently when $WTM_HOOK_SOCKET points at a missing socket', async () => {
     const { installAgentHooks, hookScriptPath } = await import('../../src/main/agent-hooks/install')
     installAgentHooks()
     const { execFileSync } = await import('child_process')
     const out = execFileSync('bash', [hookScriptPath()], {
-      input: JSON.stringify({ hook_event_name: 'Stop' }),
+      input: JSON.stringify({ hook_event_name: 'Stop', cwd: '/wt/a' }),
       env: {
         PATH: process.env.PATH ?? '',
-        WTM_TERMINAL_ID: 'abc',
         WTM_HOOK_SOCKET: join(dir, 'does-not-exist.sock')
       }
     })
     expect(out.toString()).toBe('')
+  })
+
+  it('bakes the daemon socket path into the generated script', async () => {
+    const { installAgentHooks, hookScriptPath, hookSocketPath } = await import('../../src/main/agent-hooks/install')
+    installAgentHooks()
+    expect(readFileSync(hookScriptPath(), 'utf8')).toContain(hookSocketPath())
   })
 })
