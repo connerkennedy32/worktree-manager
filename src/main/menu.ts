@@ -1,9 +1,77 @@
-import { Menu, BrowserWindow, type MenuItemConstructorOptions } from 'electron'
-import { IPC } from '@shared/ipc-types'
+import { Menu, BrowserWindow, dialog, type MenuItemConstructorOptions } from 'electron'
+import { IPC, BUILTIN_BACKGROUNDS } from '@shared/ipc-types'
+import * as config from './config'
 
-// Build the application (menu bar) menu, including a Terminal menu with Reset.
-export function buildAppMenu(win: BrowserWindow) {
+const BG_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'mp4', 'webm', 'mov', 'm4v', 'ogv']
+
+// Build the Background submenu: Add…, then a radio list of Default + every
+// added file (the current one checked), then Remove for the current selection.
+// Changing a background rebuilds the whole menu so the checkmark/list refresh.
+function backgroundSubmenu(win: BrowserWindow, backgrounds: string[], selected: string): MenuItemConstructorOptions[] {
+  const rebuild = () => buildAppMenu(win)
+  const notify = () => win.webContents.send(IPC.backgroundChanged)
+
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: 'Add Background…',
+      click: async () => {
+        const r = await dialog.showOpenDialog(win, {
+          properties: ['openFile', 'multiSelections'],
+          filters: [{ name: 'Images & Videos', extensions: BG_EXTENSIONS }]
+        })
+        if (r.canceled || r.filePaths.length === 0) return
+        let lastAdded = ''
+        for (const p of r.filePaths) lastAdded = await config.addBackground(p)
+        // Adding a background also selects it, so it takes effect immediately.
+        if (lastAdded) await config.setSelectedBackground(lastAdded)
+        await rebuild()
+        notify()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'None',
+      type: 'radio',
+      checked: selected === '',
+      click: async () => { await config.setSelectedBackground(''); await rebuild(); notify() }
+    },
+    ...BUILTIN_BACKGROUNDS.map((b): MenuItemConstructorOptions => {
+      const value = `builtin:${b.id}`
+      return {
+        label: b.label,
+        type: 'radio',
+        checked: selected === value,
+        click: async () => { await config.setSelectedBackground(value); await rebuild(); notify() }
+      }
+    }),
+    ...backgrounds.map((name): MenuItemConstructorOptions => ({
+      label: name,
+      type: 'radio',
+      checked: selected === name,
+      click: async () => { await config.setSelectedBackground(name); await rebuild(); notify() }
+    }))
+  ]
+
+  // Remove only applies to user-added files, not the built-ins or None.
+  const isUserFile = selected !== '' && !selected.startsWith('builtin:')
+  if (isUserFile) {
+    items.push(
+      { type: 'separator' },
+      {
+        label: `Remove "${selected}"`,
+        click: async () => { await config.removeBackground(selected); await rebuild(); notify() }
+      }
+    )
+  }
+  return items
+}
+
+// Build the application (menu bar) menu, including a Terminal menu with Reset
+// and a Background menu for choosing the app backdrop.
+export async function buildAppMenu(win: BrowserWindow) {
   const isMac = process.platform === 'darwin'
+  const backgrounds = await config.listBackgrounds()
+  const selected = await config.getSelectedBackground()
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? [{ role: 'appMenu' as const }] : []),
     { role: 'fileMenu' },
@@ -64,6 +132,7 @@ export function buildAppMenu(win: BrowserWindow) {
         }
       ]
     },
+    { label: 'Background', submenu: backgroundSubmenu(win, backgrounds, selected) },
     { role: 'viewMenu' },
     { role: 'windowMenu' }
   ]

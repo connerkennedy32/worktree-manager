@@ -1,9 +1,26 @@
-import { app, BrowserWindow, nativeImage } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow, nativeImage, protocol, net } from 'electron'
+import { join, basename } from 'path'
+import { pathToFileURL } from 'url'
 import { registerIpc } from './ipc'
 import { buildAppMenu } from './menu'
 import { attachShortcuts } from './shortcuts'
 import { installAgentHooks } from './agent-hooks/install'
+import { backgroundsDir } from './config'
+
+// The renderer can't load arbitrary file:// paths under the default CSP, and
+// data-URLing a multi-MB video is a non-starter. A custom scheme streams the
+// file from disk with range-request support (needed for <video> seeking).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'wtm-bg', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+])
+
+function registerBackgroundProtocol() {
+  protocol.handle('wtm-bg', (req) => {
+    // URL shape: wtm-bg://bg/<filename>. basename() blocks path traversal.
+    const name = basename(decodeURIComponent(new URL(req.url).pathname))
+    return net.fetch(pathToFileURL(join(backgroundsDir(), name)).toString())
+  })
+}
 
 const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.png'))
 // Set the dock icon explicitly since dev/preview runs are unpackaged and would
@@ -17,7 +34,7 @@ async function createWindow() {
     webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false }
   })
   await registerIpc(win)
-  buildAppMenu(win)
+  await buildAppMenu(win)
   attachShortcuts(win)
   if (process.env['ELECTRON_RENDERER_URL']) win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   else win.loadFile(join(__dirname, '../renderer/index.html'))
@@ -26,6 +43,7 @@ async function createWindow() {
 app.whenReady().then(() => {
   // Idempotent, never throws — the app must start even if hook install fails.
   installAgentHooks()
+  registerBackgroundProtocol()
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })

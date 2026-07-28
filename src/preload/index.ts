@@ -9,6 +9,12 @@ const api: Api = {
   pickRepo: () => ipcRenderer.invoke(IPC.pickRepo),
   listNames: () => ipcRenderer.invoke(IPC.listNames),
   setName: (p, name) => ipcRenderer.invoke(IPC.setName, p, name),
+  getSelectedBackground: () => ipcRenderer.invoke(IPC.getSelectedBackground),
+  onBackgroundChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.backgroundChanged, h as any)
+    return () => ipcRenderer.removeListener(IPC.backgroundChanged, h as any)
+  },
   listWorktrees: (r) => ipcRenderer.invoke(IPC.listWorktrees, r),
   createWorktree: (req) => ipcRenderer.invoke(IPC.createWorktree, req),
   removeWorktree: (p, f) => ipcRenderer.invoke(IPC.removeWorktree, p, f),
@@ -26,7 +32,7 @@ const api: Api = {
   getPendingCount: (p) => ipcRenderer.invoke(IPC.pendingCount, p),
   push: (p) => ipcRenderer.invoke(IPC.push, p),
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
-  openInEditor: (p) => ipcRenderer.send(IPC.openInEditor, p),
+  openInEditor: (p, file) => ipcRenderer.send(IPC.openInEditor, p, file),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   listTerminals: () => ipcRenderer.invoke(IPC.listTerminals),
   getAgentStatuses: () => ipcRenderer.invoke(IPC.getAgentStatuses),

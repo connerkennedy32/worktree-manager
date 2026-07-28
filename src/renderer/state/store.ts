@@ -21,6 +21,10 @@ interface State {
   seenAt: Record<string, number>
   names: Record<string, string>
   rename: (p: string, name: string) => Promise<void>
+  // Current backdrop selection ('' = built-in default). Managed from the
+  // Background app menu; the renderer just mirrors it to paint the backdrop.
+  selectedBackground: string
+  refreshBackground: () => Promise<void>
   selected?: string
   openDiff: DiffTarget | null
   setOpenDiff: (t: DiffTarget | null) => void
@@ -40,6 +44,7 @@ interface State {
 export const useStore = create<State>((set, get) => ({
   repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
   names: {},
+  selectedBackground: '',
   openDiff: null, modalOpen: 0,
   // Names are persisted in the main process (userData/names.json), so an empty
   // name clears the override there and we mirror the returned map into state.
@@ -47,12 +52,19 @@ export const useStore = create<State>((set, get) => ({
     const names = await window.api.setName(p, name)
     set({ names })
   },
+  refreshBackground: async () => {
+    set({ selectedBackground: await window.api.getSelectedBackground() })
+  },
   setOpenDiff: (t) => set({ openDiff: t }),
   pushModal: () => set(st => ({ modalOpen: st.modalOpen + 1 })),
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
     set({ repos, names: await window.api.listNames() })
+    await get().refreshBackground()
+    // The Background app menu changes the selection in the main process; re-read
+    // it when notified so the backdrop updates live.
+    window.api.onBackgroundChanged(() => get().refreshBackground())
     await get().refreshWorktrees()
     // On any change (files or branch HEAD), refresh that worktree's status and
     // re-list worktrees so branch renames/switches show in the sidebar.

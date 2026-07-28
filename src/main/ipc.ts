@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import type { AgentReport } from '@shared/agent-status'
 import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
@@ -71,6 +72,7 @@ export async function registerIpc(w: BrowserWindow) {
   })
   ipcMain.handle(IPC.listNames, () => config.listNames())
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
+  ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
   ipcMain.handle(IPC.createWorktree, (_e, req) => wt.createWorktree(req))
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
@@ -99,14 +101,17 @@ export async function registerIpc(w: BrowserWindow) {
     ptys.write(p, 'lazygit\n')
   })
 
-  ipcMain.on(IPC.openInEditor, (_e, p: string) => {
+  ipcMain.on(IPC.openInEditor, (_e, p: string, file?: string) => {
+    // Passing the worktree alongside the file keeps VS Code's window rooted at
+    // the worktree instead of opening a stray single-file window.
+    const targets = file ? [p, join(p, file)] : [p]
     // GUI-launched apps don't inherit a login shell's PATH, so the `code` CLI
     // usually isn't resolvable directly. On macOS `open -a` finds VS Code by app
     // name regardless of PATH; elsewhere fall back to `code` on PATH.
     if (process.platform === 'darwin') {
-      spawn('open', ['-a', 'Visual Studio Code', p], { detached: true, stdio: 'ignore' }).unref()
+      spawn('open', ['-a', 'Visual Studio Code', ...targets], { detached: true, stdio: 'ignore' }).unref()
     } else {
-      spawn('code', [p], { detached: true, stdio: 'ignore' }).unref()
+      spawn('code', targets, { detached: true, stdio: 'ignore' }).unref()
     }
   })
 

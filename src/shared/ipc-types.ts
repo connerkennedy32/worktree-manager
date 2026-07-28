@@ -78,6 +78,12 @@ export interface Api {
   // clears the override.
   listNames(): Promise<Record<string, string>>
   setName(worktreePath: string, name: string): Promise<Record<string, string>>
+  // Background backdrop. Files live in userData/backgrounds and are managed from
+  // the Background app menu; the renderer only reads the current selection (a
+  // bare filename, or '' for the built-in default) and re-reads it when the menu
+  // changes it. Files are served via the wtm-bg:// protocol.
+  getSelectedBackground(): Promise<string>
+  onBackgroundChanged(cb: () => void): () => void
   listWorktrees(repoPath: string): Promise<Worktree[]>
   createWorktree(req: NewWorktreeRequest): Promise<Worktree[]>
   removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]>
@@ -97,8 +103,9 @@ export interface Api {
   getPendingCount(worktreePath: string): Promise<number>
   push(worktreePath: string): Promise<PushOutcome>
   openLazygit(worktreePath: string): void
-  // Open the worktree folder in VS Code via the `code` CLI.
-  openInEditor(worktreePath: string): void
+  // Open the worktree folder in VS Code via the `code` CLI. With `file` (a
+  // worktree-relative path) that file is opened too, inside the worktree window.
+  openInEditor(worktreePath: string, file?: string): void
   // Absolute path of a dropped File. Uses Electron's webUtils under the hood
   // since renderer File objects don't expose a filesystem path on their own.
   getPathForFile(file: File): string
@@ -121,9 +128,19 @@ export interface Api {
   onMenuSelectNext(cb: () => void): () => void
 }
 
+// Backdrops bundled with the app, offered in the Background menu alongside any
+// user-added files. Selection is stored as `builtin:<id>`; '' means no backdrop
+// (blank). The renderer maps each id to its imported asset.
+export const BUILTIN_BACKGROUNDS = [
+  { id: 'voyage', label: 'Voyage (image)' },
+  { id: 'blackhole', label: 'Black hole (video)' }
+] as const
+export type BuiltinBackgroundId = typeof BUILTIN_BACKGROUNDS[number]['id']
+
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
   listNames: 'names:list', setName: 'names:set',
+  getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
   listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   readFile: 'file:read', writeFile: 'file:write',

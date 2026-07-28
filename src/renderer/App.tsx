@@ -5,10 +5,42 @@ import { TerminalView, resetTerminal } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
 import { DiffModal } from './components/DiffModal'
 import { NewWorktreeModal } from './components/NewWorktreeModal'
-import backdrop from './assets/voyage-backdrop.jpg'
+import blackholeVideo from './assets/blackhole-backdrop.mp4'
+import voyageImage from './assets/voyage-backdrop.jpg'
+
+const VIDEO_EXTS = ['.mp4', '.webm', '.mov', '.m4v', '.ogv']
+const isVideo = (name: string) => VIDEO_EXTS.some(e => name.toLowerCase().endsWith(e))
+// Built-in backdrops, keyed by the `builtin:<id>` selection value from the menu.
+const BUILTINS: Record<string, { src: string; video: boolean }> = {
+  'builtin:voyage': { src: voyageImage, video: false },
+  'builtin:blackhole': { src: blackholeVideo, video: true }
+}
+// Resolve the active backdrop. '' = blank (no element). A `builtin:` value maps
+// to a bundled asset; anything else is a user-added file served over wtm-bg://.
+function useBackdrop() {
+  const selected = useStore(s => s.selectedBackground)
+  if (!selected) return null
+  if (selected in BUILTINS) return BUILTINS[selected]
+  return { src: `wtm-bg://bg/${encodeURIComponent(selected)}`, video: isVideo(selected) }
+}
 
 const MIN_DIFF_WIDTH = 280
 const MAX_DIFF_WIDTH = 900
+
+const backdropStyle: React.CSSProperties = {
+  position: 'fixed', inset: 0, zIndex: -1,
+  width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.5)'
+}
+
+function Backdrop() {
+  const backdrop = useBackdrop()
+  if (!backdrop) return null // blank
+  const { src, video } = backdrop
+  // key=src forces a fresh element on switch so the new source actually loads.
+  return video
+    ? <video key={src} src={src} autoPlay loop muted playsInline style={backdropStyle} />
+    : <img key={src} src={src} style={backdropStyle} />
+}
 
 export function App() {
   const init = useStore(s => s.init)
@@ -82,10 +114,8 @@ export function App() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', position: 'relative' }}>
-      {/* Wezterm-style backdrop: darkened image + #282c35 overlay, faded behind the UI */}
-      <div style={{ position: 'fixed', inset: 0, zIndex: -1,
-                    backgroundImage: `url(${backdrop})`, backgroundSize: 'cover',
-                    backgroundPosition: 'center', filter: 'brightness(0.5)' }} />
+      {/* Wezterm-style backdrop: darkened image/video + #282c35 overlay, faded behind the UI */}
+      <Backdrop />
       <div style={{ position: 'fixed', inset: 0, zIndex: -1, background: 'rgba(40, 44, 53, 0.72)' }} />
       <Sidebar />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>

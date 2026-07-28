@@ -206,6 +206,14 @@ export function DiffModal() {
             {row.del ? <span style={{ color: active ? '#f28b82' : '#c94a4a' }}>−{row.del}</span> : null}
           </span>
         )}
+        <button onClick={e => { e.stopPropagation(); if (selected) window.api.openInEditor(selected, row.path) }}
+                title="Open this file in VS Code"
+                style={{ background: 'none', border: 'none', color: active ? '#cfe6ff' : '#999',
+                         cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: '0 2px', width: 18 }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#4daafc')}
+                onMouseLeave={e => (e.currentTarget.style.color = active ? '#cfe6ff' : '#999')}>
+          ↗
+        </button>
         {/* Staging and discarding an already-committed file are both meaningless. */}
         {!row.committed && (
           <>
@@ -313,6 +321,14 @@ export function DiffModal() {
                   </span>
                 )}
               </span>
+              {!editing && (
+                <button onClick={() => selected && window.api.openInEditor(selected, openDiff.path)}
+                        title="Open this file in VS Code"
+                        style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                 borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                  VS Code
+                </button>
+              )}
               {activeRow && !activeRow.committed && !editing && (
                 <>
                   <button onClick={startEdit}
