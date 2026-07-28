@@ -32,7 +32,7 @@ function WorkingSpinner() {
 }
 
 export function Sidebar() {
-  const { worktrees, statuses, agentStatuses, seenAt, selected, select, refreshWorktrees, repos } = useStore()
+  const { worktrees, statuses, agentStatuses, seenAt, names, rename, selected, select, refreshWorktrees, repos } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string>()
@@ -40,6 +40,18 @@ export function Sidebar() {
   const [error, setError] = useState<string>()
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null)
   const tipTimer = useRef<ReturnType<typeof setTimeout>>()
+  // Inline tab rename: the path being edited, plus the draft text.
+  const [editingPath, setEditingPath] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  const startEdit = (w: Worktree) => {
+    setEditingPath(w.path)
+    setDraft(names[w.path] ?? (w.path.split('/').filter(Boolean).pop() ?? ''))
+  }
+  const commitEdit = () => {
+    if (editingPath) rename(editingPath, draft)
+    setEditingPath(null)
+  }
 
   const showTip = (e: React.MouseEvent, text: string) => {
     const x = e.clientX + 14, y = e.clientY + 12
@@ -136,9 +148,28 @@ export function Sidebar() {
                        onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}>
                     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6,
-                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            onDoubleClick={(e) => { e.stopPropagation(); startEdit(w) }}
+                            title="Double-click to rename">
                         {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
-                        {w.path.split('/').filter(Boolean).pop()}
+                        {editingPath === w.path ? (
+                          <input
+                            className="wt-input"
+                            autoFocus
+                            value={draft}
+                            onChange={e => setDraft(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            onBlur={commitEdit}
+                            onKeyDown={e => {
+                              e.stopPropagation()
+                              if (e.key === 'Enter') commitEdit()
+                              else if (e.key === 'Escape') setEditingPath(null)
+                            }}
+                            style={{ flex: 1, minWidth: 0 }}
+                          />
+                        ) : (
+                          names[w.path] ?? w.path.split('/').filter(Boolean).pop()
+                        )}
                       </span>
                       <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
                                      whiteSpace: 'nowrap', paddingLeft: 29 }}>

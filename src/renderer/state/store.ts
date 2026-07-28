@@ -19,6 +19,8 @@ interface State {
   statuses: Record<string, WorktreeStatus>
   agentStatuses: Record<string, AgentReport>
   seenAt: Record<string, number>
+  names: Record<string, string>
+  rename: (p: string, name: string) => Promise<void>
   selected?: string
   openDiff: DiffTarget | null
   setOpenDiff: (t: DiffTarget | null) => void
@@ -37,13 +39,20 @@ interface State {
 
 export const useStore = create<State>((set, get) => ({
   repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
+  names: {},
   openDiff: null, modalOpen: 0,
+  // Names are persisted in the main process (userData/names.json), so an empty
+  // name clears the override there and we mirror the returned map into state.
+  rename: async (p, name) => {
+    const names = await window.api.setName(p, name)
+    set({ names })
+  },
   setOpenDiff: (t) => set({ openDiff: t }),
   pushModal: () => set(st => ({ modalOpen: st.modalOpen + 1 })),
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
-    set({ repos })
+    set({ repos, names: await window.api.listNames() })
     await get().refreshWorktrees()
     // On any change (files or branch HEAD), refresh that worktree's status and
     // re-list worktrees so branch renames/switches show in the sidebar.

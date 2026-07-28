@@ -7,6 +7,8 @@ const api: Api = {
   addRepo: (p) => ipcRenderer.invoke(IPC.addRepo, p),
   removeRepo: (p) => ipcRenderer.invoke(IPC.removeRepo, p),
   pickRepo: () => ipcRenderer.invoke(IPC.pickRepo),
+  listNames: () => ipcRenderer.invoke(IPC.listNames),
+  setName: (p, name) => ipcRenderer.invoke(IPC.setName, p, name),
   listWorktrees: (r) => ipcRenderer.invoke(IPC.listWorktrees, r),
   createWorktree: (req) => ipcRenderer.invoke(IPC.createWorktree, req),
   removeWorktree: (p, f) => ipcRenderer.invoke(IPC.removeWorktree, p, f),
@@ -32,6 +34,7 @@ const api: Api = {
   termReset: (p) => ipcRenderer.invoke(IPC.termReset, p),
   termInput: (p, d) => ipcRenderer.send(IPC.termInput, p, d),
   termResize: (p, c, r) => ipcRenderer.send(IPC.termResize, p, c, r),
+  focusWindow: () => ipcRenderer.send(IPC.focusWindow),
   onTermData: (cb) => {
     const h = (_e: unknown, p: string, d: string) => cb(p, d)
     ipcRenderer.on(IPC.termData, h as any)

@@ -127,6 +127,12 @@ export function TerminalView() {
   const onDragOver = (e: DragEvent) => {
     if (Array.from(e.dataTransfer.types).includes('Files')) e.preventDefault()
   }
+  // Pull the app to the foreground as soon as a file drag enters, so a drop
+  // works even when Worktree Manager isn't the active app. Chromium still
+  // delivers drag events to an unfocused window, so this fires without a click.
+  const onDragEnter = (e: DragEvent) => {
+    if (Array.from(e.dataTransfer.types).includes('Files')) window.api.focusWindow()
+  }
   const onDrop = (e: DragEvent) => {
     if (!selected) return
     const files = Array.from(e.dataTransfer.files)
@@ -137,6 +143,6 @@ export function TerminalView() {
     terms.get(selected)?.term.focus()
   }
 
-  return <div ref={wrapRef} onDragOver={onDragOver} onDrop={onDrop}
+  return <div ref={wrapRef} onDragEnter={onDragEnter} onDragOver={onDragOver} onDrop={onDrop}
               style={{ position: 'relative', height: '100%', width: '100%' }} />
 }

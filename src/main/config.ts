@@ -8,6 +8,7 @@ export function configDir(): string {
   return app.getPath('userData')
 }
 function file(): string { return join(configDir(), 'repos.json') }
+function namesFile(): string { return join(configDir(), 'names.json') }
 
 export async function listRepos(): Promise<string[]> {
   const f = file()
@@ -21,6 +22,25 @@ export async function addRepo(path: string): Promise<string[]> {
   if (!repos.includes(path)) repos.push(path)
   writeFileSync(file(), JSON.stringify({ repos }, null, 2))
   return repos
+}
+
+// Custom, user-chosen worktree tab names, keyed by worktree path. Persisted in
+// userData so they survive a renderer storage clear ("reset local dev").
+export async function listNames(): Promise<Record<string, string>> {
+  const f = namesFile()
+  if (!existsSync(f)) return {}
+  try { return JSON.parse(readFileSync(f, 'utf8')).names ?? {} } catch { return {} }
+}
+
+// An empty/whitespace name clears the override, restoring the path-derived default.
+export async function setName(path: string, name: string): Promise<Record<string, string>> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const names = await listNames()
+  const trimmed = name.trim()
+  if (trimmed) names[path] = trimmed
+  else delete names[path]
+  writeFileSync(namesFile(), JSON.stringify({ names }, null, 2))
+  return names
 }
 
 // Stop tracking a repo. Only updates config — never touches files on disk.

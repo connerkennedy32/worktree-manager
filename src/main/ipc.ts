@@ -69,6 +69,8 @@ export async function registerIpc(w: BrowserWindow) {
     const root = await validateRepoSelection(r.filePaths[0]) // throws with a clear message if invalid
     return config.addRepo(root)
   })
+  ipcMain.handle(IPC.listNames, () => config.listNames())
+  ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
   ipcMain.handle(IPC.createWorktree, (_e, req) => wt.createWorktree(req))
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
@@ -130,4 +132,15 @@ export async function registerIpc(w: BrowserWindow) {
 
   ipcMain.on(IPC.termInput, (_e, p: string, data: string) => ptys.write(p, data))
   ipcMain.on(IPC.termResize, (_e, p: string, c: number, r: number) => ptys.resize(p, c, r))
+
+  // Bring the app forward when a file drag enters the window. This lets a drop
+  // land even when Worktree Manager isn't the frontmost app, so the user can
+  // drag an image straight from Finder onto a terminal without clicking first.
+  ipcMain.on(IPC.focusWindow, () => {
+    if (!win || win.isDestroyed()) return
+    if (process.platform === 'darwin') app.focus({ steal: true })
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  })
 }

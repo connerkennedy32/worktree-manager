@@ -73,6 +73,11 @@ export interface Api {
   addRepo(path: string): Promise<string[]>
   removeRepo(path: string): Promise<string[]>
   pickRepo(): Promise<string[]>
+  // Custom worktree tab names keyed by path. Persisted in the main process so
+  // they survive a renderer localStorage clear. setName with an empty string
+  // clears the override.
+  listNames(): Promise<Record<string, string>>
+  setName(worktreePath: string, name: string): Promise<Record<string, string>>
   listWorktrees(repoPath: string): Promise<Worktree[]>
   createWorktree(req: NewWorktreeRequest): Promise<Worktree[]>
   removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]>
@@ -103,6 +108,9 @@ export interface Api {
   termReset(worktreePath: string): Promise<void>
   termInput(worktreePath: string, data: string): void
   termResize(worktreePath: string, cols: number, rows: number): void
+  // Brings the app window to the foreground (e.g. when a file drag enters it),
+  // so drops land without first clicking the app to focus it.
+  focusWindow(): void
   onTermData(cb: (worktreePath: string, data: string) => void): () => void
   onStatusChanged(cb: (worktreePath: string) => void): () => void
   getAgentStatuses(): Promise<Record<string, AgentReport>>
@@ -115,6 +123,7 @@ export interface Api {
 
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
+  listNames: 'names:list', setName: 'names:set',
   listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   readFile: 'file:read', writeFile: 'file:write',
@@ -127,6 +136,7 @@ export const IPC = {
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
+  focusWindow: 'win:focus',
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',
   menuResetTerminal: 'menu:resetTerminal', menuNewWorktree: 'menu:newWorktree',
   menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext'
