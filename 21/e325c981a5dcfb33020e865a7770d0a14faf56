@@ -1,0 +1,51 @@
+src/shared/ipc-types.ts
+  s_84fbbfb639d2e4::t_e529e66e27f7ae 76-80
+  s_27c05fb761ee48::t_3506cb4cd524dd 139
+  s_27c05fb761ee48::t_26b1221aa34179 111-113
+  s_84fbbfb639d2e4::t_25a16928366063 126
+src/main/ipc.ts
+  s_27c05fb761ee48::t_414cd9339282e7 135-145
+  s_84fbbfb639d2e4::t_c9a4db3a4211c0 72-73
+src/renderer/components/Sidebar.tsx
+  s_84fbbfb639d2e4::t_076d6786026c43 35,43-54
+  s_84fbbfb639d2e4::t_fe1cae24708e98 151-153,155-172
+src/preload/index.ts
+  s_27c05fb761ee48::t_2371b7aad7fa3f 37
+  s_84fbbfb639d2e4::t_74d1fef1fcae99 10-11
+src/renderer/components/TerminalView.tsx
+  s_27c05fb761ee48::t_ee618473025fff 146
+  s_27c05fb761ee48::t_34975f0d1b830f 130-135
+src/renderer/state/store.ts
+  s_84fbbfb639d2e4::t_ab967d3395ff78 55
+  s_84fbbfb639d2e4::t_5c6e748f35e7b2 23
+  s_84fbbfb639d2e4::t_4c7c8a7c5dbdc3 42,44-47
+  s_84fbbfb639d2e4::t_2db0381255bcf8 48-49
+  s_84fbbfb639d2e4::t_a20b55e33fd36e 22
+src/main/config.ts
+  s_84fbbfb639d2e4::t_0f4de77d8435bd 27-45
+  s_84fbbfb639d2e4::t_13fe8eb9b324d8 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.16",
+  "base_commit_sha": "21e325c981a5dcfb33020e865a7770d0a14faf56",
+  "prompts": {},
+  "sessions": {
+    "s_27c05fb761ee48": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80aadefc-adeb-49ae-82d7-fb786b4835f0",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    },
+    "s_84fbbfb639d2e4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a7ae3753-d7b4-4ef1-9b6d-c4935ba52840",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
