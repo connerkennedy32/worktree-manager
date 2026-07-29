@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { parseDiff, Diff, Hunk, Decoration } from 'react-diff-view'
 import 'react-diff-view/style/index.css'
 import './diff-theme.css'
@@ -14,6 +14,19 @@ const VIEW_KEY = 'wtm.diffView'
 // filename, which both of these handle via lastIndexOf's -1.
 const dirOf = (p: string) => p.slice(0, p.lastIndexOf('/') + 1)
 const baseOf = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
+// Preview only makes sense for pages a browser renders as documents.
+const isHtml = (p: string) => /\.x?html?$/i.test(p)
+
+const PREVIEW_KEY = 'wtm.diffPreview'
+
+// Cheap content fingerprint (FNV-1a-ish) for the preview's cache-busting nonce.
+// Only needs to change when the text changes, so collision quality is irrelevant.
+function hash(s: string): string {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return (h >>> 0).toString(36)
+}
 
 export function DiffModal() {
   const selected = useStore(s => s.selected)
@@ -36,6 +49,22 @@ export function DiffModal() {
     localStorage.getItem(VIEW_KEY) === 'unified' ? 'unified' : 'split')
 
   const setViewPref = (v: ViewType) => { setView(v); localStorage.setItem(VIEW_KEY, v) }
+
+  // Render-the-page-instead-of-the-diff mode for HTML files, so a markup change can
+  // be checked without leaving the app. On by default — opening a page usually means
+  // wanting to look at it — and remembered after that, so turning it off sticks. The
+  // stored '' (explicitly off) is deliberately distinct from a missing key (default on).
+  const [preview, setPreview] = useState(() => (localStorage.getItem(PREVIEW_KEY) ?? '1') === '1')
+  const setPreviewPref = (v: boolean) => { setPreview(v); localStorage.setItem(PREVIEW_KEY, v ? '1' : '') }
+  const [previewSrc, setPreviewSrc] = useState<string>()
+  // Base URL for the open file, and the content hash the frame is currently showing.
+  // Refs, not state: they coordinate the two preview effects below without themselves
+  // triggering a render (and thus a reload).
+  const previewBase = useRef<string>()
+  const previewHash = useRef<string>()
+  // A fresh iframe paints its own white page before the document renders, which read
+  // as a white flash against the dark pane. Hold it transparent until load fires.
+  const [previewReady, setPreviewReady] = useState(false)
 
   // Edit mode: load the working-tree file into a textarea so minor changes
   // (deleting a comment, a one-line fix) can happen here instead of an external
@@ -111,6 +140,8 @@ export function DiffModal() {
     return () => { cancelled = true }
   }, [selected, openDiff, status, committed?.baseBranch, patchKey])
 
+  const showPreview = preview && !editing && !!openDiff && isHtml(openDiff.path)
+
   const stageRow = async (row: Row) => {
     if (!selected) return
     await window.api.stagePath({ worktreePath: selected, path: row.path, unstage: row.staged })
@@ -149,20 +180,73 @@ export function DiffModal() {
   }
 
   const saveEdit = async () => {
-    if (!selected || !openDiff) return
+    if (!selected || !openDiff) return false
     setSaving(true)
     try {
       await window.api.writeFile({ worktreePath: selected, path: openDiff.path, content: draft })
       setEditing(false)  // watcher-driven status refresh updates the diff
+      return true
     } catch (e) {
       window.alert('Failed to save: ' + (e as Error).message)
       // Leave editing true and the draft intact so the edit isn't lost.
+      return false
     } finally { setSaving(false) }
+  }
+
+  // The browser loads the file from disk, so an unsaved draft would preview
+  // stale content. Offer to save first rather than silently showing the old page.
+  const openInBrowser = async () => {
+    if (!selected || !openDiff) return
+    if (dirty) {
+      if (!window.confirm('Save your edits before previewing in the browser?')) return
+      if (!await saveEdit()) return  // saveEdit already reported the failure
+    }
+    window.api.openInBrowser(selected, openDiff.path)
   }
 
   // A refetch of the SAME file keeps showing the old text (no "Loading…" flicker
   // on every status tick); switching files shows "Loading…" immediately.
   const patchText = patch && patch.key === patchKey ? patch.text : undefined
+  // Resolve the wtm-preview:// URL as soon as the file opens — deliberately NOT
+  // waiting on the patch fetch, which would hold an empty pane for as long as git
+  // takes. The protocol handler sends no-store, so the base URL always reads current
+  // disk content and needs no nonce on this first load.
+  useEffect(() => {
+    if (!selected || !openDiff || !showPreview) {
+      setPreviewSrc(undefined)
+      previewBase.current = undefined
+      previewHash.current = undefined
+      return
+    }
+    let cancelled = false
+    // Only hidden for a genuinely new page. An in-place reload keeps the old render
+    // visible until the new one paints, so an edit doesn't blank the pane.
+    setPreviewReady(false)
+    window.api.previewUrl(selected, openDiff.path)
+      .then(url => {
+        if (cancelled) return
+        previewBase.current = url
+        setPreviewSrc(url)
+      })
+      .catch(() => { if (!cancelled) setPreviewSrc(undefined) })
+    return () => { cancelled = true }
+  }, [selected, openDiff?.path, showPreview])
+
+  // Reload the frame when this file's content actually moves. Keyed on a hash of the
+  // patch, NOT a timestamp: the watcher ticks status every few seconds even when
+  // nothing changed, and a fresh nonce per tick reloaded the page on every tick.
+  // The first hash seen for a file is only recorded — the initial load already read
+  // that content, so reloading for it would be a redundant flash. Only the src
+  // changes here, never the element, so a reload navigates in place with no unmount.
+  useEffect(() => {
+    if (patchText === undefined || !previewBase.current) return
+    const h = hash(patchText)
+    if (previewHash.current === h) return
+    const first = previewHash.current === undefined
+    previewHash.current = h
+    if (!first) setPreviewSrc(`${previewBase.current}?wtm=${h}`)
+  }, [patchText, previewSrc])
+
   const parsed = useMemo<any[]>(() => {
     if (!patchText) return []
     try { return parseDiff(patchText, { nearbySequences: 'zip' }) } catch { return [] }
@@ -321,6 +405,26 @@ export function DiffModal() {
                   </span>
                 )}
               </span>
+              {/* Shown while editing too: previewing the page you just changed is
+                  the point, and openInBrowser saves the draft first. */}
+              {isHtml(openDiff.path) && (
+                <>
+                  <button onClick={() => setPreviewPref(!preview)}
+                          title={preview ? 'Show the diff instead of the rendered page'
+                                         : 'Render this page in the pane below'}
+                          style={{ background: preview ? '#0e639c' : '#3a3a3a', color: preview ? '#fff' : '#ddd',
+                                   border: `1px solid ${preview ? '#0e639c' : '#4a4a4a'}`,
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    Preview
+                  </button>
+                  <button onClick={openInBrowser} disabled={saving}
+                          title="Open this file in your browser"
+                          style={{ background: '#3a3a3a', color: '#ddd', border: '1px solid #4a4a4a',
+                                   borderRadius: 4, padding: '2px 10px', cursor: 'pointer', fontSize: 11 }}>
+                    Browser
+                  </button>
+                </>
+              )}
               {!editing && (
                 <button onClick={() => selected && window.api.openInEditor(selected, openDiff.path)}
                         title="Open this file in VS Code"
@@ -370,6 +474,25 @@ export function DiffModal() {
                           style={{ width: '100%', height: '100%', boxSizing: 'border-box', resize: 'none',
                                    background: '#1e1e1e', color: '#d4d4d4', border: 'none', outline: 'none',
                                    padding: 12, fontFamily: 'Menlo, monospace', fontSize: 12, lineHeight: 1.5 }} />
+              ) : showPreview ? (
+                // No `key`: the element must survive a src change so a content reload
+                // navigates in place rather than unmounting (which flashed the pane).
+                // White backing, since pages that don't set their own background would
+                // otherwise render dark text on the modal's dark pane — but only once
+                // loaded, so the blank white page never shows.
+                previewSrc ? (
+                  <iframe src={previewSrc} title="Page preview"
+                          onLoad={() => setPreviewReady(true)}
+                          // Sandboxed, but with scripts and same-origin so the page
+                          // behaves as it would in a browser tab — its own scripts run
+                          // and can reach its relative assets. The frame gets no
+                          // preload and no node integration.
+                          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                          style={{ display: 'block', width: '100%', height: '100%',
+                                   border: 'none', background: '#fff',
+                                   opacity: previewReady ? 1 : 0,
+                                   transition: 'opacity 90ms ease-out' }} />
+                ) : null
               ) : (
                 <>
                   {patchText === undefined && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Loading…</div>}

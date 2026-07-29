@@ -106,6 +106,13 @@ export interface Api {
   // Open the worktree folder in VS Code via the `code` CLI. With `file` (a
   // worktree-relative path) that file is opened too, inside the worktree window.
   openInEditor(worktreePath: string, file?: string): void
+  // Open a worktree-relative file in the OS default browser (used for .html
+  // previews from the diff modal).
+  openInBrowser(worktreePath: string, file: string): void
+  // URL that renders a worktree-relative file inside the app (wtm-preview://),
+  // used by the diff modal's in-pane HTML preview. Relative assets in the page
+  // resolve against the worktree, as they would in a browser.
+  previewUrl(worktreePath: string, file: string): Promise<string>
   // Absolute path of a dropped File. Uses Electron's webUtils under the hood
   // since renderer File objects don't expose a filesystem path on their own.
   getPathForFile(file: File): string
@@ -150,6 +157,8 @@ export const IPC = {
   pendingCount: 'push:pending', push: 'push:run',
   openLazygit: 'term:lazygit',
   openInEditor: 'editor:open',
+  openInBrowser: 'browser:open',
+  previewUrl: 'preview:url',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
   termData: 'term:data', statusChanged: 'wt:statusChanged',

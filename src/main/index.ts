@@ -6,12 +6,17 @@ import { buildAppMenu } from './menu'
 import { attachShortcuts } from './shortcuts'
 import { installAgentHooks } from './agent-hooks/install'
 import { backgroundsDir } from './config'
+import { registerPreviewProtocol } from './preview'
 
 // The renderer can't load arbitrary file:// paths under the default CSP, and
 // data-URLing a multi-MB video is a non-starter. A custom scheme streams the
 // file from disk with range-request support (needed for <video> seeking).
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'wtm-bg', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } }
+  { scheme: 'wtm-bg', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+  // In-app HTML preview. A custom scheme (rather than a file:// iframe, which the
+  // dev server's http:// origin cannot frame) serves the page from its worktree so
+  // its relative stylesheets, scripts and images resolve the way a browser's would.
+  { scheme: 'wtm-preview', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
 ])
 
 function registerBackgroundProtocol() {
@@ -44,6 +49,7 @@ app.whenReady().then(() => {
   // Idempotent, never throws — the app must start even if hook install fails.
   installAgentHooks()
   registerBackgroundProtocol()
+  registerPreviewProtocol()
   createWindow()
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })

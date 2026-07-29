@@ -14,6 +14,9 @@ function safeResolve(worktreePath: string, path: string): string {
   return abs
 }
 
+// Same containment check, for callers that only need the validated path.
+export const resolveInWorktree = safeResolve
+
 export async function readFile(req: ReadFileRequest): Promise<string> {
   return fsReadFile(safeResolve(req.worktreePath, req.path), 'utf8')
 }

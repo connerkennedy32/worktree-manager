@@ -1,6 +1,7 @@
-import { ipcMain, BrowserWindow, dialog, app } from 'electron'
+import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
 import { IPC } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
@@ -13,6 +14,7 @@ import * as files from './files'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
 import { WatcherManager } from './watcher'
+import { previewUrl } from './preview'
 
 // ipcMain.handle/on registrations are process-global and can only happen once,
 // but createWindow() (and thus registerIpc) runs again whenever the app is
@@ -114,6 +116,17 @@ export async function registerIpc(w: BrowserWindow) {
       spawn('code', targets, { detached: true, stdio: 'ignore' }).unref()
     }
   })
+
+  // Preview a file in the OS default browser. openExternal with a file:// URL
+  // (rather than openPath) makes the browser the target even when the OS has a
+  // different default app registered for the extension, e.g. an editor for .html.
+  ipcMain.on(IPC.openInBrowser, (_e, p: string, file: string) => {
+    let abs: string
+    try { abs = files.resolveInWorktree(p, file) } catch { return }
+    shell.openExternal(pathToFileURL(abs).href)
+  })
+
+  ipcMain.handle(IPC.previewUrl, (_e, p: string, file: string) => previewUrl(p, file))
 
   ipcMain.handle(IPC.listTerminals, () => ptys.list())
   ipcMain.handle(IPC.getAgentStatuses, () => ptys.agentStatuses())
