@@ -16,6 +16,7 @@ import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
 import { WatcherManager } from './watcher'
 import { previewUrl } from './preview'
+import { setAgentStatus, seedAgentStatuses, flashDone } from './dock'
 
 // ipcMain.handle/on registrations are process-global and can only happen once,
 // but createWindow() (and thus registerIpc) runs again whenever the app is
@@ -36,17 +37,19 @@ function send(channel: string, ...args: unknown[]) {
   if (!win.isDestroyed()) win.webContents.send(channel, ...args)
 }
 
-// Bounce the macOS Dock icon when an agent finishes a turn, so a task that
-// completed while the user was in another app is noticed. Only 'done' bounces
-// ('working'/'permission'/'failed' are handled by the in-app row indicators),
-// and only when the app is in the background — bouncing what the user is
-// already looking at is pure noise. 'informational' bounces once rather than
-// until focus, matching a "task done" nudge rather than an alarm.
-function bounceOnDone(r: AgentReport) {
+// Signal a finished turn on the Dock icon. Only 'done' signals
+// ('working'/'permission'/'failed' are handled by the in-app row indicators and
+// the Dock badge), and how it signals depends on where the user is looking:
+// backgrounded gets a bounce, so a task that completed while the user was in
+// another app is noticed ('informational' bounces once rather than until focus,
+// matching a "task done" nudge rather than an alarm); focused gets a brief badge
+// flash instead, since a bounce on the frontmost app is invisible but the
+// finishing row may still be off-screen or scrolled away.
+function signalDone(r: AgentReport) {
   if (process.platform !== 'darwin') return
   if (r.status !== 'done') return
-  if (win && !win.isDestroyed() && win.isFocused()) return
-  app.dock?.bounce('informational')
+  if (win && !win.isDestroyed() && win.isFocused()) flashDone()
+  else app.dock?.bounce('informational')
 }
 
 export async function registerIpc(w: BrowserWindow) {
@@ -60,8 +63,10 @@ export async function registerIpc(w: BrowserWindow) {
 
   ptys = await PtyDaemonClient.connect(
     (p, d) => send(IPC.termData, p, d),
-    (p, r) => { send(IPC.agentStatus, p, r); bounceOnDone(r) }
+    (p, r) => { send(IPC.agentStatus, p, r); signalDone(r); setAgentStatus(p, r) }
   )
+  // Sessions outlive the app, so agents can already be mid-turn on connect.
+  seedAgentStatuses(ptys.agentStatuses())
   watchers = new WatcherManager()
 
   ipcMain.handle(IPC.listRepos, () => config.listRepos())
