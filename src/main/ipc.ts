@@ -9,6 +9,7 @@ import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
 import { getCommittedFiles } from './git/committed'
 import { getPushState, push } from './git/push'
+import { syncWithTrunk } from './git/sync'
 import * as diff from './git/diff'
 import * as files from './files'
 import * as config from './config'
@@ -89,6 +90,8 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.getCommittedFiles, (_e, p: string) => getCommittedFiles(p))
   ipcMain.handle(IPC.pendingCount, (_e, p: string) => getPushState(p).then(s => s.ahead))
   ipcMain.handle(IPC.push, (_e, p: string) => push(p))
+  ipcMain.handle(IPC.syncWithTrunk, (_e, p: string) =>
+    syncWithTrunk(p, chunk => send(IPC.gitOutput, p, chunk)))
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
   ipcMain.handle(IPC.readFile, (_e, req) => files.readFile(req))
   ipcMain.handle(IPC.writeFile, (_e, req) => files.writeFile(req))

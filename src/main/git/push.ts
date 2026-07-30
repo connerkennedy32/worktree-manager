@@ -19,7 +19,7 @@ export interface PushState {
 // a whole family of env vars it considers injectable (EDITOR, PAGER, ASKPASS,
 // …), so any shell exporting one would break the push with a message about
 // allowUnsafeEditor rather than anything to do with pushing.
-function pushEnv(): Record<string, string> {
+export function pushEnv(): Record<string, string> {
   const keep = ['PATH', 'HOME', 'SSH_AUTH_SOCK'] as const
   const env: Record<string, string> = {}
   for (const k of keep) if (process.env[k]) env[k] = process.env[k]!
@@ -35,7 +35,7 @@ function pushEnv(): Record<string, string> {
 // simple-git blocks GIT_SSH_COMMAND by default, since an attacker-supplied value
 // would run arbitrary code. Ours is the constant above, never user input, so the
 // opt-in is narrow and deliberate.
-const PUSH_OPTS = { unsafe: { allowUnsafeSshCommand: true } }
+export const PUSH_OPTS = { unsafe: { allowUnsafeSshCommand: true } }
 
 // A branch with no upstream needs one established; otherwise git push already
 // knows where to go. The remote is always 'origin', as everywhere else here.

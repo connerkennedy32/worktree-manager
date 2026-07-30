@@ -48,6 +48,10 @@ export interface CommittedFile {
 // main-process error, which would bury git's rejection message in framing.
 export type PushOutcome = { ok: true } | { ok: false; message: string }
 
+// Unlike a push, a successful sync still has something to say — whether it
+// merged anything, and how much — so success carries a summary too.
+export type SyncOutcome = { ok: boolean; message: string }
+
 export interface CommittedChanges {
   baseBranch: string    // branch of the repo's main worktree; '' when unresolvable
   files: CommittedFile[]
@@ -102,6 +106,15 @@ export interface Api {
   // rather than carried on WorktreeStatus — see the push-button design spec.
   getPendingCount(worktreePath: string): Promise<number>
   push(worktreePath: string): Promise<PushOutcome>
+  // Fetch trunk and merge it into this worktree's branch.
+  syncWithTrunk(worktreePath: string): Promise<SyncOutcome>
+  // Live output of the git commands a branch action runs, so the panel can show
+  // what a terminal would. Chunks arrive as git writes them.
+  onGitOutput(cb: (worktreePath: string, chunk: string) => void): () => void
+  // Electron's clipboard rather than navigator.clipboard: the packaged app loads
+  // the renderer from file://, which is not a secure context, so the web
+  // clipboard API isn't there at all.
+  copyText(text: string): void
   openLazygit(worktreePath: string): void
   // Open the worktree folder in VS Code via the `code` CLI. With `file` (a
   // worktree-relative path) that file is opened too, inside the worktree window.
@@ -154,7 +167,8 @@ export const IPC = {
   getCommittedFiles: 'diff:committed',
   stage: 'diff:stage', stagePath: 'diff:stagePath', stageAll: 'diff:stageAll',
   discardPath: 'diff:discardPath', commit: 'diff:commit',
-  pendingCount: 'push:pending', push: 'push:run',
+  pendingCount: 'push:pending', push: 'push:run', syncWithTrunk: 'sync:trunk',
+  gitOutput: 'git:output',
   openLazygit: 'term:lazygit',
   openInEditor: 'editor:open',
   openInBrowser: 'browser:open',

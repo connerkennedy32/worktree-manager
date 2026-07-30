@@ -1,6 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
 import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
+
+// The outlined style shared by the action-row buttons, matching the header's
+// VS Code button.
+const actionButton: React.CSSProperties = {
+  background: 'none', border: '1px solid #444', borderRadius: 4, color: '#ddd',
+  cursor: 'pointer', fontSize: 11, padding: '5px 8px', whiteSpace: 'nowrap',
+  overflow: 'hidden', textOverflow: 'ellipsis'
+}
 
 // Diffs are not rendered here — clicking a row opens DiffModal. This panel is the
 // file list, the staging surface, and the commit box.
@@ -19,7 +27,14 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const [committing, setCommitting] = useState(false)
   const [pending, setPending] = useState(0)
   const [pushing, setPushing] = useState(false)
-  const [pushError, setPushError] = useState<string>()
+  // Shared by push and sync: both are network git operations that report back in
+  // the same banner, and only one runs at a time.
+  const [result, setResult] = useState<{ ok: boolean; message: string; source: 'sync' | 'push' }>()
+  const [syncing, setSyncing] = useState(false)
+  const [copied, setCopied] = useState(false)
+  // Live git output for the running action. Undefined means no popout.
+  const [terminal, setTerminal] = useState<string>()
+  const terminalRef = useRef<HTMLPreElement>(null)
 
   // Commits this worktree has that the remote doesn't. Fetched on demand rather
   // than carried on WorktreeStatus: getStatus already runs for every *watched*
@@ -34,8 +49,32 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     return () => { cancelled = true }
   }, [selected, status])
 
-  // An error from one worktree must not linger over another.
-  useEffect(() => { setPushError(undefined) }, [selected])
+  // A result from one worktree must not linger over another.
+  useEffect(() => { setResult(undefined); setTerminal(undefined) }, [selected])
+
+  // Chunks arrive as git writes them, so the popout fills in during a slow
+  // fetch instead of appearing complete at the end. Output for a worktree you
+  // aren't looking at is dropped rather than shown under the wrong branch.
+  useEffect(() => {
+    return window.api.onGitOutput((worktreePath, chunk) => {
+      if (worktreePath !== selected) return
+      setTerminal(prev => (prev ?? '') + chunk)
+    })
+  }, [selected])
+
+  // Pin to the newest line, the way a terminal scrolls.
+  useEffect(() => {
+    const el = terminalRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [terminal])
+
+  // Success is an acknowledgement, so it clears itself. Failures stay until
+  // dismissed — git's message is the only record of what went wrong.
+  useEffect(() => {
+    if (!result?.ok) return
+    const t = setTimeout(() => setResult(undefined), 5000)
+    return () => clearTimeout(t)
+  }, [result])
   // Working changes are the panel's job, so they start open; committed files are
   // reference material and start collapsed.
   const [openSections, setOpenSections] = useState<Record<SectionId, boolean>>(
@@ -80,12 +119,51 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const doPush = async () => {
     if (!selected) return
     setPushing(true)
-    setPushError(undefined)
+    setResult(undefined)
     try {
-      const result = await window.api.push(selected)
-      if (result.ok) await refreshStatus(selected)
-      else setPushError(result.message)
+      const outcome = await window.api.push(selected)
+      if (outcome.ok) {
+        setResult({ ok: true, source: 'push', message: `Pushed ${pending} commit${pending === 1 ? '' : 's'}.` })
+        await refreshStatus(selected)
+      } else setResult({ ok: false, source: 'push', message: outcome.message })
     } finally { setPushing(false) }
+  }
+
+  // Merge conflicts come back as a failed outcome, but the working tree has
+  // still changed — so refresh either way.
+  const doSync = async () => {
+    if (!selected) return
+    setSyncing(true)
+    setResult(undefined)
+    // Empty string, not undefined: the popout should open immediately so a slow
+    // fetch has somewhere to appear, rather than after the first chunk lands.
+    setTerminal('')
+    try {
+      setResult({ ...await window.api.syncWithTrunk(selected), source: 'sync' })
+      await refreshStatus(selected)
+    } finally { setSyncing(false) }
+  }
+
+  // The command the Sync button runs, for pasting into a terminal. Falls back to
+  // origin/main before the committed-files fetch has resolved the real base.
+  const base = committed?.baseBranch || 'origin/main'
+  const syncCommand = base.startsWith('origin/')
+    ? `git fetch origin ${base.slice('origin/'.length)} && git merge --no-edit ${base}`
+    : `git merge --no-edit ${base}`
+
+  // A successful sync reports inside its own button, so the message is trimmed
+  // to what fits: the file count and trailing period live in the tooltip.
+  const syncSuccess = result?.ok && result.source === 'sync'
+    ? result.message.replace(/,.*$/, '').replace(/\.$/, '')
+    : undefined
+
+  const copySyncCommand = () => {
+    // navigator.clipboard is absent in the packaged app (file:// is not a secure
+    // context), so the copy goes through Electron's clipboard in the preload.
+    // Kept in a try so a failure can't also swallow the visible feedback.
+    try { window.api.copyText(syncCommand) } catch (e) { console.error('copy failed', e) }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1200)
   }
 
   const renderRow = (row: Row) => (
@@ -206,6 +284,69 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
       </div>
 
       <div style={{ borderTop: '1px solid #333', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Two equal columns, with one action so far: labels stay readable and
+            nothing reflows when a label changes length (`Sync with master` on a
+            master repo). More actions land here as further cells. */}
+        {terminal !== undefined && (
+          // Anchored to the action row rather than inline: it can be tall, and
+          // pushing the commit box down mid-sync would move the buttons under
+          // the cursor. Sticks around after the command finishes so the output
+          // is readable; dismissed by hand or by the next run.
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, zIndex: 3,
+                          background: '#141415', border: '1px solid #3d3d3d', borderRadius: 4,
+                          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.5)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
+                            borderBottom: '1px solid #2c2c2c', fontSize: 10.5, letterSpacing: 0.5,
+                            textTransform: 'uppercase', color: '#8a8a8a' }}>
+                <span style={{ flex: 1 }}>Terminal{syncing ? ' · running' : ''}</span>
+                <button onClick={() => setTerminal(undefined)} title="Hide"
+                        style={{ background: 'none', border: 'none', color: '#8a8a8a',
+                                 cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>
+                  ×
+                </button>
+              </div>
+              <pre ref={terminalRef}
+                   style={{ margin: 0, padding: '6px 8px', maxHeight: 180, overflow: 'auto',
+                            fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.5,
+                            color: '#cfcfcf', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {terminal || 'Starting…'}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+          {/* Two sibling buttons sharing one border, rather than a copy control
+              nested inside the sync button: a disabled <button> swallows clicks
+              on everything inside it, so while no worktree is selected — or
+              during a sync — the nested copy icon received no events at all. */}
+          <div style={{ ...actionButton, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}
+               onMouseEnter={e => { e.currentTarget.style.background = '#3c424e' }}
+               onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+            <button onClick={doSync} disabled={!selected || syncing}
+                    title={syncSuccess ? result!.message : `Fetch and merge ${base} into this branch`}
+                    style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', font: 'inherit',
+                             color: syncSuccess ? '#89d185' : '#ddd', textAlign: 'left',
+                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                             padding: '5px 0 5px 8px',
+                             cursor: !selected || syncing ? 'default' : 'pointer' }}>
+              {/* The outcome replaces the label for a few seconds rather than
+                  claiming its own row, so the commit box never moves. */}
+              {syncing ? 'Syncing…' : syncSuccess ? `✓ ${syncSuccess}` : `⟳ Sync with ${base.replace('origin/', '')}`}
+            </button>
+            <button onClick={copySyncCommand} aria-label="Copy sync command"
+                    title={`Copy: ${syncCommand}`}
+                    style={{ flexShrink: 0, background: 'none', border: 'none', font: 'inherit',
+                             color: copied ? '#89d185' : '#999', cursor: 'pointer',
+                             padding: '5px 8px 5px 0' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = copied ? '#89d185' : '#fff' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = copied ? '#89d185' : '#999' }}>
+              {copied ? '✓' : '⧉'}
+            </button>
+          </div>
+        </div>
+
         <textarea placeholder="Commit message" value={msg} onChange={e => setMsg(e.target.value)}
                   rows={2} style={{ resize: 'none', background: '#2d2d2d', color: '#ddd',
                   border: '1px solid #444', borderRadius: 4, padding: 6, fontFamily: 'system-ui', fontSize: 12 }} />
@@ -224,10 +365,26 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
           </button>
         )}
 
-        {pushError && (
-          <div style={{ color: '#f28b82', fontSize: 11, whiteSpace: 'pre-wrap',
-                        maxHeight: 120, overflow: 'auto', fontFamily: 'Menlo, monospace' }}>
-            {pushError}
+        {/* Sync success is shown inline on its button; everything else needs the
+            room — git's failure output is multi-line, and a push that succeeds
+            takes its own button away with it. */}
+        {result && !syncSuccess && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, borderRadius: 4,
+                        padding: '5px 7px', fontSize: 11,
+                        // Success is a one-line confirmation; failure is git's own
+                        // output, so it keeps the monospace treatment and a scroll cap.
+                        fontFamily: result.ok ? 'system-ui' : 'Menlo, monospace',
+                        whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto',
+                        color: result.ok ? '#89d185' : '#f28b82',
+                        background: result.ok ? 'rgba(137, 209, 133, 0.1)' : 'rgba(242, 139, 130, 0.1)',
+                        border: `1px solid ${result.ok ? 'rgba(137, 209, 133, 0.3)' : 'rgba(242, 139, 130, 0.3)'}` }}>
+            <span style={{ flexShrink: 0 }}>{result.ok ? '✓' : '✕'}</span>
+            <span style={{ flex: 1 }}>{result.message}</span>
+            <button onClick={() => setResult(undefined)} title="Dismiss"
+                    style={{ background: 'none', border: 'none', color: 'inherit', opacity: 0.6,
+                             cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, flexShrink: 0 }}>
+              ×
+            </button>
           </div>
         )}
       </div>

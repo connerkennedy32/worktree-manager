@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import { clipboard, contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IPC, type Api } from '@shared/ipc-types'
 import type { AgentReport } from '@shared/agent-status'
 
@@ -31,6 +31,13 @@ const api: Api = {
   commit: (req) => ipcRenderer.invoke(IPC.commit, req),
   getPendingCount: (p) => ipcRenderer.invoke(IPC.pendingCount, p),
   push: (p) => ipcRenderer.invoke(IPC.push, p),
+  syncWithTrunk: (p) => ipcRenderer.invoke(IPC.syncWithTrunk, p),
+  copyText: (text) => clipboard.writeText(text),
+  onGitOutput: (cb) => {
+    const h = (_e: unknown, p: string, chunk: string) => cb(p, chunk)
+    ipcRenderer.on(IPC.gitOutput, h as any)
+    return () => ipcRenderer.removeListener(IPC.gitOutput, h as any)
+  },
   openLazygit: (p) => ipcRenderer.send(IPC.openLazygit, p),
   openInEditor: (p, file) => ipcRenderer.send(IPC.openInEditor, p, file),
   openInBrowser: (p, file) => ipcRenderer.send(IPC.openInBrowser, p, file),
