@@ -1,0 +1,42 @@
+src/main/ipc.ts
+  s_cc89131d85320e::t_213e496d03746b 40-48,51-52
+  s_cc89131d85320e::t_65f097377db86c 68-69
+  s_cc89131d85320e::t_eb2d87f7ac5a26 66
+  s_cc89131d85320e::t_5affa026c5d738 19
+tests/main/dock.test.ts
+  s_cc89131d85320e::t_15ced9bfd331b1 23-26
+  s_cc89131d85320e::t_7685683c31f683 14-16
+  s_cc89131d85320e::t_61e0c26c6c4346 1,3-8,11-13,27-28
+  s_cc89131d85320e::t_a9b52d61253f0a 17-22
+  s_cc89131d85320e::t_cd5e4d7f0656a4 2
+  s_cc89131d85320e::t_df6d3228d9278c 9-10
+src/main/dock.ts
+  s_cc89131d85320e::t_72ba42ff93808a 11,13,19,26-27
+  s_cc89131d85320e::t_ddab59eb8f832d 20-24,31-36,38,46
+  s_cc89131d85320e::t_49561295a9e1e0 79-80,82,94-102
+  s_cc89131d85320e::t_eeeab96beee9d4 65-78,81,87-92
+  s_cc89131d85320e::t_2354f5f3c72331 14-15
+  s_cc89131d85320e::t_d12a4c44cb2035 16-18
+  s_cc89131d85320e::t_6d7c57d36eee31 1-8,25,28,37,40-41,43-45,49-64,83-86,103
+  s_cc89131d85320e::t_8fbae34e25bce4 29-30
+  s_cc89131d85320e::t_8e8c32c55e92bc 39,42,47-48
+  s_cc89131d85320e::t_c697bd2458e7f1 12
+  s_cc89131d85320e::t_ddf54652d52ccf 93
+  s_cc89131d85320e::t_134bf8e859da35 9-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.17",
+  "base_commit_sha": "95081a944cf0aa85d3b684ecbd31262c443d94ec",
+  "prompts": {},
+  "sessions": {
+    "s_cc89131d85320e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fa9075a6-56db-4ee4-b730-01dc38d2ffa6",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
