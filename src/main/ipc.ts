@@ -3,13 +3,15 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
-import { IPC } from '@shared/ipc-types'
+import { IPC, type GtCreateRequest, type RunRepoCommandRequest } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
 import { getCommittedFiles } from './git/committed'
 import { getPushState, push } from './git/push'
 import { syncWithTrunk } from './git/sync'
+import { gtCreate } from './stack'
+import { runRepoCommand } from './repo-commands'
 import * as diff from './git/diff'
 import * as files from './files'
 import * as config from './config'
@@ -82,7 +84,6 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
-  ipcMain.handle(IPC.createWorktree, (_e, req) => wt.createWorktree(req))
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
     const result = await wt.removeWorktree(p, f)
     // The worktree dir is gone; free its terminal and stop watching it.
@@ -97,6 +98,12 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.push, (_e, p: string) => push(p))
   ipcMain.handle(IPC.syncWithTrunk, (_e, p: string) =>
     syncWithTrunk(p, chunk => send(IPC.gitOutput, p, chunk)))
+  ipcMain.handle(IPC.gtCreate, (_e, req: GtCreateRequest) =>
+    gtCreate(req, chunk => send(IPC.gitOutput, req.worktreePath, chunk)))
+  ipcMain.handle(IPC.listRepoCommands, (_e, p: string) => config.listRepoCommands(p))
+  ipcMain.handle(IPC.runRepoCommand, (_e, req: RunRepoCommandRequest) =>
+    runRepoCommand(req, chunk => send(IPC.gitOutput, req.worktreePath, chunk)))
+  ipcMain.handle(IPC.openRepoCommandsFile, () => config.openRepoCommandsFile())
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
   ipcMain.handle(IPC.readFile, (_e, req) => files.readFile(req))
   ipcMain.handle(IPC.writeFile, (_e, req) => files.writeFile(req))

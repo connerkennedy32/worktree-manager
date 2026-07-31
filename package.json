@@ -9,7 +9,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "test:watch": "vitest",
+    "test:fast": "vitest run --exclude 'tests/git/**'",
+    "test:watch": "vitest --exclude 'tests/git/**'",
     "dist": "electron-vite build && electron-builder --mac --publish=never",
     "dist:dir": "electron-vite build && electron-builder --mac --dir --publish=never"
   },

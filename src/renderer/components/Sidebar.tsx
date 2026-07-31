@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../state/store'
-import { NewWorktreeForm } from './NewWorktreeForm'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
@@ -190,7 +189,6 @@ export function Sidebar() {
           )
         })}
       </div>
-      {repos[0] && <NewWorktreeForm repoPath={repos[0]} />}
 
       {pending && (
         <ConfirmModal

@@ -79,18 +79,6 @@ export async function buildAppMenu(win: BrowserWindow) {
     {
       label: 'Worktree',
       submenu: [
-        {
-          label: 'New Worktree…',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => win.webContents.send(IPC.menuNewWorktree)
-        },
-        {
-          label: 'New Worktree… (Ctrl+W)',
-          accelerator: 'Ctrl+W',
-          registerAccelerator: false,
-          click: () => win.webContents.send(IPC.menuNewWorktree)
-        },
-        { type: 'separator' },
         // registerAccelerator: false — these shortcuts are handled in
         // shortcuts.ts via before-input-event, because a registered accelerator
         // never fires while the terminal has focus (xterm eats Cmd+Arrow first).
@@ -129,6 +117,15 @@ export async function buildAppMenu(win: BrowserWindow) {
           label: 'Reset',
           accelerator: 'CmdOrCtrl+Shift+R',
           click: () => win.webContents.send(IPC.menuResetTerminal)
+        }
+      ]
+    },
+    {
+      label: 'Commands',
+      submenu: [
+        {
+          label: 'Edit Repo Commands…',
+          click: () => { void config.openRepoCommandsFile() }
         }
       ]
     },

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
 import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
+import { InputsPromptModal } from './InputsPromptModal'
+import type { RepoCommand } from '@shared/ipc-types'
+import { promptVars } from '@shared/repo-commands'
 
 // The outlined style shared by the action-row buttons, matching the header's
 // VS Code button.
@@ -16,6 +19,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   { collapsed: boolean; onToggle: () => void; width?: number }) {
   const selected = useStore(s => s.selected)
   const refreshStatus = useStore(s => s.refreshStatus)
+  const refreshWorktrees = useStore(s => s.refreshWorktrees)
   const setOpenDiff = useStore(s => s.setOpenDiff)
   const worktrees = useStore(s => s.worktrees)
   const branch = worktrees.find(w => w.path === selected)?.branch
@@ -29,8 +33,16 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const [pushing, setPushing] = useState(false)
   // Shared by push and sync: both are network git operations that report back in
   // the same banner, and only one runs at a time.
-  const [result, setResult] = useState<{ ok: boolean; message: string; source: 'sync' | 'push' }>()
+  const [result, setResult] = useState<{
+    ok: boolean
+    message: string
+    source: 'sync' | 'push' | 'branch' | 'command'
+  }>()
   const [syncing, setSyncing] = useState(false)
+  const [running, setRunning] = useState<string>()
+  const [commands, setCommands] = useState<RepoCommand[]>([])
+  // Either the gt-create prompt, or a configured command awaiting its input.
+  const [prompt, setPrompt] = useState<'branch' | RepoCommand>()
   const [copied, setCopied] = useState(false)
   // Live git output for the running action. Undefined means no popout.
   const [terminal, setTerminal] = useState<string>()
@@ -51,6 +63,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
 
   // A result from one worktree must not linger over another.
   useEffect(() => { setResult(undefined); setTerminal(undefined) }, [selected])
+
+  useEffect(() => {
+    if (!selected) { setCommands([]); return }
+    let cancelled = false
+    window.api.listRepoCommands(selected).then(c => { if (!cancelled) setCommands(c) })
+    return () => { cancelled = true }
+  }, [selected])
 
   // Chunks arrive as git writes them, so the popout fills in during a slow
   // fetch instead of appearing complete at the end. Output for a worktree you
@@ -144,6 +163,46 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     } finally { setSyncing(false) }
   }
 
+  // gt create commits what's staged, so with nothing staged it would make an
+  // empty branch and leave the work behind — stage everything in that case.
+  const doGtCreate = async (branch: string) => {
+    if (!selected) return
+    setRunning('gt create')
+    setResult(undefined)
+    setTerminal('')
+    try {
+      const outcome = await window.api.gtCreate({
+        worktreePath: selected, branch, message: msg.trim(), stageAll: stagedCount === 0
+      })
+      setResult({ ...outcome, source: 'branch' })
+      if (outcome.ok) setMsg('')
+      await refreshStatus(selected)
+      await refreshWorktrees()
+    } finally { setRunning(undefined) }
+  }
+
+  // A configured command can do anything — create a worktree, run a gate — so
+  // both the worktree list and the status are refreshed after every one.
+  const doRepoCommand = async (command: RepoCommand, inputs?: Record<string, string>) => {
+    if (!selected) return
+    setRunning(command.label)
+    setResult(undefined)
+    setTerminal('')
+    try {
+      const outcome = await window.api.runRepoCommand({
+        worktreePath: selected, command, inputs, message: msg.trim(), branch
+      })
+      setResult({ ...outcome, source: 'command' })
+      await refreshStatus(selected)
+      await refreshWorktrees()
+    } finally { setRunning(undefined) }
+  }
+
+  const startRepoCommand = (command: RepoCommand) => {
+    if (promptVars(command.run).length) setPrompt(command)
+    else doRepoCommand(command)
+  }
+
   // The command the Sync button runs, for pasting into a terminal. Falls back to
   // origin/main before the committed-files fetch has resolved the real base.
   const base = committed?.baseBranch || 'origin/main'
@@ -156,6 +215,10 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const syncSuccess = result?.ok && result.source === 'sync'
     ? result.message.replace(/,.*$/, '').replace(/\.$/, '')
     : undefined
+
+  // The action row shares one result banner and one terminal popout, so only one
+  // of these commands may run at a time.
+  const busy = syncing || running !== undefined
 
   const copySyncCommand = () => {
     // navigator.clipboard is absent in the packaged app (file:// is not a secure
@@ -284,9 +347,8 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
       </div>
 
       <div style={{ borderTop: '1px solid #333', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Two equal columns, with one action so far: labels stay readable and
-            nothing reflows when a label changes length (`Sync with master` on a
-            master repo). More actions land here as further cells. */}
+        {/* Two equal columns: labels stay readable and nothing reflows when one
+            changes length (`Sync with master` on a master repo). */}
         {terminal !== undefined && (
           // Anchored to the action row rather than inline: it can be tall, and
           // pushing the commit box down mid-sync would move the buttons under
@@ -299,7 +361,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
                             borderBottom: '1px solid #2c2c2c', fontSize: 10.5, letterSpacing: 0.5,
                             textTransform: 'uppercase', color: '#8a8a8a' }}>
-                <span style={{ flex: 1 }}>Terminal{syncing ? ' · running' : ''}</span>
+                <span style={{ flex: 1 }}>Terminal{busy ? ' · running' : ''}</span>
                 <button onClick={() => setTerminal(undefined)} title="Hide"
                         style={{ background: 'none', border: 'none', color: '#8a8a8a',
                                  cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>
@@ -324,13 +386,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
           <div style={{ ...actionButton, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}
                onMouseEnter={e => { e.currentTarget.style.background = '#3c424e' }}
                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
-            <button onClick={doSync} disabled={!selected || syncing}
+            <button onClick={doSync} disabled={!selected || busy}
                     title={syncSuccess ? result!.message : `Fetch and merge ${base} into this branch`}
                     style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', font: 'inherit',
                              color: syncSuccess ? '#89d185' : '#ddd', textAlign: 'left',
                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                              padding: '5px 0 5px 8px',
-                             cursor: !selected || syncing ? 'default' : 'pointer' }}>
+                             cursor: !selected || busy ? 'default' : 'pointer' }}>
               {/* The outcome replaces the label for a few seconds rather than
                   claiming its own row, so the commit box never moves. */}
               {syncing ? 'Syncing…' : syncSuccess ? `✓ ${syncSuccess}` : `⟳ Sync with ${base.replace('origin/', '')}`}
@@ -345,7 +407,54 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
               {copied ? '✓' : '⧉'}
             </button>
           </div>
+
+          {/* gt create needs a commit message, and the box below is already the
+              one the Commit button uses — so it doubles as this button's -m. */}
+          <button onClick={() => setPrompt('branch')}
+                  disabled={!selected || busy || !msg.trim() || total === 0}
+                  title={!msg.trim()
+                    ? 'Type a commit message below first'
+                    : total === 0
+                      ? 'No changes to put on a branch'
+                      : `gt create <branch> ${stagedCount === 0 ? '-a ' : ''}-m "${msg.trim()}"`}
+                  style={{ ...actionButton, textAlign: 'left',
+                           color: msg.trim() && total ? '#ddd' : '#666',
+                           cursor: !selected || busy || !msg.trim() || total === 0 ? 'default' : 'pointer' }}
+                  onMouseEnter={e => { if (msg.trim() && total && !busy) e.currentTarget.style.background = '#3c424e' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+            {running === 'gt create' ? 'Creating…' : '⌥ gt create'}
+          </button>
+
+          {commands.map((cmd: RepoCommand) => (
+            <button key={cmd.label} onClick={() => startRepoCommand(cmd)}
+                    disabled={!selected || busy}
+                    title={`${cmd.run}${cmd.cwd === 'repo' ? '  (in the repo root)' : ''}`}
+                    style={{ ...actionButton, textAlign: 'left',
+                             cursor: !selected || busy ? 'default' : 'pointer' }}
+                    onMouseEnter={e => { if (!busy) e.currentTarget.style.background = '#3c424e' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+              {running === cmd.label ? `${cmd.label}…` : cmd.label}
+            </button>
+          ))}
         </div>
+
+        {prompt === 'branch' && (
+          <InputsPromptModal title="New branch in this stack"
+                             hint={`gt create <branch> ${stagedCount === 0 ? '-a ' : ''}-m "${msg.trim()}"` +
+                                   (stagedCount === 0 ? ' — nothing is staged, so all changes go on it' : '')}
+                             fields={['branch']}
+                             confirmLabel="Create branch"
+                             onSubmit={v => doGtCreate(v.branch)}
+                             onClose={() => setPrompt(undefined)} />
+        )}
+        {prompt && prompt !== 'branch' && (
+          <InputsPromptModal title={prompt.label}
+                             hint={prompt.run}
+                             fields={promptVars(prompt.run)}
+                             confirmLabel="Run"
+                             onSubmit={values => doRepoCommand(prompt, values)}
+                             onClose={() => setPrompt(undefined)} />
+        )}
 
         <textarea placeholder="Commit message" value={msg} onChange={e => setMsg(e.target.value)}
                   rows={2} style={{ resize: 'none', background: '#2d2d2d', color: '#ddd',

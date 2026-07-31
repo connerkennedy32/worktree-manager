@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
+import { makeTmpRepo, removeDir } from '../helpers/tmpRepo'
 import { validateRepoSelection } from '../../src/main/git/repo'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
@@ -25,7 +25,7 @@ describe('validateRepoSelection', () => {
     const { mkdtempSync } = await import('fs')
     const { tmpdir } = await import('os')
     const dir = mkdtempSync(join(tmpdir(), 'wtm-norepo-'))
-    cleanups.push(() => import('fs').then(fs => fs.rmSync(dir, { recursive: true, force: true })))
+    cleanups.push(() => removeDir(dir))
     await expect(validateRepoSelection(dir)).rejects.toThrow(/Not a git repository/)
   })
 })

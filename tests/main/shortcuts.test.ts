@@ -82,12 +82,10 @@ describe('shortcutFor Ctrl+J/Ctrl+K, on both platforms', () => {
     expect(shortcutFor(key({ key: 'k' }), true)).toBeNull()
   })
 
-  it('maps Ctrl+W to new on macOS', () => {
-    expect(shortcutFor(key({ key: 'w', control: true }), true)).toBe('new')
-  })
-
-  it('maps Ctrl+W to new off macOS', () => {
-    expect(shortcutFor(key({ key: 'w', control: true }), false)).toBe('new')
+  // Ctrl+W is readline's delete-word-backward. It used to open the new-worktree
+  // dialog; with that gone the app must stop intercepting it so the shell gets it.
+  it.each([true, false])('leaves Ctrl+W to the shell (isMac=%s)', isMac => {
+    expect(shortcutFor(key({ key: 'w', control: true }), isMac)).toBeNull()
   })
 
   it('ignores Cmd+W, which closes the window on macOS', () => {

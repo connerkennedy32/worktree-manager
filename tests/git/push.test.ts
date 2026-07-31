@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
+import { makeTmpRepo, removeDir } from '../helpers/tmpRepo'
 import { pushArgs, getPushState, push } from '../../src/main/git/push'
 import { clearTrunkCache } from '../../src/main/git/trunk'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import simpleGit from 'simple-git'
@@ -16,7 +16,7 @@ async function repoWithRemote() {
   const r = await makeTmpRepo()
   cleanups.push(r.cleanup)
   const remote = mkdtempSync(join(tmpdir(), 'wtm-remote-'))
-  cleanups.push(() => rmSync(remote, { recursive: true, force: true }))
+  cleanups.push(() => removeDir(remote))
   await simpleGit(remote).init(['--bare', '--initial-branch=main'])
   await r.git.addRemote('origin', remote)
   await r.git.push(['-u', 'origin', 'main'])
@@ -122,7 +122,7 @@ describe('push', () => {
     // Put a commit on the remote that the local branch doesn't have, so the
     // local push is a non-fast-forward.
     const other = mkdtempSync(join(tmpdir(), 'wtm-other-'))
-    cleanups.push(() => rmSync(other, { recursive: true, force: true }))
+    cleanups.push(() => removeDir(other))
     await simpleGit().clone(r.remote, other)
     const otherGit = simpleGit(other)
     await otherGit.addConfig('user.email', 'other@test.dev')

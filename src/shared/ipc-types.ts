@@ -52,6 +52,33 @@ export type PushOutcome = { ok: true } | { ok: false; message: string }
 // merged anything, and how much — so success carries a summary too.
 export type SyncOutcome = { ok: boolean; message: string }
 
+export type CommandOutcome = { ok: boolean; message: string }
+
+export interface RepoCommand {
+  label: string
+  // Tokenized on quotes and spawned directly, never through a shell: no `&&`,
+  // no pipes, no $VAR. {{branch}}, {{worktree}}, {{repo}} and {{message}} (the
+  // commit box) are substituted; any other {{placeholder}} is prompted for.
+  run: string
+  cwd?: 'worktree' | 'repo'   // default 'worktree'
+}
+
+export interface RunRepoCommandRequest {
+  worktreePath: string
+  command: RepoCommand
+  // Keyed by placeholder name; every {{placeholder}} the command declares needs one.
+  inputs?: Record<string, string>
+  message?: string
+  branch?: string
+}
+
+export interface GtCreateRequest {
+  worktreePath: string
+  branch: string
+  message: string
+  stageAll: boolean
+}
+
 export interface CommittedChanges {
   baseBranch: string    // branch of the repo's main worktree; '' when unresolvable
   files: CommittedFile[]
@@ -70,7 +97,6 @@ export interface DiscardPathRequest { worktreePath: string; path: string }
 export interface ReadFileRequest { worktreePath: string; path: string }
 export interface WriteFileRequest { worktreePath: string; path: string; content: string }
 export interface CommitRequest { worktreePath: string; message: string }
-export interface NewWorktreeRequest { repoPath: string; branch: string; createBranch: boolean }
 
 export interface Api {
   listRepos(): Promise<string[]>
@@ -89,7 +115,6 @@ export interface Api {
   getSelectedBackground(): Promise<string>
   onBackgroundChanged(cb: () => void): () => void
   listWorktrees(repoPath: string): Promise<Worktree[]>
-  createWorktree(req: NewWorktreeRequest): Promise<Worktree[]>
   removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]>
   getStatus(worktreePath: string): Promise<WorktreeStatus>
   getDiff(worktreePath: string): Promise<DiffFile[]>
@@ -108,6 +133,10 @@ export interface Api {
   push(worktreePath: string): Promise<PushOutcome>
   // Fetch trunk and merge it into this worktree's branch.
   syncWithTrunk(worktreePath: string): Promise<SyncOutcome>
+  gtCreate(req: GtCreateRequest): Promise<CommandOutcome>
+  listRepoCommands(worktreePath: string): Promise<RepoCommand[]>
+  runRepoCommand(req: RunRepoCommandRequest): Promise<CommandOutcome>
+  openRepoCommandsFile(): Promise<void>
   // Live output of the git commands a branch action runs, so the panel can show
   // what a terminal would. Chunks arrive as git writes them.
   onGitOutput(cb: (worktreePath: string, chunk: string) => void): () => void
@@ -143,7 +172,6 @@ export interface Api {
   getAgentStatuses(): Promise<Record<string, AgentReport>>
   onAgentStatus(cb: (worktreePath: string, report: AgentReport) => void): () => void
   onMenuResetTerminal(cb: () => void): () => void
-  onMenuNewWorktree(cb: () => void): () => void
   onMenuSelectPrev(cb: () => void): () => void
   onMenuSelectNext(cb: () => void): () => void
 }
@@ -161,13 +189,16 @@ export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
   listNames: 'names:list', setName: 'names:set',
   getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
-  listWorktrees: 'wt:list', createWorktree: 'wt:create', removeWorktree: 'wt:remove',
+  listWorktrees: 'wt:list', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   readFile: 'file:read', writeFile: 'file:write',
   getCommittedFiles: 'diff:committed',
   stage: 'diff:stage', stagePath: 'diff:stagePath', stageAll: 'diff:stageAll',
   discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run', syncWithTrunk: 'sync:trunk',
+  gtCreate: 'stack:gtCreate',
+  listRepoCommands: 'cmd:list', runRepoCommand: 'cmd:run',
+  openRepoCommandsFile: 'cmd:openFile',
   gitOutput: 'git:output',
   openLazygit: 'term:lazygit',
   openInEditor: 'editor:open',
@@ -178,6 +209,6 @@ export const IPC = {
   termData: 'term:data', statusChanged: 'wt:statusChanged',
   focusWindow: 'win:focus',
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',
-  menuResetTerminal: 'menu:resetTerminal', menuNewWorktree: 'menu:newWorktree',
+  menuResetTerminal: 'menu:resetTerminal',
   menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext'
 } as const

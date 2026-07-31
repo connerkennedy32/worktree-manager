@@ -16,7 +16,6 @@ const api: Api = {
     return () => ipcRenderer.removeListener(IPC.backgroundChanged, h as any)
   },
   listWorktrees: (r) => ipcRenderer.invoke(IPC.listWorktrees, r),
-  createWorktree: (req) => ipcRenderer.invoke(IPC.createWorktree, req),
   removeWorktree: (p, f) => ipcRenderer.invoke(IPC.removeWorktree, p, f),
   getStatus: (p) => ipcRenderer.invoke(IPC.getStatus, p),
   getDiff: (p) => ipcRenderer.invoke(IPC.getDiff, p),
@@ -32,6 +31,10 @@ const api: Api = {
   getPendingCount: (p) => ipcRenderer.invoke(IPC.pendingCount, p),
   push: (p) => ipcRenderer.invoke(IPC.push, p),
   syncWithTrunk: (p) => ipcRenderer.invoke(IPC.syncWithTrunk, p),
+  gtCreate: (req) => ipcRenderer.invoke(IPC.gtCreate, req),
+  listRepoCommands: (p) => ipcRenderer.invoke(IPC.listRepoCommands, p),
+  runRepoCommand: (req) => ipcRenderer.invoke(IPC.runRepoCommand, req),
+  openRepoCommandsFile: () => ipcRenderer.invoke(IPC.openRepoCommandsFile),
   copyText: (text) => clipboard.writeText(text),
   onGitOutput: (cb) => {
     const h = (_e: unknown, p: string, chunk: string) => cb(p, chunk)
@@ -69,11 +72,6 @@ const api: Api = {
     const h = () => cb()
     ipcRenderer.on(IPC.menuResetTerminal, h as any)
     return () => ipcRenderer.removeListener(IPC.menuResetTerminal, h as any)
-  },
-  onMenuNewWorktree: (cb) => {
-    const h = () => cb()
-    ipcRenderer.on(IPC.menuNewWorktree, h as any)
-    return () => ipcRenderer.removeListener(IPC.menuNewWorktree, h as any)
   },
   onMenuSelectPrev: (cb) => {
     const h = () => cb()

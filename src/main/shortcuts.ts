@@ -11,7 +11,7 @@ export interface KeyInput {
   shift: boolean
 }
 
-export type WorktreeStep = 'prev' | 'next' | 'new' | null
+export type WorktreeStep = 'prev' | 'next' | null
 
 // Decide whether a key press means "step to another worktree".
 //
@@ -32,14 +32,13 @@ export function shortcutFor(input: KeyInput, isMac: boolean): WorktreeStep {
     if (input.key === 'ArrowUp') return 'prev'
     if (input.key === 'ArrowDown') return 'next'
   }
-  // Bare Ctrl+J/Ctrl+K/Ctrl+W (no Cmd/Meta) as a plain-terminal alternative to
-  // the arrow/menu shortcuts above. This intentionally shadows readline's
-  // Ctrl+K (kill-to-end-of-line), Ctrl+W (delete-word-backward), and fzf's
-  // default Ctrl+J/Ctrl+K bindings — accepted tradeoff, not an oversight.
+  // Bare Ctrl+J/Ctrl+K (no Cmd/Meta) as a plain-terminal alternative to the
+  // arrow/menu shortcuts above. This intentionally shadows readline's Ctrl+K
+  // (kill-to-end-of-line) and fzf's default Ctrl+J/Ctrl+K bindings — accepted
+  // tradeoff, not an oversight.
   if (input.control && !input.meta) {
     if (input.key === 'k') return 'prev'
     if (input.key === 'j') return 'next'
-    if (input.key === 'w') return 'new'
   }
   return null
 }
@@ -50,9 +49,6 @@ export function attachShortcuts(win: BrowserWindow, isMac = process.platform ===
     if (!step) return
     // Keep the key from reaching the renderer, so the terminal never sees it.
     event.preventDefault()
-    const channel = step === 'prev' ? IPC.menuSelectPrev
-      : step === 'next' ? IPC.menuSelectNext
-      : IPC.menuNewWorktree
-    win.webContents.send(channel)
+    win.webContents.send(step === 'prev' ? IPC.menuSelectPrev : IPC.menuSelectNext)
   })
 }

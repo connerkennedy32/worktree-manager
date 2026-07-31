@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo, withOrigin } from '../helpers/tmpRepo'
+import { makeTmpRepo, withOrigin, removeDir, addWorktree } from '../helpers/tmpRepo'
 import { getCommittedFiles } from '../../src/main/git/committed'
 import { getFileDiff } from '../../src/main/git/diff'
-import { createWorktree, worktreeDir } from '../../src/main/git/worktrees'
-import { writeFileSync, mkdtempSync, rmSync } from 'fs'
+import { worktreeDir } from '../../src/main/git/worktrees'
+import { writeFileSync, mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import simpleGit from 'simple-git'
@@ -15,8 +15,7 @@ afterEach(() => { cleanups.forEach(c => c()); cleanups = [] })
 async function repoWithBranchWorktree() {
   const r = await makeTmpRepo()
   cleanups.push(r.cleanup)
-  cleanups.push(() => rmSync(join(r.dir, '..', '.worktrees'), { recursive: true, force: true }))
-  await createWorktree({ repoPath: r.dir, branch: 'feat', createBranch: true })
+  await addWorktree(r.dir, 'feat')
   const wtPath = worktreeDir(r.dir, 'feat')
   const wtGit = simpleGit(wtPath)
   await wtGit.addConfig('user.email', 'test@test.dev')
@@ -126,7 +125,7 @@ describe('getCommittedFiles', () => {
 
   it('returns an empty list rather than throwing outside a repo', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'wtm-norepo-'))
-    cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+    cleanups.push(() => removeDir(dir))
     const res = await getCommittedFiles(dir)
     expect(res.files).toEqual([])
   })

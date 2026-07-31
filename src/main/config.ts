@@ -1,5 +1,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs'
 import { join, basename, extname } from 'path'
+import type { RepoCommand } from '@shared/ipc-types'
+import { repoRoot } from './git/repo-root'
+import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
 
 export function configDir(): string {
   if (process.env.WTM_CONFIG_DIR) return process.env.WTM_CONFIG_DIR
@@ -9,6 +12,7 @@ export function configDir(): string {
 }
 function file(): string { return join(configDir(), 'repos.json') }
 function namesFile(): string { return join(configDir(), 'names.json') }
+function commandsFile(): string { return join(configDir(), 'commands.json') }
 
 export async function listRepos(): Promise<string[]> {
   const f = file()
@@ -112,4 +116,23 @@ export async function removeRepo(path: string): Promise<string[]> {
   const repos = (await listRepos()).filter(r => r !== path)
   writeFileSync(file(), JSON.stringify({ repos }, null, 2))
   return repos
+}
+
+// Keyed by main-checkout path, so every worktree of a repo gets the same commands.
+export async function listRepoCommands(worktreePath: string): Promise<RepoCommand[]> {
+  const f = commandsFile()
+  if (!existsSync(f)) return []
+  try {
+    const root = await repoRoot(worktreePath)
+    const parsed: unknown = JSON.parse(readFileSync(f, 'utf8'))
+    return parseCommandsFile(parsed)[root] ?? []
+  } catch { return [] }
+}
+
+export async function openRepoCommandsFile(): Promise<void> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const f = commandsFile()
+  if (!existsSync(f)) writeFileSync(f, exampleCommandsFile(await listRepos()))
+  const { shell } = require('electron')
+  await shell.openPath(f)
 }

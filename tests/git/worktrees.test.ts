@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo, withOrigin } from '../helpers/tmpRepo'
-import { listWorktrees, createWorktree, removeWorktree, headPath, worktreeDir } from '../../src/main/git/worktrees'
-import { existsSync, writeFileSync, rmSync } from 'fs'
+import { makeTmpRepo, withOrigin, addWorktree } from '../helpers/tmpRepo'
+import { listWorktrees, removeWorktree, headPath, worktreeDir } from '../../src/main/git/worktrees'
+import { existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import simpleGit from 'simple-git'
 
@@ -17,52 +17,9 @@ describe('worktrees', () => {
     expect(wts[0].branch).toBe('main')
   })
 
-  it('creates a worktree with a new branch in sibling dir', async () => {
-    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    const wts = await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
-    expect(wts).toHaveLength(2)
-    const created = wts.find(w => w.branch === 'feat-x')!
-    expect(created).toBeDefined()
-    expect(existsSync(created.path)).toBe(true)
-    expect(created.path).toContain('.worktrees')
-  })
-
-  // The bug this guards: `worktree add -b` with no start-point silently uses the
-  // invoking repo's HEAD, so a main checkout parked on a feature branch seeds
-  // every new worktree with that branch's commits.
-  it('starts a new branch at the trunk, not at the main checkout HEAD', async () => {
-    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    cleanups.push(await withOrigin(r.dir))
-    cleanups.push(() => rmSync(join(r.dir, '..', '.worktrees'), { recursive: true, force: true }))
-    const trunkTip = (await r.git.revparse(['HEAD'])).trim()
-
-    // Park the main checkout on a feature branch with a commit of its own.
-    await r.git.checkoutLocalBranch('other-feature')
-    writeFileSync(join(r.dir, 'other.txt'), 'not mine\n')
-    await r.git.add('.')
-    await r.git.commit('work on another branch')
-
-    await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
-    const tip = (await simpleGit(worktreeDir(r.dir, 'feat-x')).revparse(['HEAD'])).trim()
-    expect(tip).toBe(trunkTip)
-  })
-
-  it('leaves a new branch with no upstream, so it is never pushed at the trunk', async () => {
-    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    cleanups.push(await withOrigin(r.dir))
-    cleanups.push(() => rmSync(join(r.dir, '..', '.worktrees'), { recursive: true, force: true }))
-
-    await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
-    const wtGit = simpleGit(worktreeDir(r.dir, 'feat-x'))
-    const upstream = await wtGit
-      .raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'])
-      .then(o => o.trim(), () => '')
-    expect(upstream).toBe('')
-  })
-
   it('removes a worktree', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await createWorktree({ repoPath: r.dir, branch: 'feat-x', createBranch: true })
+    await addWorktree(r.dir, 'feat-x')
     let wts = await listWorktrees(r.dir)
     const target = wts.find(w => w.branch === 'feat-x')!
     wts = await removeWorktree(target.path, false)
@@ -71,7 +28,7 @@ describe('worktrees', () => {
 
   it('deletes the branch when removing its worktree', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await createWorktree({ repoPath: r.dir, branch: 'feat-z', createBranch: true })
+    await addWorktree(r.dir, 'feat-z')
     const branchesBefore = await r.git.branchLocal()
     expect(branchesBefore.all).toContain('feat-z')
     const target = (await listWorktrees(r.dir)).find(w => w.branch === 'feat-z')!
@@ -93,7 +50,7 @@ describe('worktrees', () => {
 
   it('force-removes a worktree that has uncommitted changes', async () => {
     const r = await makeTmpRepo(); cleanups.push(r.cleanup)
-    await createWorktree({ repoPath: r.dir, branch: 'feat-y', createBranch: true })
+    await addWorktree(r.dir, 'feat-y')
     const target = (await listWorktrees(r.dir)).find(w => w.branch === 'feat-y')!
     writeFileSync(join(target.path, 'dirty.txt'), 'uncommitted\n')
     // a non-forced remove must refuse when the worktree is dirty

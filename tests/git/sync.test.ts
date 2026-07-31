@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest'
-import { makeTmpRepo } from '../helpers/tmpRepo'
+import { makeTmpRepo, removeDir } from '../helpers/tmpRepo'
 import { syncWithTrunk } from '../../src/main/git/sync'
 import { clearTrunkCache } from '../../src/main/git/trunk'
-import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import simpleGit from 'simple-git'
@@ -15,7 +15,7 @@ async function repoWithRemote() {
   const r = await makeTmpRepo()
   cleanups.push(r.cleanup)
   const remote = mkdtempSync(join(tmpdir(), 'wtm-remote-'))
-  cleanups.push(() => rmSync(remote, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }))
+  cleanups.push(() => removeDir(remote))
   await simpleGit(remote).init(['--bare', '--initial-branch=main'])
   await r.git.addRemote('origin', remote)
   await r.git.push(['-u', 'origin', 'main'])
@@ -31,7 +31,7 @@ const commit = async (r: { dir: string; git: any }, name: string, body = name) =
 // A second clone that lands commits on origin/main, standing in for a teammate.
 async function advanceRemoteMain(remote: string, name: string) {
   const other = mkdtempSync(join(tmpdir(), 'wtm-other-'))
-  cleanups.push(() => rmSync(other, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }))
+  cleanups.push(() => removeDir(other))
   const git = simpleGit(other)
   await git.clone(remote, other)
   writeFileSync(join(other, name), name)
@@ -89,7 +89,7 @@ describe('syncWithTrunk', () => {
 
     // The same file, changed differently on trunk.
     const other = mkdtempSync(join(tmpdir(), 'wtm-other-'))
-    cleanups.push(() => rmSync(other, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }))
+    cleanups.push(() => removeDir(other))
     const git = simpleGit(other)
     await git.clone(r.remote, other)
     writeFileSync(join(other, 'shared.txt'), 'theirs')
