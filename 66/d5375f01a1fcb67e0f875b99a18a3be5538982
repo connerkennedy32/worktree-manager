@@ -1,0 +1,20 @@
+src/main/shell.ts
+  s_90a2eb5a075646::t_51d91612d8988c 1,9-34
+  s_90a2eb5a075646::t_773c45277d1237 52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "66d5375f01a1fcb67e0f875b99a18a3be5538982",
+  "prompts": {},
+  "sessions": {
+    "s_90a2eb5a075646": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e81404e-f9f2-4f2a-b91e-6260b78e1872",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
