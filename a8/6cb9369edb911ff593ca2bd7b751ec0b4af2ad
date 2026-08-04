@@ -1,0 +1,21 @@
+docs/superpowers/specs/2026-08-04-stack-section-design.md
+  s_6242554deece88::t_30c72ac116a649 1-57,59-60,63-145
+  s_6242554deece88::t_1e39d6027093e1 58,62
+  s_6242554deece88::t_3109dad6ff744e 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "a86cb9369edb911ff593ca2bd7b751ec0b4af2ad",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
