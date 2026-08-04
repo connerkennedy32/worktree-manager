@@ -1,0 +1,19 @@
+src/renderer/components/stack-panel.ts
+  s_83b7badf96e78b::t_3058c55357acc2 20-24,39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "281ce32437cbdd26dee51d29ded0168a140e084c",
+  "prompts": {},
+  "sessions": {
+    "s_83b7badf96e78b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-afix-wave-3885334c72b0029f",
+        "model": "unknown"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
