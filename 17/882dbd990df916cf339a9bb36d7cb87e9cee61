@@ -1,0 +1,32 @@
+src/main/stack.ts
+  s_6242554deece88::t_dd0f5fbd0a4637 14-26,30-31,33
+  s_6242554deece88::t_54f01c770a60b4 96
+  s_6242554deece88::t_ace13b4e990307 97
+  s_83b7badf96e78b::t_e6b2d76e0ae7ef 90-93,102,124
+tests/main/stack-parse.test.ts
+  s_6242554deece88::t_10a845fbe710ec 4-8,10-11,14,20-34,36,41-44,46,51-65,71-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "17882dbd990df916cf339a9bb36d7cb87e9cee61",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    },
+    "s_83b7badf96e78b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-afix-wave-3885334c72b0029f",
+        "model": "unknown"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
