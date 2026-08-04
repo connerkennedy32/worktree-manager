@@ -1,0 +1,19 @@
+tests/main/stack-prs.test.ts
+  s_6242554deece88::t_0482f853ea2aeb 66-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "ee322007894b9ec8c96ab495fc2fc84d269b537b",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
