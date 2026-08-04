@@ -1,0 +1,32 @@
+src/main/stack.ts
+  s_6242554deece88::t_cff9e3d822207c 45
+  s_6242554deece88::t_8863909aa835f1 66-69,72-74
+  s_6242554deece88::t_bddea0638a4966 98-102
+  s_6242554deece88::t_fecab1fc681a75 60-65,70-71,75-76
+  s_6242554deece88::t_73d3a9a5fca74f 152
+tests/main/stack-prs.test.ts
+  s_6242554deece88::t_3b4a370da854f2 2
+  s_6242554deece88::t_021cf0f3adc9e7 50-52
+  s_6242554deece88::t_ce3aead842302b 88-89,101-102,108-126
+  s_6242554deece88::t_403b514d53f0c1 90-100,103-107
+  s_6242554deece88::t_fec431da8a8618 48
+  s_6242554deece88::t_287a58005a1093 8
+docs/superpowers/specs/2026-08-04-stack-section-design.md
+  s_6242554deece88::t_0ffb9cb9ce2c77 79-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "147fe61453511e075126928b117b87aabe7e3361",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
