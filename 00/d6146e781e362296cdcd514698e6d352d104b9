@@ -1,0 +1,24 @@
+docs/superpowers/plans/2026-08-04-stack-section.md
+  s_6242554deece88::t_910c6c2cdccc6d 603-607,612-616,618,620,622-623,625
+  s_6242554deece88::t_b06e1b78f23c60 1-602,608-611,617,619,621,624,626-764
+docs/superpowers/specs/2026-08-04-stack-section-design.md
+  s_6242554deece88::t_ae7c87874ffe02 96-100
+  s_6242554deece88::t_ba223a0b0faae8 58,77
+  s_6242554deece88::t_1c46b3368198b8 40-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "00d6146e781e362296cdcd514698e6d352d104b9",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
