@@ -1,0 +1,25 @@
+src/renderer/components/stack-panel.ts
+  s_6242554deece88::t_e1ee61471101d1 44-48
+docs/superpowers/specs/2026-08-04-stack-section-design.md
+  s_6242554deece88::t_5544c4f2a79749 75-83
+  s_6242554deece88::t_5262b57172f38e 157-159
+  s_6242554deece88::t_57e2544913fe05 73-74
+src/main/stack.ts
+  s_6242554deece88::t_981598f43f5efc 141-149,155-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.20",
+  "base_commit_sha": "99813c2fdf53945162b73306da7764df5562654d",
+  "prompts": {},
+  "sessions": {
+    "s_6242554deece88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "74528304-599c-4ce8-89ef-6f1230ff39b1",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
