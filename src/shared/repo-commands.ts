@@ -1,6 +1,8 @@
 import type { RepoCommand } from './ipc-types'
 
-const IMPLICIT_VARS = ['branch', 'worktree', 'repo', 'message'] as const
+// Not `name`: that is the placeholder the example create-worktree command
+// prompts for, and making it implicit would silently stop it asking.
+const IMPLICIT_VARS = ['branch', 'worktree', 'worktreeName', 'repo', 'message'] as const
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][\w-]*)\s*\}\}/g
 
@@ -44,12 +46,27 @@ export function substitute(tokens: string[], vars: Record<string, string>): stri
   return tokens.map(t => t.replace(PLACEHOLDER, (_m, name: string) => vars[name] ?? ''))
 }
 
+// Single quotes with '\'' for embedded ones: inside single quotes sh treats
+// everything literally, so a commit message with spaces, $, backticks or a
+// stray `;` reaches the command as one argument instead of being run.
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+// Shell mode substitutes into the raw string rather than into tokens, because
+// the whole string is the script. Values are quoted for you — writing your own
+// quotes around a {{placeholder}} would nest them, not help.
+export function substituteShell(run: string, vars: Record<string, string>): string {
+  return run.replace(PLACEHOLDER, (_m, name: string) => shellQuote(vars[name] ?? ''))
+}
+
 function isRepoCommand(value: unknown): value is RepoCommand {
   if (typeof value !== 'object' || value === null) return false
   const v = value as Record<string, unknown>
   if (typeof v.label !== 'string' || !v.label.trim()) return false
   if (typeof v.run !== 'string' || !v.run.trim()) return false
   if (v.cwd !== undefined && v.cwd !== 'worktree' && v.cwd !== 'repo') return false
+  if (v.shell !== undefined && typeof v.shell !== 'boolean') return false
   return true
 }
 
@@ -75,8 +92,11 @@ export function exampleCommandsFile(repoPaths: string[]): string {
     '// how this works': [
       "Keys are absolute paths to a repo's main checkout — the ones below are yours.",
       'run is tokenized on quotes and spawned directly: no shell, so no && or pipes.',
-      '{{branch}} {{worktree}} {{repo}} {{message}} are filled in for you;',
+      'Set "shell": true to run it through sh -c instead, where && | > & all work.',
+      '{{branch}} {{worktree}} {{worktreeName}} {{repo}} {{message}} are filled in;',
+      '{{worktreeName}} is just the worktree folder name, {{worktree}} its full path.',
       'any other {{placeholder}} is prompted for before the command runs.',
+      'In shell mode placeholders are quoted for you - do not quote them yourself.',
       'cwd is "worktree" (default) or "repo".',
       'Delete any repo below you do not want commands for.'
     ],

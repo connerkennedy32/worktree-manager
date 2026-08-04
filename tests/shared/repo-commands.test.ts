@@ -1,8 +1,33 @@
 import { describe, it, expect } from 'vitest'
 import {
-  tokenize, promptVars, substitute, parseCommandsFile,
+  tokenize, promptVars, substitute, substituteShell, parseCommandsFile,
   exampleCommandsFile
 } from '../../src/shared/repo-commands'
+
+describe('substituteShell', () => {
+  it('leaves shell operators in the script intact', () => {
+    expect(substituteShell('caffeinate -d & open -a ScreenSaverEngine', {}))
+      .toBe('caffeinate -d & open -a ScreenSaverEngine')
+  })
+
+  it('quotes substituted values so spaces stay one argument', () => {
+    expect(substituteShell('git commit -m {{message}}', { message: 'fix the thing' }))
+      .toBe("git commit -m 'fix the thing'")
+  })
+
+  it('neutralises shell metacharacters inside a value', () => {
+    expect(substituteShell('echo {{message}}', { message: '$(rm -rf /); `x`' }))
+      .toBe("echo '$(rm -rf /); `x`'")
+  })
+
+  it('escapes embedded single quotes', () => {
+    expect(substituteShell('echo {{message}}', { message: "it's" })).toBe("echo 'it'\\''s'")
+  })
+
+  it('renders an unknown placeholder as an empty argument, not nothing', () => {
+    expect(substituteShell('echo {{nope}}', {})).toBe("echo ''")
+  })
+})
 
 describe('tokenize', () => {
   it('splits on whitespace', () => {
@@ -33,8 +58,15 @@ describe('promptVars', () => {
     expect(promptVars('pnpm use-worktree {{name}}')).toEqual(['name'])
   })
 
-  it.each(['branch', 'worktree', 'repo', 'message'])('treats {{%s}} as implicit', v => {
-    expect(promptVars(`cmd {{${v}}}`)).toEqual([])
+  it.each(['branch', 'worktree', 'worktreeName', 'repo', 'message'])(
+    'treats {{%s}} as implicit', v => {
+      expect(promptVars(`cmd {{${v}}}`)).toEqual([])
+    })
+
+  // The example create-worktree command prompts for {{name}}; {{worktreeName}}
+  // being implicit must not swallow it.
+  it('still prompts for {{name}}', () => {
+    expect(promptVars('git worktree add -b {{name}} {{worktreeName}}')).toEqual(['name'])
   })
 
   it('returns nothing to ask for when the command has no placeholders', () => {
@@ -94,6 +126,11 @@ describe('parseCommandsFile', () => {
     expect(parseCommandsFile({ '/repo': [valid] })).toEqual({ '/repo': [valid] })
   })
 
+  it('keeps a shell command', () => {
+    const cmd = { label: 'Screensaver', run: 'caffeinate -d & open -a X', shell: true }
+    expect(parseCommandsFile({ '/repo': [cmd] })).toEqual({ '/repo': [cmd] })
+  })
+
   it('ignores // comment keys', () => {
     const parsed = parseCommandsFile({ '// notes': ['anything'], '/repo': [valid] })
     expect(Object.keys(parsed)).toEqual(['/repo'])
@@ -104,6 +141,7 @@ describe('parseCommandsFile', () => {
     ['a blank label', { label: '  ', run: 'x' }],
     ['a missing run', { label: 'x' }],
     ['an unknown cwd', { label: 'x', run: 'y', cwd: 'elsewhere' }],
+    ['a non-boolean shell', { label: 'x', run: 'y', shell: 'true' }],
     ['a non-object', 'just a string']
   ])('drops an entry with %s but keeps its siblings', (_case, bad) => {
     expect(parseCommandsFile({ '/repo': [bad, valid] })).toEqual({ '/repo': [valid] })

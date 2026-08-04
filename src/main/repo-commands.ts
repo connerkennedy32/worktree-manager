@@ -1,5 +1,6 @@
+import { basename } from 'node:path'
 import type { CommandOutcome, RunRepoCommandRequest } from '@shared/ipc-types'
-import { promptVars, substitute, tokenize } from '@shared/repo-commands'
+import { promptVars, substitute, substituteShell, tokenize } from '@shared/repo-commands'
 import { runCommand, lastLine } from './shell'
 import { repoRoot } from './git/repo-root'
 
@@ -13,6 +14,9 @@ export async function runRepoCommand(
 
   const vars: Record<string, string> = {
     worktree: req.worktreePath,
+    // The folder name, so a command can label things without the caller having
+    // to strip the path. For the main checkout this is the repo's own folder.
+    worktreeName: basename(req.worktreePath),
     repo: root,
     branch: req.branch ?? '',
     message: req.message ?? ''
@@ -23,7 +27,9 @@ export async function runRepoCommand(
     vars[name] = value
   }
 
-  const [file, ...args] = substitute(tokenize(command.run), vars)
+  const [file, ...args] = command.shell
+    ? ['sh', '-c', substituteShell(command.run, vars)]
+    : substitute(tokenize(command.run), vars)
   if (!file) return { ok: false, message: 'This command is empty.' }
 
   const { code, output } = await runCommand(cwd, file, args, onOutput)

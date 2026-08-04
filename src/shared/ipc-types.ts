@@ -57,10 +57,15 @@ export type CommandOutcome = { ok: boolean; message: string }
 export interface RepoCommand {
   label: string
   // Tokenized on quotes and spawned directly, never through a shell: no `&&`,
-  // no pipes, no $VAR. {{branch}}, {{worktree}}, {{repo}} and {{message}} (the
-  // commit box) are substituted; any other {{placeholder}} is prompted for.
+  // no pipes, no $VAR. {{branch}}, {{worktree}}, {{worktreeName}}, {{repo}} and
+  // {{message}} (the commit box) are substituted; any other {{placeholder}} is
+  // prompted for.
   run: string
   cwd?: 'worktree' | 'repo'   // default 'worktree'
+  // With shell: true, `run` is handed to `sh -c` verbatim after substitution
+  // instead of being tokenized, so `&&`, pipes, redirects and `&` work. Opt-in
+  // because it also means a {{placeholder}} value is interpreted by the shell.
+  shell?: boolean
 }
 
 export interface RunRepoCommandRequest {
