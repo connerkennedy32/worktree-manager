@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar'
 import { TerminalView, resetTerminal } from './components/TerminalView'
 import { DiffPanel } from './components/DiffPanel'
 import { DiffModal } from './components/DiffModal'
+import { CommandsEditor } from './components/CommandsEditor'
 import blackholeVideo from './assets/blackhole-backdrop.mp4'
 import voyageImage from './assets/voyage-backdrop.jpg'
 
@@ -45,6 +46,7 @@ export function App() {
   const init = useStore(s => s.init)
   const selected = useStore(s => s.selected)
   const [diffCollapsed, setDiffCollapsed] = useState(false)
+  const [editingCommands, setEditingCommands] = useState(false)
   const [diffWidth, setDiffWidth] = useState(MIN_DIFF_WIDTH)
   const dragging = useRef(false)
 
@@ -52,6 +54,10 @@ export function App() {
   // worktree's repo root (its main worktree), else the first connected repo.
 
   useEffect(() => { init() }, [init])
+
+  // Commands › Edit Repo Commands… (Cmd+Shift+K) opens the same editor the
+  // changes panel does, so it is reachable without a worktree selected.
+  useEffect(() => window.api.onMenuEditCommands(() => setEditingCommands(true)), [])
 
   // Reset the active terminal when the Terminal › Reset menu item is chosen.
   useEffect(() => {
@@ -111,6 +117,7 @@ export function App() {
       <DiffPanel collapsed={diffCollapsed} width={diffWidth}
                  onToggle={() => setDiffCollapsed(c => !c)} />
       <DiffModal />
+      {editingCommands && <CommandsEditor onClose={() => setEditingCommands(false)} />}
     </div>
   )
 }

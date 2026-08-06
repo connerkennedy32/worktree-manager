@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
-import { IPC, type GtCreateRequest, type RunRepoCommandRequest } from '@shared/ipc-types'
+import { IPC, type GtCreateRequest, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
@@ -104,6 +104,12 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.runRepoCommand, (_e, req: RunRepoCommandRequest) =>
     runRepoCommand(req, chunk => send(IPC.gitOutput, req.worktreePath, chunk)))
   ipcMain.handle(IPC.openRepoCommandsFile, () => config.openRepoCommandsFile())
+  ipcMain.handle(IPC.readAllRepoCommands, () => config.readAllRepoCommands())
+  ipcMain.handle(IPC.saveRepoCommands, async (_e, repoPath: string, entries: RepoCommandEntry[]) => {
+    const stored = await config.saveRepoCommands(repoPath, entries)
+    send(IPC.commandsChanged)
+    return stored
+  })
   ipcMain.handle(IPC.getFileDiff, (_e, req) => diff.getFileDiff(req))
   ipcMain.handle(IPC.readFile, (_e, req) => files.readFile(req))
   ipcMain.handle(IPC.writeFile, (_e, req) => files.writeFile(req))

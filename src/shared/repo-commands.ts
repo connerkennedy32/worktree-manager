@@ -1,8 +1,8 @@
-import type { RepoCommand } from './ipc-types'
+import type { RepoCommand, RepoCommandEntry, RepoCommandGroup } from './ipc-types'
 
 // Not `name`: that is the placeholder the example create-worktree command
 // prompts for, and making it implicit would silently stop it asking.
-const IMPLICIT_VARS = ['branch', 'worktree', 'worktreeName', 'repo', 'message'] as const
+export const IMPLICIT_VARS = ['branch', 'worktree', 'worktreeName', 'repo', 'message'] as const
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][\w-]*)\s*\}\}/g
 
@@ -40,6 +40,18 @@ export function promptVars(run: string): string[] {
   return found
 }
 
+// Every {{placeholder}} in the string, in first-appearance order, split by where
+// its value comes from. The editor shows both so you can see, while typing a
+// command, which names will be filled in and which will stop to ask.
+export function placeholders(run: string): { auto: string[]; ask: string[] } {
+  const auto: string[] = []
+  for (const [, name] of run.matchAll(PLACEHOLDER)) {
+    if (!IMPLICIT_VARS.includes(name as typeof IMPLICIT_VARS[number])) continue
+    if (!auto.includes(name)) auto.push(name)
+  }
+  return { auto, ask: promptVars(run) }
+}
+
 // Unknown placeholders resolve to empty rather than being left as literal
 // `{{x}}` text, so a mistyped variable can't be passed to git as an argument.
 export function substitute(tokens: string[], vars: Record<string, string>): string[] {
@@ -66,19 +78,40 @@ function isRepoCommand(value: unknown): value is RepoCommand {
   if (typeof v.label !== 'string' || !v.label.trim()) return false
   if (typeof v.run !== 'string' || !v.run.trim()) return false
   if (v.cwd !== undefined && v.cwd !== 'worktree' && v.cwd !== 'repo') return false
+  if (v.width !== undefined && v.width !== 'half' && v.width !== 'full') return false
   if (v.shell !== undefined && typeof v.shell !== 'boolean') return false
   return true
 }
 
+// A group is recognised by having `commands`, so a plain command is never
+// mistaken for one. Its members go through the same per-entry validation, and a
+// group whose members all turn out to be junk is dropped rather than rendered
+// as an empty container.
+function parseGroup(value: Record<string, unknown>): RepoCommandGroup | undefined {
+  if (typeof value.label !== 'string' || !value.label.trim()) return undefined
+  if (!Array.isArray(value.commands)) return undefined
+  if (value.open !== undefined && typeof value.open !== 'boolean') return undefined
+  const commands = value.commands.filter(isRepoCommand)
+  if (!commands.length) return undefined
+  return { label: value.label, commands, ...(value.open !== undefined && { open: value.open }) }
+}
+
+function parseEntry(value: unknown): RepoCommandEntry | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const v = value as Record<string, unknown>
+  if ('commands' in v) return parseGroup(v)
+  return isRepoCommand(v) ? v : undefined
+}
+
 // Bad entries are dropped individually rather than failing the whole file, so one
 // typo doesn't silently remove every button for every repo.
-export function parseCommandsFile(raw: unknown): Record<string, RepoCommand[]> {
+export function parseCommandsFile(raw: unknown): Record<string, RepoCommandEntry[]> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
-  const out: Record<string, RepoCommand[]> = {}
+  const out: Record<string, RepoCommandEntry[]> = {}
   for (const [repo, value] of Object.entries(raw)) {
     if (repo.startsWith('//')) continue
     if (!Array.isArray(value)) continue
-    out[repo] = value.filter(isRepoCommand)
+    out[repo] = value.map(parseEntry).filter((e): e is RepoCommandEntry => e !== undefined)
   }
   return out
 }
@@ -98,6 +131,10 @@ export function exampleCommandsFile(repoPaths: string[]): string {
       'any other {{placeholder}} is prompted for before the command runs.',
       'In shell mode placeholders are quoted for you - do not quote them yourself.',
       'cwd is "worktree" (default) or "repo".',
+      'width is "half" (default) or "full" - full spans both button columns.',
+      'To group buttons, use { "label": ..., "commands": [ ... ] } instead of a',
+      'command: it renders as a collapsible section. Add "open": true to start',
+      'it expanded. Groups do not nest.',
       'Delete any repo below you do not want commands for.'
     ],
     ...Object.fromEntries(paths.map(path => [path, [
@@ -109,6 +146,14 @@ export function exampleCommandsFile(repoPaths: string[]): string {
         label: 'Create worktree',
         run: 'git worktree add --no-track -b {{name}} ../.worktrees/{{name}} main',
         cwd: 'repo'
+      },
+      {
+        label: 'Worktree admin',
+        open: false,
+        commands: [
+          { label: 'List worktrees', run: 'git worktree list', cwd: 'repo' },
+          { label: 'Prune worktrees', run: 'git worktree prune', cwd: 'repo' }
+        ]
       }
     ]]))
   }

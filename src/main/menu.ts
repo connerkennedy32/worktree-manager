@@ -125,6 +125,13 @@ export async function buildAppMenu(win: BrowserWindow) {
       submenu: [
         {
           label: 'Edit Repo Commands…',
+          accelerator: 'CmdOrCtrl+Shift+K',
+          click: () => win.webContents.send(IPC.menuEditCommands)
+        },
+        // The editor writes the same file, so the raw JSON stays available for
+        // anything the form doesn't cover.
+        {
+          label: 'Open commands.json',
           click: () => { void config.openRepoCommandsFile() }
         }
       ]

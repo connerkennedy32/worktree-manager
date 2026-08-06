@@ -1,0 +1,498 @@
+/* The changes panel, in the same visual language as sidebar-theme.css: 6px
+   radii, translucent surfaces rather than hard borders, #0e639c accent,
+   #8a8f98 for anything secondary. Hover/disabled live here rather than in
+   onMouseEnter handlers so a disabled control cannot get stuck highlighted
+   and the states are all readable in one place. */
+
+.dp-panel {
+  --dp-accent: #0e639c;
+  --dp-accent-hover: #1177bb;
+  --dp-muted: #8a8f98;
+  --dp-ok: #89d185;
+  --dp-bad: #f28b82;
+  --dp-hairline: rgba(255, 255, 255, 0.09);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-left: 1px solid #333;
+  background: rgba(30, 30, 30, 0.55);
+  color: #d4d4d4;
+  font-family: system-ui;
+}
+
+/* --- Header ---------------------------------------------------------------- */
+
+.dp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 4px;
+  border-bottom: 1px solid var(--dp-hairline);
+  font-size: 12px;
+}
+.dp-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.dp-title-name { font-weight: 600; letter-spacing: 0.01em; }
+.dp-title-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  color: var(--dp-muted);
+}
+
+/* A count that reads as data, not as a label. */
+.dp-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dp-muted);
+}
+.dp-count strong { color: #ddd; font-weight: 600; }
+
+/* --- Buttons --------------------------------------------------------------- */
+
+/* Icon-only affordances: chevrons, dismisses, per-row stage/discard. Invisible
+   until hovered so the panel stays quiet, which is why they need a hit area
+   larger than the glyph. */
+.dp-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--dp-muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.dp-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.dp-icon-btn.danger:hover { background: rgba(242, 139, 130, 0.15); color: var(--dp-bad); }
+.dp-icon-btn.ok { color: var(--dp-ok); }
+
+/* The action-row command buttons. A filled surface rather than an outline:
+   twelve outlined buttons in a grid read as a wireframe. */
+.dp-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #ddd;
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.dp-action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--dp-hairline);
+}
+.dp-action:disabled { color: #6a6e75; cursor: default; }
+.dp-action-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dp-action-glyph { flex-shrink: 0; color: var(--dp-muted); font-size: 12px; }
+.dp-action:hover:not(:disabled) .dp-action-glyph { color: #ccc; }
+.dp-action:disabled .dp-action-glyph { color: #5c6067; }
+.dp-action.ok, .dp-action.ok .dp-action-glyph { color: var(--dp-ok); }
+
+/* Marks a button that opens a prompt instead of running straight away. Dimmer
+   than the label it trails, so it reads as an annotation rather than a second
+   thing to click. */
+.dp-action-asks {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--dp-muted);
+  opacity: 0.75;
+}
+.dp-action:hover:not(:disabled) .dp-action-asks { color: #9dcdf0; opacity: 1; }
+.dp-action:disabled .dp-action-asks { color: #5c6067; }
+
+/* Sync is a button plus a copy affordance sharing one surface. They stay
+   siblings rather than nesting, because a disabled <button> swallows clicks on
+   anything inside it — the copy icon would go dead during a sync. */
+.dp-split {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.dp-split:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--dp-hairline); }
+.dp-split .dp-action { background: none; border: none; border-radius: 6px 0 0 6px; }
+.dp-split .dp-action:hover:not(:disabled) { background: none; }
+.dp-split .dp-icon-btn { width: 26px; height: auto; border-radius: 0 6px 6px 0; }
+
+.dp-primary {
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  background: var(--dp-accent);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, opacity 0.12s ease;
+}
+.dp-primary:hover:not(:disabled) { background: var(--dp-accent-hover); }
+.dp-primary:disabled {
+  background: rgba(255, 255, 255, 0.06);
+  color: #6a6e75;
+  cursor: default;
+}
+
+/* --- Command groups -------------------------------------------------------- */
+
+/* Inset rather than outlined, so a group reads as a container the buttons sit
+   inside instead of a very wide button. */
+.dp-group {
+  grid-column: 1 / -1;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.dp-group.open {
+  background: rgba(0, 0, 0, 0.22);
+  border-color: var(--dp-hairline);
+}
+.dp-group-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 6px 8px 6px 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dp-muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+.dp-group-header:hover { color: #ddd; }
+.dp-group-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-group-count {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.dp-group-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 0 6px 6px;
+}
+
+/* Rotates in place, so opening a group animates rather than swapping glyphs. */
+.dp-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  transition: transform 0.14s ease;
+}
+.dp-chevron.open { transform: rotate(90deg); }
+
+/* --- File list ------------------------------------------------------------- */
+
+.dp-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 5px 10px 5px 4px;
+  cursor: pointer;
+  /* Opaque: rows scroll underneath it. */
+  background: #2b2b2c;
+  border-bottom: 1px solid var(--dp-hairline);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dp-muted);
+  transition: color 0.12s ease;
+}
+.dp-section:hover { color: #ddd; }
+.dp-section + .dp-section { border-top: 1px solid var(--dp-hairline); }
+.dp-section-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-section-action {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--dp-muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.dp-section-action:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+.dp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.1s ease;
+}
+.dp-row:hover { background: rgba(255, 255, 255, 0.055); }
+.dp-row-code {
+  flex-shrink: 0;
+  width: 12px;
+  text-align: center;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+.dp-row-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* rtl keeps the filename visible and truncates the leading directories. */
+  direction: rtl;
+  text-align: left;
+}
+.dp-row-stat {
+  flex-shrink: 0;
+  display: flex;
+  gap: 5px;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+/* Row actions stay out of the way until the row is under the cursor, but hold
+   their space so the path never reflows on hover. */
+.dp-row-actions { flex-shrink: 0; display: flex; gap: 1px; opacity: 0; transition: opacity 0.12s ease; }
+.dp-row:hover .dp-row-actions { opacity: 1; }
+
+.dp-empty { padding: 14px 12px; color: var(--dp-muted); font-size: 12px; }
+
+/* --- Footer, terminal, banner ---------------------------------------------- */
+
+.dp-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid var(--dp-hairline);
+  background: rgba(0, 0, 0, 0.18);
+}
+.dp-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+/* A hairline between the run-a-command half of the footer and the
+   commit-and-push half: they are different jobs sharing one corner. */
+.dp-sep { height: 1px; margin: 1px 0; background: var(--dp-hairline); }
+
+/* The composer is one card — message, staged count and Commit together —
+   rather than a textarea with a detached full-width button under it. The count
+   sits next to the button it qualifies, where it answers "commit what?". */
+.dp-composer {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dp-hairline);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.dp-composer:focus-within { border-color: var(--dp-accent); background: rgba(255, 255, 255, 0.07); }
+
+.dp-message {
+  resize: none;
+  padding: 8px 9px 4px;
+  border: none;
+  background: none;
+  color: #ddd;
+  font-family: system-ui;
+  font-size: 12px;
+  line-height: 1.45;
+  outline: none;
+}
+.dp-message::placeholder { color: #6a6e75; }
+
+.dp-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 5px 5px 9px;
+}
+.dp-composer-meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--dp-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dp-composer-meta strong { color: #ccc; font-weight: 600; }
+.dp-composer .dp-primary { flex-shrink: 0; padding: 4px 12px; }
+
+/* Push is real but secondary to committing: an accent outline, so two solid
+   blue buttons never compete for the same glance. */
+.dp-primary.subtle {
+  background: rgba(14, 99, 156, 0.18);
+  border: 1px solid rgba(42, 157, 244, 0.45);
+  color: #9dcdf0;
+}
+.dp-primary.subtle:hover:not(:disabled) {
+  background: rgba(14, 99, 156, 0.34);
+  color: #d7ecfb;
+}
+.dp-primary.subtle:disabled { background: rgba(255, 255, 255, 0.06); border-color: transparent; color: #6a6e75; }
+.dp-push { display: flex; align-items: center; justify-content: center; gap: 6px; }
+
+.dp-terminal {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  border-radius: 6px;
+  border: 1px solid #3d3d3d;
+  background: #141415;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+.dp-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 9px;
+  border-bottom: 1px solid #2c2c2c;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--dp-muted);
+}
+.dp-terminal-out {
+  margin: 0;
+  padding: 7px 9px;
+  max-height: 180px;
+  overflow: auto;
+  font-family: Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #cfcfcf;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* A dot that pulses while something is running — the one piece of motion in
+   the panel, so "still going" doesn't rely on reading a label. */
+.dp-pulse {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dp-accent-hover);
+  animation: dp-pulse 1.1s ease-in-out infinite;
+}
+@keyframes dp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .dp-pulse { animation: none; }
+  .dp-chevron { transition: none; }
+}
+
+.dp-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 4px 6px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow: auto;
+}
+.dp-banner.ok {
+  color: var(--dp-ok);
+  background: rgba(137, 209, 133, 0.1);
+  border: 1px solid rgba(137, 209, 133, 0.28);
+}
+/* Failure is git's own output, so it keeps the monospace treatment. */
+.dp-banner.bad {
+  color: var(--dp-bad);
+  background: rgba(242, 139, 130, 0.1);
+  border: 1px solid rgba(242, 139, 130, 0.28);
+  font-family: Menlo, monospace;
+}
+.dp-banner .dp-icon-btn { color: inherit; opacity: 0.6; width: 18px; height: 18px; }
+.dp-banner .dp-icon-btn:hover { color: inherit; opacity: 1; background: rgba(255, 255, 255, 0.1); }
+
+/* --- Collapsed rail -------------------------------------------------------- */
+
+.dp-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  width: 34px;
+  padding-top: 10px;
+  border-left: 1px solid #333;
+  background: rgba(30, 30, 30, 0.55);
+  color: var(--dp-muted);
+  font-family: system-ui;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.dp-rail:hover { background: rgba(255, 255, 255, 0.05); color: #ddd; }
+.dp-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dp-rail-count {
+  padding: 2px 5px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}

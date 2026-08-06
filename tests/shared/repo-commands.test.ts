@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  tokenize, promptVars, substitute, substituteShell, parseCommandsFile,
+  tokenize, promptVars, placeholders, substitute, substituteShell, parseCommandsFile,
   exampleCommandsFile
 } from '../../src/shared/repo-commands'
+import { isCommandGroup } from '../../src/shared/ipc-types'
 
 describe('substituteShell', () => {
   it('leaves shell operators in the script intact', () => {
@@ -91,6 +92,21 @@ describe('promptVars', () => {
   })
 })
 
+describe('placeholders', () => {
+  it('splits the ones filled in from context from the ones asked for', () => {
+    expect(placeholders('deploy {{name}} --on {{branch}} --from {{repo}}'))
+      .toEqual({ auto: ['branch', 'repo'], ask: ['name'] })
+  })
+
+  it('reports nothing for a command with no placeholders', () => {
+    expect(placeholders('bash gate.sh')).toEqual({ auto: [], ask: [] })
+  })
+
+  it('lists each name once, in first-appearance order', () => {
+    expect(placeholders('{{repo}} {{branch}} {{repo}}')).toEqual({ auto: ['repo', 'branch'], ask: [] })
+  })
+})
+
 describe('substitute', () => {
   it('fills placeholders from the supplied values', () => {
     expect(substitute(['gt', 'create', '{{branch}}'], { branch: 'feat-x' }))
@@ -142,8 +158,45 @@ describe('parseCommandsFile', () => {
     ['a missing run', { label: 'x' }],
     ['an unknown cwd', { label: 'x', run: 'y', cwd: 'elsewhere' }],
     ['a non-boolean shell', { label: 'x', run: 'y', shell: 'true' }],
+    ['an unknown width', { label: 'x', run: 'y', width: 'wide' }],
     ['a non-object', 'just a string']
   ])('drops an entry with %s but keeps its siblings', (_case, bad) => {
+    expect(parseCommandsFile({ '/repo': [bad, valid] })).toEqual({ '/repo': [valid] })
+  })
+
+  it('keeps a full-width command', () => {
+    const cmd = { label: 'Push branch', run: 'git push', width: 'full' }
+    expect(parseCommandsFile({ '/repo': [cmd] })).toEqual({ '/repo': [cmd] })
+  })
+
+  it('reads a group of commands', () => {
+    const group = { label: 'Deploys', commands: [valid], open: true }
+    expect(parseCommandsFile({ '/repo': [group] })).toEqual({ '/repo': [group] })
+  })
+
+  it('keeps groups and loose commands in the order written', () => {
+    const group = { label: 'Deploys', commands: [valid] }
+    const entries = parseCommandsFile({ '/repo': [valid, group] })['/repo']
+    expect(entries.map(isCommandGroup)).toEqual([false, true])
+  })
+
+  it('omits open when the group does not set it, leaving the default to the UI', () => {
+    expect(parseCommandsFile({ '/repo': [{ label: 'G', commands: [valid] }] })['/repo'][0])
+      .toEqual({ label: 'G', commands: [valid] })
+  })
+
+  it('drops a bad command inside a group but keeps the group', () => {
+    const parsed = parseCommandsFile({ '/repo': [{ label: 'G', commands: [{ run: 'x' }, valid] }] })
+    expect(parsed).toEqual({ '/repo': [{ label: 'G', commands: [valid] }] })
+  })
+
+  it.each([
+    ['a group with no valid commands', { label: 'G', commands: [{ run: 'x' }] }],
+    ['an empty group', { label: 'G', commands: [] }],
+    ['a group with no label', { commands: [{ label: 'x', run: 'y' }] }],
+    ['a non-boolean open', { label: 'G', commands: [{ label: 'x', run: 'y' }], open: 'yes' }],
+    ['a non-array commands', { label: 'G', commands: 'nope' }]
+  ])('drops %s but keeps its siblings', (_case, bad) => {
     expect(parseCommandsFile({ '/repo': [bad, valid] })).toEqual({ '/repo': [valid] })
   })
 
@@ -154,7 +207,12 @@ describe('parseCommandsFile', () => {
   it('accepts the example file it writes, keyed by the real repos', () => {
     const parsed = parseCommandsFile(JSON.parse(exampleCommandsFile(['/a/repo', '/b/repo'])))
     expect(Object.keys(parsed)).toEqual(['/a/repo', '/b/repo'])
-    expect(parsed['/a/repo']).toHaveLength(1)
+    expect(parsed['/a/repo']).toHaveLength(2)
+  })
+
+  it('seeds an example group, so grouping is discoverable from the file', () => {
+    const entries = parseCommandsFile(JSON.parse(exampleCommandsFile(['/a/repo'])))['/a/repo']
+    expect(entries.filter(isCommandGroup)).toHaveLength(1)
   })
 
   // The bug this guards: a sample path in the seeded file matches no repo, so

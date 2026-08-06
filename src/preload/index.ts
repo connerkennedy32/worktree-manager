@@ -35,6 +35,18 @@ const api: Api = {
   listRepoCommands: (p) => ipcRenderer.invoke(IPC.listRepoCommands, p),
   runRepoCommand: (req) => ipcRenderer.invoke(IPC.runRepoCommand, req),
   openRepoCommandsFile: () => ipcRenderer.invoke(IPC.openRepoCommandsFile),
+  readAllRepoCommands: () => ipcRenderer.invoke(IPC.readAllRepoCommands),
+  saveRepoCommands: (repoPath, entries) => ipcRenderer.invoke(IPC.saveRepoCommands, repoPath, entries),
+  onCommandsChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.commandsChanged, h as any)
+    return () => ipcRenderer.removeListener(IPC.commandsChanged, h as any)
+  },
+  onMenuEditCommands: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuEditCommands, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuEditCommands, h as any)
+  },
   copyText: (text) => clipboard.writeText(text),
   onGitOutput: (cb) => {
     const h = (_e: unknown, p: string, chunk: string) => cb(p, chunk)

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs'
 import { join, basename, extname } from 'path'
-import type { RepoCommand } from '@shared/ipc-types'
+import type { RepoCommandEntry } from '@shared/ipc-types'
 import { repoRoot } from './git/repo-root'
 import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
 
@@ -119,7 +119,7 @@ export async function removeRepo(path: string): Promise<string[]> {
 }
 
 // Keyed by main-checkout path, so every worktree of a repo gets the same commands.
-export async function listRepoCommands(worktreePath: string): Promise<RepoCommand[]> {
+export async function listRepoCommands(worktreePath: string): Promise<RepoCommandEntry[]> {
   const f = commandsFile()
   if (!existsSync(f)) return []
   try {
@@ -127,6 +127,45 @@ export async function listRepoCommands(worktreePath: string): Promise<RepoComman
     const parsed: unknown = JSON.parse(readFileSync(f, 'utf8'))
     return parseCommandsFile(parsed)[root] ?? []
   } catch { return [] }
+}
+
+// The whole file at once, for the commands editor. Repos with no entries are
+// still keyed (as []), so the editor can list every connected repo without
+// having to reconcile two sources.
+export async function readAllRepoCommands(): Promise<Record<string, RepoCommandEntry[]>> {
+  const repos = await listRepos()
+  const f = commandsFile()
+  let parsed: Record<string, RepoCommandEntry[]> = {}
+  if (existsSync(f)) {
+    try { parsed = parseCommandsFile(JSON.parse(readFileSync(f, 'utf8'))) } catch { parsed = {} }
+  }
+  return Object.fromEntries(repos.map(r => [r, parsed[r] ?? []]))
+}
+
+// Rewrites one repo's entries and leaves the rest of the file byte-for-byte
+// alone in content — other repos, and the `//` help comments, are read back
+// from the raw JSON rather than from the parsed form, so saving from the editor
+// can never drop a key the parser doesn't model. A repo with no commands has
+// its key removed rather than written as [], so the file doesn't accumulate
+// empty entries for every repo ever opened in the editor.
+export async function saveRepoCommands(
+  repoPath: string, entries: RepoCommandEntry[]
+): Promise<RepoCommandEntry[]> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const f = commandsFile()
+  let raw: Record<string, unknown> = {}
+  if (existsSync(f)) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(f, 'utf8'))
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        raw = parsed as Record<string, unknown>
+      }
+    } catch { raw = {} }
+  }
+  if (entries.length) raw[repoPath] = entries
+  else delete raw[repoPath]
+  writeFileSync(f, `${JSON.stringify(raw, null, 2)}\n`)
+  return parseCommandsFile(raw)[repoPath] ?? []
 }
 
 export async function openRepoCommandsFile(): Promise<void> {

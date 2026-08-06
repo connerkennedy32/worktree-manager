@@ -62,10 +62,32 @@ export interface RepoCommand {
   // prompted for.
   run: string
   cwd?: 'worktree' | 'repo'   // default 'worktree'
+  // How much of the two-column action row the button takes. 'full' spans both
+  // columns, for a label that would otherwise be truncated. Default 'half'.
+  width?: 'half' | 'full'
   // With shell: true, `run` is handed to `sh -c` verbatim after substitution
   // instead of being tokenized, so `&&`, pipes, redirects and `&` work. Opt-in
   // because it also means a {{placeholder}} value is interpreted by the shell.
   shell?: boolean
+}
+
+// A named, collapsible set of buttons. Groups don't nest: one level keeps the
+// panel scannable, and a group inside a group would be a folder tree, not a
+// button bar.
+export interface RepoCommandGroup {
+  label: string
+  commands: RepoCommand[]
+  // Whether the group starts open. Default false — the point of a group is to
+  // get its buttons out of the way until they're wanted.
+  open?: boolean
+}
+
+// The commands array for a repo holds either kind, in the order written, so a
+// file with no groups behaves exactly as it did before.
+export type RepoCommandEntry = RepoCommand | RepoCommandGroup
+
+export function isCommandGroup(entry: RepoCommandEntry): entry is RepoCommandGroup {
+  return Array.isArray((entry as RepoCommandGroup).commands)
 }
 
 export interface RunRepoCommandRequest {
@@ -139,9 +161,18 @@ export interface Api {
   // Fetch trunk and merge it into this worktree's branch.
   syncWithTrunk(worktreePath: string): Promise<SyncOutcome>
   gtCreate(req: GtCreateRequest): Promise<CommandOutcome>
-  listRepoCommands(worktreePath: string): Promise<RepoCommand[]>
+  listRepoCommands(worktreePath: string): Promise<RepoCommandEntry[]>
   runRepoCommand(req: RunRepoCommandRequest): Promise<CommandOutcome>
   openRepoCommandsFile(): Promise<void>
+  // Every connected repo's commands, for the editor. Keyed by repo path, with
+  // an empty array for a repo that has none yet.
+  readAllRepoCommands(): Promise<Record<string, RepoCommandEntry[]>>
+  // Replace one repo's entries. Returns them as re-parsed from disk, so the
+  // editor shows what was actually stored rather than what it sent.
+  saveRepoCommands(repoPath: string, entries: RepoCommandEntry[]): Promise<RepoCommandEntry[]>
+  onMenuEditCommands(cb: () => void): () => void
+  // Fires after the editor writes commands.json, so open panels re-read it.
+  onCommandsChanged(cb: () => void): () => void
   // Live output of the git commands a branch action runs, so the panel can show
   // what a terminal would. Chunks arrive as git writes them.
   onGitOutput(cb: (worktreePath: string, chunk: string) => void): () => void
@@ -204,6 +235,8 @@ export const IPC = {
   gtCreate: 'stack:gtCreate',
   listRepoCommands: 'cmd:list', runRepoCommand: 'cmd:run',
   openRepoCommandsFile: 'cmd:openFile',
+  readAllRepoCommands: 'cmd:readAll', saveRepoCommands: 'cmd:save',
+  menuEditCommands: 'menu:editCommands', commandsChanged: 'cmd:changed',
   gitOutput: 'git:output',
   openLazygit: 'term:lazygit',
   openInEditor: 'editor:open',

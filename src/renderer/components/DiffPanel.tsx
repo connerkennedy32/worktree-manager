@@ -2,16 +2,35 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../state/store'
 import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-files'
 import { InputsPromptModal } from './InputsPromptModal'
-import type { RepoCommand } from '@shared/ipc-types'
+import type { RepoCommand, RepoCommandEntry } from '@shared/ipc-types'
+import { isCommandGroup } from '@shared/ipc-types'
 import { promptVars } from '@shared/repo-commands'
+import './diff-panel.css'
 
-// The outlined style shared by the action-row buttons, matching the header's
-// VS Code button.
-const actionButton: React.CSSProperties = {
-  background: 'none', border: '1px solid #444', borderRadius: 4, color: '#ddd',
-  cursor: 'pointer', fontSize: 11, padding: '5px 8px', whiteSpace: 'nowrap',
-  overflow: 'hidden', textOverflow: 'ellipsis'
-}
+// Stroked icons rather than the glyphs this panel used to borrow from the text
+// font (⟳ ⧉ ↩ ▸): those render at whatever weight and baseline the font
+// happens to give them, which is why the action row never looked level.
+const Icon = ({ d, size = 13 }: { d: string; size?: number }) => (
+  <svg viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor"
+       strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d={d} />
+  </svg>
+)
+const ICONS = {
+  chevron: 'M6 3.5 10.5 8 6 12.5',
+  sync: 'M13.5 7a5.5 5.5 0 1 0-1.2 4.3M13.5 3v4h-4',
+  copy: 'M5.5 5.5V3.75A1.25 1.25 0 0 1 6.75 2.5h5.5a1.25 1.25 0 0 1 1.25 1.25v5.5a1.25 1.25 0 0 1-1.25 1.25H10.5M3.75 5.5h5.5a1.25 1.25 0 0 1 1.25 1.25v5.5a1.25 1.25 0 0 1-1.25 1.25h-5.5A1.25 1.25 0 0 1 2.5 12.25v-5.5A1.25 1.25 0 0 1 3.75 5.5Z',
+  check: 'M3 8.5 6.5 12 13 4.5',
+  close: 'M4 4l8 8M12 4l-8 8',
+  terminal: 'M3.5 4.5 6.5 8l-3 3.5M8.5 11.5h4',
+  push: 'M8 13V3.5M8 3.5 4.5 7M8 3.5 11.5 7',
+  plus: 'M8 4v8M4 8h8',
+  minus: 'M4 8h8',
+  undo: 'M3 8h7a3 3 0 0 1 0 6H7M3 8l3-3M3 8l3 3',
+  play: 'M5.5 3.5 12 8l-6.5 4.5Z',
+  // A caret in a field: this button opens a prompt before it runs anything.
+  prompt: 'M2.5 3.5h11v9h-11zM5 6.5 7 8l-2 1.5M8.5 9.5h3'
+} as const
 
 // Diffs are not rendered here — clicking a row opens DiffModal. This panel is the
 // file list, the staging surface, and the commit box.
@@ -36,13 +55,21 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const [result, setResult] = useState<{
     ok: boolean
     message: string
-    source: 'sync' | 'push' | 'branch' | 'command'
+    source: 'sync' | 'push' | 'command'
   }>()
   const [syncing, setSyncing] = useState(false)
-  const [running, setRunning] = useState<string>()
-  const [commands, setCommands] = useState<RepoCommand[]>([])
-  // Either the gt-create prompt, or a configured command awaiting its input.
-  const [prompt, setPrompt] = useState<'branch' | RepoCommand>()
+  // Identified by position ("2", or "2.1" inside a group), not by label: the
+  // same command may legitimately appear both loose and inside a group, and
+  // keying this by label would light up both buttons and make React's list keys
+  // collide.
+  const [running, setRunning] = useState<{ id: string; label: string }>()
+  const [commands, setCommands] = useState<RepoCommandEntry[]>([])
+  // Which command groups are expanded, keyed by group label. Kept per session
+  // rather than seeded fresh from `open` on every worktree switch, so a group
+  // you opened stays open while you move between worktrees of the same repo.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  // A configured command awaiting the values for its {{placeholders}}.
+  const [prompt, setPrompt] = useState<{ id: string; cmd: RepoCommand }>()
   const [copied, setCopied] = useState(false)
   // Live git output for the running action. Undefined means no popout.
   const [terminal, setTerminal] = useState<string>()
@@ -64,11 +91,17 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   // A result from one worktree must not linger over another.
   useEffect(() => { setResult(undefined); setTerminal(undefined) }, [selected])
 
+  // Re-read on every worktree switch and whenever the editor writes the file,
+  // so a command you just added is on the panel before the modal has finished
+  // closing.
   useEffect(() => {
     if (!selected) { setCommands([]); return }
     let cancelled = false
-    window.api.listRepoCommands(selected).then(c => { if (!cancelled) setCommands(c) })
-    return () => { cancelled = true }
+    const load = () => window.api.listRepoCommands(selected)
+      .then(c => { if (!cancelled) setCommands(c) })
+    load()
+    const off = window.api.onCommandsChanged(load)
+    return () => { cancelled = true; off() }
   }, [selected])
 
   // Chunks arrive as git writes them, so the popout fills in during a slow
@@ -163,29 +196,11 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     } finally { setSyncing(false) }
   }
 
-  // gt create commits what's staged, so with nothing staged it would make an
-  // empty branch and leave the work behind — stage everything in that case.
-  const doGtCreate = async (branch: string) => {
-    if (!selected) return
-    setRunning('gt create')
-    setResult(undefined)
-    setTerminal('')
-    try {
-      const outcome = await window.api.gtCreate({
-        worktreePath: selected, branch, message: msg.trim(), stageAll: stagedCount === 0
-      })
-      setResult({ ...outcome, source: 'branch' })
-      if (outcome.ok) setMsg('')
-      await refreshStatus(selected)
-      await refreshWorktrees()
-    } finally { setRunning(undefined) }
-  }
-
   // A configured command can do anything — create a worktree, run a gate — so
   // both the worktree list and the status are refreshed after every one.
-  const doRepoCommand = async (command: RepoCommand, inputs?: Record<string, string>) => {
+  const doRepoCommand = async (id: string, command: RepoCommand, inputs?: Record<string, string>) => {
     if (!selected) return
-    setRunning(command.label)
+    setRunning({ id, label: command.label })
     setResult(undefined)
     setTerminal('')
     try {
@@ -198,9 +213,37 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     } finally { setRunning(undefined) }
   }
 
-  const startRepoCommand = (command: RepoCommand) => {
-    if (promptVars(command.run).length) setPrompt(command)
-    else doRepoCommand(command)
+  const startRepoCommand = (id: string, command: RepoCommand) => {
+    if (promptVars(command.run).length) setPrompt({ id, cmd: command })
+    else doRepoCommand(id, command)
+  }
+
+  // Shared by the top-level buttons and the ones inside a group, so a grouped
+  // command behaves identically to an ungrouped one.
+  const commandButton = (cmd: RepoCommand, id: string): ReactNode => {
+    // Clicking this one opens a dialog rather than running immediately, which
+    // is worth knowing before you click — especially next to buttons that fire
+    // straight away.
+    const asks = promptVars(cmd.run)
+    return (
+      <button key={id} className="dp-action" onClick={() => startRepoCommand(id, cmd)}
+              disabled={!selected || busy}
+              style={cmd.width === 'full' ? { gridColumn: '1 / -1' } : undefined}
+              title={`${cmd.run}${cmd.cwd === 'repo' ? '  (in the repo root)' : ''}` +
+                     (asks.length ? `\n\nAsks for ${asks.join(', ')} first` : '')}>
+        {/* The pulsing dot replaces the glyph while it runs, so the label keeps
+            its full width instead of gaining a trailing ellipsis. */}
+        {running?.id === id
+          ? <span className="dp-pulse" />
+          : <span className="dp-action-glyph"><Icon d={ICONS.play} size={11} /></span>}
+        <span className="dp-action-label">{cmd.label}</span>
+        {asks.length > 0 && running?.id !== id && (
+          <span className="dp-action-asks" aria-label={`Asks for ${asks.join(', ')}`}>
+            <Icon d={ICONS.prompt} size={11} />
+          </span>
+        )}
+      </button>
+    )
   }
 
   // The command the Sync button runs, for pasting into a terminal. Falls back to
@@ -230,41 +273,30 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   }
 
   const renderRow = (row: Row) => (
-    <div key={row.key} onClick={() => setOpenDiff(row)} title={row.path}
-         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-                  borderBottom: '1px solid #2a2a2a', background: 'rgba(37, 37, 38, 0.5)',
-                  fontSize: 12, cursor: 'pointer' }}>
-      <span title={row.committed ? 'committed' : row.staged ? 'staged' : 'unstaged'}
-            style={{ color: codeColor(row.code), width: 12, textAlign: 'center' }}>{row.code}</span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                     direction: 'rtl', textAlign: 'left' }}>{row.path}</span>
+    <div key={row.key} className="dp-row" onClick={() => setOpenDiff(row)} title={row.path}>
+      <span className="dp-row-code" style={{ color: codeColor(row.code) }}
+            title={row.committed ? 'committed' : row.staged ? 'staged' : 'unstaged'}>
+        {row.code}
+      </span>
+      <span className="dp-row-path">{row.path}</span>
       {(row.add || row.del) && (
-        <span style={{ flexShrink: 0, display: 'flex', gap: 5, fontFamily: 'Menlo, monospace',
-                       fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+        <span className="dp-row-stat">
           {row.add ? <span style={{ color: '#6a9955' }}>+{row.add}</span> : null}
           {row.del ? <span style={{ color: '#c94a4a' }}>−{row.del}</span> : null}
         </span>
       )}
       {/* Staging and discarding an already-committed file are both meaningless. */}
       {!row.committed && (
-        <>
-          <button onClick={e => { e.stopPropagation(); discardRow(row) }}
-                  title="Discard changes"
-                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                           fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#f28b82')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
-            ↩
+        <span className="dp-row-actions">
+          <button className="dp-icon-btn danger" title="Discard changes"
+                  onClick={e => { e.stopPropagation(); discardRow(row) }}>
+            <Icon d={ICONS.undo} size={12} />
           </button>
-          <button onClick={e => { e.stopPropagation(); stageRow(row) }}
-                  title={row.staged ? 'Unstage' : 'Stage'}
-                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                           fontSize: 15, lineHeight: 1, padding: '0 2px', width: 18 }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
-            {row.staged ? '−' : '+'}
+          <button className="dp-icon-btn" title={row.staged ? 'Unstage' : 'Stage'}
+                  onClick={e => { e.stopPropagation(); stageRow(row) }}>
+            <Icon d={row.staged ? ICONS.minus : ICONS.plus} size={12} />
           </button>
-        </>
+        </span>
       )}
     </div>
   )
@@ -274,16 +306,11 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     const open = openSections[id]
     return (
       <>
-        <div onClick={() => setOpenSections(s => ({ ...s, [id]: !s[id] }))}
-             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', cursor: 'pointer',
-                      position: 'sticky', top: 0, zIndex: 1,
-                      borderTop: '1px solid #333', borderBottom: '1px solid #2a2a2a',
-                      background: '#2d2d2d', fontSize: 11, fontWeight: 600,
-                      letterSpacing: 0.5, textTransform: 'uppercase', color: '#bbb' }}>
-          <span style={{ width: 12, color: '#888' }}>{open ? '▾' : '▸'}</span>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <div className="dp-section" onClick={() => setOpenSections(s => ({ ...s, [id]: !s[id] }))}>
+          <span className={`dp-chevron${open ? ' open' : ''}`}><Icon d={ICONS.chevron} size={11} /></span>
+          <span className="dp-section-label">{label}</span>
           {action}
-          <span style={{ color: '#888', fontWeight: 400 }}>{sectionRows.length}</span>
+          <span className="dp-group-count">{sectionRows.length}</span>
         </div>
         {open && sectionRows.map(renderRow)}
       </>
@@ -292,184 +319,172 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
 
   if (collapsed) {
     return (
-      <div onClick={onToggle} title="Show changes"
-           style={{ width: 34, borderLeft: '1px solid #333', background: 'rgba(30, 30, 30, 0.55)', color: '#ddd',
-                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    paddingTop: 10, gap: 8, flexShrink: 0, fontFamily: 'system-ui' }}>
-        <span style={{ fontSize: 14 }}>‹</span>
-        <span style={{ writingMode: 'vertical-rl', fontSize: 12, letterSpacing: 1 }}>
-          CHANGES{total ? ` (${total})` : ''}
+      <div className="dp-rail" onClick={onToggle} title="Show changes">
+        <span className="dp-chevron" style={{ transform: 'rotate(180deg)' }}>
+          <Icon d={ICONS.chevron} size={12} />
         </span>
+        <span className="dp-rail-label">Changes</span>
+        {total > 0 && <span className="dp-rail-count">{total}</span>}
       </div>
     )
   }
 
   return (
-    <div style={{ width, borderLeft: '1px solid #333', background: 'rgba(30, 30, 30, 0.55)', color: '#d4d4d4',
-                  display: 'flex', flexDirection: 'column', flexShrink: 0, fontFamily: 'system-ui' }}>
-      <div style={{ padding: '6px 10px', borderBottom: '1px solid #333', display: 'flex',
-                    alignItems: 'center', gap: 8, fontSize: 12 }}>
-        <button onClick={onToggle} title="Collapse" style={{ background: 'none', border: 'none',
-                color: '#ddd', cursor: 'pointer', fontSize: 14 }}>›</button>
-        <span style={{ fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          Changes {branch ? `· ${branch}` : ''}
+    <div className="dp-panel" style={{ width }}>
+      <div className="dp-header">
+        <button className="dp-icon-btn" onClick={onToggle} title="Collapse">
+          <Icon d={ICONS.chevron} size={12} />
+        </button>
+        <span className="dp-title">
+          <span className="dp-title-name">Changes</span>
+          {branch && <span className="dp-title-branch" title={branch}>{branch}</span>}
         </span>
         {selected && (
-          <button onClick={() => window.api.openInEditor(selected)} title="Open worktree in VS Code"
-                  style={{ background: 'none', border: '1px solid #444', borderRadius: 4, color: '#ddd',
-                           cursor: 'pointer', fontSize: 11, padding: '2px 8px', whiteSpace: 'nowrap' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#3c424e' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
+          <button className="dp-action" style={{ flex: 'none', padding: '3px 9px' }}
+                  onClick={() => window.api.openInEditor(selected)} title="Open worktree in VS Code">
             VS Code
           </button>
         )}
-        <span style={{ color: '#888' }}>{stagedCount}/{total} staged</span>
+        {total > 0 && (
+          <span className="dp-count" title={`${stagedCount} of ${total} changed files staged`}>
+            <strong>{stagedCount}</strong>/{total}
+          </span>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        {!selected && <div style={{ padding: 12, color: '#888', fontSize: 12 }}>Select a worktree.</div>}
+        {!selected && <div className="dp-empty">Select a worktree.</div>}
         {selected && total === 0 && (
-          <div style={{ padding: 12, color: '#888', fontSize: 12 }}>
-            {committedRows.length ? 'No working changes.' : 'No changes.'}
-          </div>
+          <div className="dp-empty">{committedRows.length ? 'No working changes.' : 'No changes.'}</div>
         )}
         {renderSection('staged', 'Staged', stagedRows)}
         {renderSection('unstaged', 'Unstaged', unstagedRows,
-          <button onClick={e => { e.stopPropagation(); stageAll() }} title="Stage all"
-                  style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer',
-                           fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-                           letterSpacing: 0.5, padding: '0 2px' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#fff')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#999')}>
+          <button className="dp-section-action" title="Stage all"
+                  onClick={e => { e.stopPropagation(); stageAll() }}>
             Stage all
           </button>)}
         {renderSection('committed', `Committed vs ${committed?.baseBranch ?? ''}`, committedRows)}
       </div>
 
-      <div style={{ borderTop: '1px solid #333', padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Two equal columns: labels stay readable and nothing reflows when one
-            changes length (`Sync with master` on a master repo). */}
+      {/* The footer is two halves separated by a hairline: things you run
+          (sync, branch, repo commands) above, and the commit-and-push flow
+          below. They were one undifferentiated stack of buttons before, which
+          is why the primary action never stood out. */}
+      <div className="dp-footer">
         {terminal !== undefined && (
           // Anchored to the action row rather than inline: it can be tall, and
           // pushing the commit box down mid-sync would move the buttons under
           // the cursor. Sticks around after the command finishes so the output
           // is readable; dismissed by hand or by the next run.
           <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', bottom: 4, left: 0, right: 0, zIndex: 3,
-                          background: '#141415', border: '1px solid #3d3d3d', borderRadius: 4,
-                          boxShadow: '0 6px 18px rgba(0, 0, 0, 0.5)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
-                            borderBottom: '1px solid #2c2c2c', fontSize: 10.5, letterSpacing: 0.5,
-                            textTransform: 'uppercase', color: '#8a8a8a' }}>
-                <span style={{ flex: 1 }}>Terminal{busy ? ' · running' : ''}</span>
-                <button onClick={() => setTerminal(undefined)} title="Hide"
-                        style={{ background: 'none', border: 'none', color: '#8a8a8a',
-                                 cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>
-                  ×
+            <div className="dp-terminal">
+              <div className="dp-terminal-bar">
+                <Icon d={ICONS.terminal} size={11} />
+                <span style={{ flex: 1 }}>{running?.label ?? 'Terminal'}</span>
+                {busy && <span className="dp-pulse" />}
+                <button className="dp-icon-btn" onClick={() => setTerminal(undefined)} title="Hide">
+                  <Icon d={ICONS.close} size={10} />
                 </button>
               </div>
-              <pre ref={terminalRef}
-                   style={{ margin: 0, padding: '6px 8px', maxHeight: 180, overflow: 'auto',
-                            fontFamily: 'Menlo, monospace', fontSize: 11, lineHeight: 1.5,
-                            color: '#cfcfcf', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {terminal || 'Starting…'}
-              </pre>
+              <pre ref={terminalRef} className="dp-terminal-out">{terminal || 'Starting…'}</pre>
             </div>
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-          {/* Two sibling buttons sharing one border, rather than a copy control
+        {/* Two equal columns: labels stay readable and nothing reflows when one
+            changes length (`Sync with master` on a master repo). */}
+        <div className="dp-actions">
+          {/* Two sibling buttons sharing one surface, rather than a copy control
               nested inside the sync button: a disabled <button> swallows clicks
               on everything inside it, so while no worktree is selected — or
               during a sync — the nested copy icon received no events at all. */}
-          <div style={{ ...actionButton, display: 'flex', alignItems: 'center', gap: 6, padding: 0 }}
-               onMouseEnter={e => { e.currentTarget.style.background = '#3c424e' }}
-               onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
-            <button onClick={doSync} disabled={!selected || busy}
-                    title={syncSuccess ? result!.message : `Fetch and merge ${base} into this branch`}
-                    style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', font: 'inherit',
-                             color: syncSuccess ? '#89d185' : '#ddd', textAlign: 'left',
-                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                             padding: '5px 0 5px 8px',
-                             cursor: !selected || busy ? 'default' : 'pointer' }}>
+          <div className="dp-split">
+            <button className={`dp-action${syncSuccess ? ' ok' : ''}`} onClick={doSync}
+                    disabled={!selected || busy}
+                    title={syncSuccess ? result!.message : `Fetch and merge ${base} into this branch`}>
+              {syncing
+                ? <span className="dp-pulse" />
+                : <span className="dp-action-glyph">
+                    <Icon d={syncSuccess ? ICONS.check : ICONS.sync} size={12} />
+                  </span>}
               {/* The outcome replaces the label for a few seconds rather than
                   claiming its own row, so the commit box never moves. */}
-              {syncing ? 'Syncing…' : syncSuccess ? `✓ ${syncSuccess}` : `⟳ Sync with ${base.replace('origin/', '')}`}
+              <span className="dp-action-label">
+                {syncing ? 'Syncing…' : syncSuccess ?? `Sync ${base.replace('origin/', '')}`}
+              </span>
             </button>
-            <button onClick={copySyncCommand} aria-label="Copy sync command"
-                    title={`Copy: ${syncCommand}`}
-                    style={{ flexShrink: 0, background: 'none', border: 'none', font: 'inherit',
-                             color: copied ? '#89d185' : '#999', cursor: 'pointer',
-                             padding: '5px 8px 5px 0' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = copied ? '#89d185' : '#fff' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = copied ? '#89d185' : '#999' }}>
-              {copied ? '✓' : '⧉'}
+            <button className={`dp-icon-btn${copied ? ' ok' : ''}`} onClick={copySyncCommand}
+                    aria-label="Copy sync command" title={`Copy: ${syncCommand}`}>
+              <Icon d={copied ? ICONS.check : ICONS.copy} size={12} />
             </button>
           </div>
 
-          {/* gt create needs a commit message, and the box below is already the
-              one the Commit button uses — so it doubles as this button's -m. */}
-          <button onClick={() => setPrompt('branch')}
-                  disabled={!selected || busy || !msg.trim() || total === 0}
-                  title={!msg.trim()
-                    ? 'Type a commit message below first'
-                    : total === 0
-                      ? 'No changes to put on a branch'
-                      : `gt create <branch> ${stagedCount === 0 ? '-a ' : ''}-m "${msg.trim()}"`}
-                  style={{ ...actionButton, textAlign: 'left',
-                           color: msg.trim() && total ? '#ddd' : '#666',
-                           cursor: !selected || busy || !msg.trim() || total === 0 ? 'default' : 'pointer' }}
-                  onMouseEnter={e => { if (msg.trim() && total && !busy) e.currentTarget.style.background = '#3c424e' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
-            {running === 'gt create' ? 'Creating…' : '⌥ gt create'}
-          </button>
-
-          {commands.map((cmd: RepoCommand) => (
-            <button key={cmd.label} onClick={() => startRepoCommand(cmd)}
-                    disabled={!selected || busy}
-                    title={`${cmd.run}${cmd.cwd === 'repo' ? '  (in the repo root)' : ''}`}
-                    style={{ ...actionButton, textAlign: 'left',
-                             cursor: !selected || busy ? 'default' : 'pointer' }}
-                    onMouseEnter={e => { if (!busy) e.currentTarget.style.background = '#3c424e' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'none' }}>
-              {running === cmd.label ? `${cmd.label}…` : cmd.label}
-            </button>
-          ))}
+          {commands.map((entry: RepoCommandEntry, i: number) => {
+            if (!isCommandGroup(entry)) return commandButton(entry, String(i))
+            const open = openGroups[entry.label] ?? entry.open ?? false
+            // Spans both columns so the container reads as a section rather than
+            // a button that happens to be wide, and its own grid keeps the
+            // buttons inside on the same two-column rhythm as the ones outside.
+            return (
+              <div key={`group:${i}`} className={`dp-group${open ? ' open' : ''}`}>
+                <button className="dp-group-header"
+                        onClick={() => setOpenGroups(g => ({ ...g, [entry.label]: !open }))}
+                        title={`${entry.commands.length} command${entry.commands.length === 1 ? '' : 's'}`}>
+                  <span className={`dp-chevron${open ? ' open' : ''}`}>
+                    <Icon d={ICONS.chevron} size={11} />
+                  </span>
+                  <span className="dp-group-label">{entry.label}</span>
+                  {/* While collapsed, a running command inside would otherwise
+                      give no sign it is running at all. */}
+                  {!open && entry.commands.some((_, j) => running?.id === `${i}.${j}`)
+                    ? <span className="dp-pulse" />
+                    : <span className="dp-group-count">{entry.commands.length}</span>}
+                </button>
+                {open && (
+                  <div className="dp-group-body">
+                    {entry.commands.map((cmd, j) => commandButton(cmd, `${i}.${j}`))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
 
-        {prompt === 'branch' && (
-          <InputsPromptModal title="New branch in this stack"
-                             hint={`gt create <branch> ${stagedCount === 0 ? '-a ' : ''}-m "${msg.trim()}"` +
-                                   (stagedCount === 0 ? ' — nothing is staged, so all changes go on it' : '')}
-                             fields={['branch']}
-                             confirmLabel="Create branch"
-                             onSubmit={v => doGtCreate(v.branch)}
-                             onClose={() => setPrompt(undefined)} />
-        )}
-        {prompt && prompt !== 'branch' && (
-          <InputsPromptModal title={prompt.label}
-                             hint={prompt.run}
-                             fields={promptVars(prompt.run)}
+        <div className="dp-sep" />
+
+        {prompt && (
+          <InputsPromptModal title={prompt.cmd.label}
+                             hint={prompt.cmd.run}
+                             fields={promptVars(prompt.cmd.run)}
                              confirmLabel="Run"
-                             onSubmit={values => doRepoCommand(prompt, values)}
+                             onSubmit={values => doRepoCommand(prompt.id, prompt.cmd, values)}
                              onClose={() => setPrompt(undefined)} />
         )}
 
-        <textarea placeholder="Commit message" value={msg} onChange={e => setMsg(e.target.value)}
-                  rows={2} style={{ resize: 'none', background: '#2d2d2d', color: '#ddd',
-                  border: '1px solid #444', borderRadius: 4, padding: 6, fontFamily: 'system-ui', fontSize: 12 }} />
-        <button onClick={doCommit} disabled={committing || !msg.trim() || stagedCount === 0}
-                style={{ background: stagedCount && msg.trim() ? '#0e639c' : '#3a3a3a', color: '#fff',
-                         border: 'none', borderRadius: 4, padding: '6px', cursor: 'pointer', fontSize: 12 }}>
-          {committing ? 'Committing…' : `Commit ${stagedCount} file${stagedCount === 1 ? '' : 's'}`}
-        </button>
+        {/* Message, subject and action in one card. The count sits beside the
+            button it qualifies — "commit what?" is answered where it's asked,
+            rather than only in the panel header. */}
+        <div className="dp-composer">
+          <textarea className="dp-message" placeholder="Commit message" rows={2}
+                    value={msg} onChange={e => setMsg(e.target.value)} />
+          <div className="dp-composer-bar">
+            <span className="dp-composer-meta">
+              {stagedCount === 0
+                ? total === 0 ? 'Nothing to commit' : 'Nothing staged'
+                : <><strong>{stagedCount}</strong> file{stagedCount === 1 ? '' : 's'} staged</>}
+            </span>
+            <button className="dp-primary" onClick={doCommit}
+                    disabled={committing || !msg.trim() || stagedCount === 0}
+                    title={stagedCount === 0 ? 'Stage a file first'
+                      : !msg.trim() ? 'Type a commit message' : `Commit ${stagedCount} staged file(s)`}>
+              {committing ? 'Committing…' : 'Commit'}
+            </button>
+          </div>
+        </div>
 
         {pending > 0 && (
-          <button onClick={doPush} disabled={pushing}
-                  style={{ background: pushing ? '#3a3a3a' : '#0e639c', color: '#fff',
-                           border: 'none', borderRadius: 4, padding: '6px',
-                           cursor: pushing ? 'default' : 'pointer', fontSize: 12 }}>
+          <button className="dp-primary subtle dp-push" onClick={doPush} disabled={pushing}>
+            {pushing ? <span className="dp-pulse" /> : <Icon d={ICONS.push} size={12} />}
             {pushing ? 'Pushing…' : `Push ${pending} commit${pending === 1 ? '' : 's'}`}
           </button>
         )}
@@ -478,21 +493,13 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
             room — git's failure output is multi-line, and a push that succeeds
             takes its own button away with it. */}
         {result && !syncSuccess && (
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, borderRadius: 4,
-                        padding: '5px 7px', fontSize: 11,
-                        // Success is a one-line confirmation; failure is git's own
-                        // output, so it keeps the monospace treatment and a scroll cap.
-                        fontFamily: result.ok ? 'system-ui' : 'Menlo, monospace',
-                        whiteSpace: 'pre-wrap', maxHeight: 120, overflow: 'auto',
-                        color: result.ok ? '#89d185' : '#f28b82',
-                        background: result.ok ? 'rgba(137, 209, 133, 0.1)' : 'rgba(242, 139, 130, 0.1)',
-                        border: `1px solid ${result.ok ? 'rgba(137, 209, 133, 0.3)' : 'rgba(242, 139, 130, 0.3)'}` }}>
-            <span style={{ flexShrink: 0 }}>{result.ok ? '✓' : '✕'}</span>
-            <span style={{ flex: 1 }}>{result.message}</span>
-            <button onClick={() => setResult(undefined)} title="Dismiss"
-                    style={{ background: 'none', border: 'none', color: 'inherit', opacity: 0.6,
-                             cursor: 'pointer', fontSize: 12, lineHeight: 1, padding: 0, flexShrink: 0 }}>
-              ×
+          <div className={`dp-banner ${result.ok ? 'ok' : 'bad'}`}>
+            <span style={{ flexShrink: 0, paddingTop: 1 }}>
+              <Icon d={result.ok ? ICONS.check : ICONS.close} size={11} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>{result.message}</span>
+            <button className="dp-icon-btn" onClick={() => setResult(undefined)} title="Dismiss">
+              <Icon d={ICONS.close} size={10} />
             </button>
           </div>
         )}

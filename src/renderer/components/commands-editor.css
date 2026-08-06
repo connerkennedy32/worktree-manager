@@ -1,0 +1,258 @@
+/* The repo-commands editor: a form over the same commands.json the Commands
+   menu opens raw. Same visual language as diff-panel.css / sidebar-theme.css. */
+
+.ce-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5vh 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.ce-modal {
+  --ce-accent: #0e639c;
+  --ce-muted: #8a8f98;
+  --ce-hairline: rgba(255, 255, 255, 0.09);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 780px;
+  max-height: 100%;
+  border: 1px solid #3d3d3d;
+  border-radius: 10px;
+  background: #232326;
+  color: #ddd;
+  font-family: system-ui;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+/* --- Chrome ---------------------------------------------------------------- */
+
+.ce-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--ce-hairline);
+}
+.ce-title { font-size: 14px; font-weight: 600; }
+.ce-sub { font-size: 11px; color: var(--ce-muted); }
+
+.ce-repo-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ce-hairline);
+  background: rgba(0, 0, 0, 0.2);
+  overflow-x: auto;
+}
+/* One tab per connected repo. The dot marks a repo with unsaved edits, so
+   switching tabs mid-edit can't hide pending work. */
+.ce-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--ce-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.ce-tab:hover { background: rgba(255, 255, 255, 0.06); color: #ddd; }
+.ce-tab.active {
+  background: rgba(14, 99, 156, 0.22);
+  border-color: #2a9df4;
+  color: #fff;
+}
+.ce-dot { width: 6px; height: 6px; border-radius: 50%; background: #e0b97d; flex-shrink: 0; }
+
+.ce-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+
+.ce-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--ce-hairline);
+  background: rgba(0, 0, 0, 0.2);
+}
+.ce-status { flex: 1; min-width: 0; font-size: 11px; color: var(--ce-muted); }
+.ce-status.warn { color: #e0b97d; }
+.ce-status.ok { color: #89d185; }
+
+/* --- Cards ----------------------------------------------------------------- */
+
+.ce-card {
+  border: 1px solid var(--ce-hairline);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  margin-bottom: 8px;
+}
+.ce-card.group { background: rgba(0, 0, 0, 0.22); }
+.ce-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 7px 7px 10px;
+}
+.ce-card-kind {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ce-muted);
+}
+.ce-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+/* Commands nested in a group are inset so the nesting is visible without a
+   second border competing with the group's own. */
+.ce-group-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px 16px;
+  border-left: 1px solid var(--ce-hairline);
+  margin: 0 8px 8px;
+}
+.ce-group-empty {
+  padding: 4px 0 8px;
+  font-size: 11px;
+  color: var(--ce-muted);
+}
+
+/* --- Fields ---------------------------------------------------------------- */
+
+.ce-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ce-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ce-muted);
+}
+.ce-input {
+  width: 100%;
+  padding: 6px 9px;
+  border: 1px solid var(--ce-hairline);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #eee;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+.ce-input:focus { border-color: var(--ce-accent); background: rgba(0, 0, 0, 0.4); }
+.ce-input::placeholder { color: #63676e; }
+.ce-input.mono { font-family: Menlo, monospace; font-size: 11.5px; }
+.ce-input.invalid { border-color: rgba(242, 139, 130, 0.65); }
+.ce-input.title { font-size: 12.5px; font-weight: 600; }
+
+.ce-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* Checkbox and select share the row under `run`, where the flags that change
+   how it is executed belong. */
+.ce-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #bbb;
+  cursor: pointer;
+  user-select: none;
+}
+.ce-check input { accent-color: var(--ce-accent); margin: 0; cursor: pointer; }
+.ce-select {
+  padding: 3px 6px;
+  border: 1px solid var(--ce-hairline);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #ddd;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* The placeholders the run string declares, split by how they get their value:
+   filled in from context, or prompted for when the button is clicked. */
+.ce-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; font-size: 10.5px; }
+.ce-chip {
+  padding: 1px 6px;
+  border-radius: 9px;
+  font-family: Menlo, monospace;
+  font-size: 10px;
+}
+.ce-chip.auto { background: rgba(255, 255, 255, 0.07); color: var(--ce-muted); }
+.ce-chip.ask { background: rgba(14, 99, 156, 0.25); color: #9dcdf0; }
+.ce-hint { font-size: 10.5px; color: var(--ce-muted); line-height: 1.5; }
+.ce-hint.bad { color: #f28b82; }
+
+/* --- Buttons --------------------------------------------------------------- */
+
+.ce-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--ce-hairline);
+  background: rgba(255, 255, 255, 0.055);
+  color: #ddd;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+.ce-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+.ce-btn:disabled { opacity: 0.45; cursor: default; }
+.ce-btn.primary { background: var(--ce-accent); border-color: var(--ce-accent); color: #fff; }
+.ce-btn.primary:hover:not(:disabled) { background: #1177bb; border-color: #1177bb; }
+.ce-btn.quiet { background: none; border-color: transparent; color: var(--ce-muted); }
+.ce-btn.quiet:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #ddd; }
+
+.ce-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ce-muted);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease;
+}
+.ce-icon-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); color: #fff; }
+.ce-icon-btn:disabled { opacity: 0.25; cursor: default; }
+.ce-icon-btn.danger:hover:not(:disabled) { background: rgba(242, 139, 130, 0.16); color: #f28b82; }
+
+.ce-add-row { display: flex; gap: 6px; padding: 2px 0 4px; }
+
+.ce-empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ce-muted);
+  line-height: 1.7;
+}
