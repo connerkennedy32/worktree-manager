@@ -1,0 +1,27 @@
+src/renderer/components/WorktreeRow.tsx
+  s_5f96099e541340::t_eff29460c4dbce 40-42,47
+  s_5f96099e541340::t_afa47804c89ecc 88-91
+src/renderer/components/sidebar-theme.css
+  s_5f96099e541340::t_85690cf8887846 139-168
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_149002b7be171d 87-124
+  s_5f96099e541340::t_c620af72a2c7e0 7-10
+  s_5f96099e541340::t_1fa232dd16b3c9 141-201,203-207,209
+  s_5f96099e541340::t_3d84fd062ad358 132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "17c185722efb243dd674bff6b1bce8a91fee0c13",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
