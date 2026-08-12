@@ -1,0 +1,47 @@
+tests/renderer/commands-editor-model.test.ts
+  s_dceab01d03ffb3::t_f920d9a199c513 62-70
+src/shared/repo-commands.ts
+  s_dceab01d03ffb3::t_e254a26cce8107 191-193
+  s_dceab01d03ffb3::t_fbdd26a71c4c00 174-176
+  s_dceab01d03ffb3::t_0e0c21b24d5f92 55-79
+  s_dceab01d03ffb3::t_97fe4e61e4dda3 167-168
+src/renderer/components/commands-editor-model.ts
+  s_dceab01d03ffb3::t_7ffdd4490470b3 40-45
+src/renderer/components/DiffPanel.tsx
+  s_dceab01d03ffb3::t_0ca963847a7e03 7
+  s_dceab01d03ffb3::t_063a5004091a5d 232,242,473
+tests/shared/repo-commands.test.ts
+  s_dceab01d03ffb3::t_8132839233fa72 3-4,256-293
+src/main/repo-commands.ts
+  s_dceab01d03ffb3::t_063a5004091a5d 3,25
+tests/main/command-followups.test.ts
+  s_dceab01d03ffb3::t_8132839233fa72 40-69
+src/main/ipc.ts
+  s_dceab01d03ffb3::t_7ff8a612151ce8 196-200
+  s_dceab01d03ffb3::t_6ed1af64fdf291 39-42
+  s_dceab01d03ffb3::t_0850378c087b75 151-155
+src/main/command-followups.ts
+  s_dceab01d03ffb3::t_04341f2c8c36ff 26,28
+  s_dceab01d03ffb3::t_765e6aa4982633 14-15
+  s_dceab01d03ffb3::t_63de967d530df8 13,16-17,19-20
+  s_dceab01d03ffb3::t_4da4ccc59944b6 18
+src/renderer/components/CommandsEditor.tsx
+  s_dceab01d03ffb3::t_0ca963847a7e03 4
+  s_dceab01d03ffb3::t_063a5004091a5d 257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f5ff02c57071eca4a25f32bea95ec298f1494d6d",
+  "prompts": {},
+  "sessions": {
+    "s_dceab01d03ffb3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e7dc0f5-7325-480c-a08b-129101b38c4c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
