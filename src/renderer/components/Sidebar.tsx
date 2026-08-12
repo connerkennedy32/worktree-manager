@@ -187,8 +187,12 @@ export function Sidebar() {
       }}
       onDrop={e => {
         const path = e.dataTransfer.getData(PATH_MIME)
-        if (!path) return
         e.preventDefault(); e.stopPropagation()
+        // HTML5 DnD fires drop on the source element too. Without this guard,
+        // anchoring on w.path would resolve against an array that no longer
+        // contains it (detach already removed it), fall back to "end", and
+        // bump the row to the bottom of its section instead of leaving it put.
+        if (!path || path === w.path) return clearDrag()
         const r = e.currentTarget.getBoundingClientRect()
         const after = e.clientY - r.top > r.height / 2
         // Anchor on this row's own path — a real entry in the target's raw

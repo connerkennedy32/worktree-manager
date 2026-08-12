@@ -105,6 +105,17 @@ describe('moveTo with an anchor', () => {
     expect(pathsOf(dropped, 'g1')).toEqual(['/a', '/b', '/ghost'])
   })
 
+  // HTML5 DnD fires `drop` on the source element too, so a row can be dropped
+  // onto itself. Since detach() removes the path before the anchor lookup
+  // runs, an anchor naming the dragged path's own position would otherwise be
+  // unresolvable and silently fall back to appending, bumping the row to the
+  // bottom instead of leaving it where it was.
+  it('dropping a path onto itself leaves the section order unchanged', () => {
+    const l = base()
+    expect(moveTo(l, '/a', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/a' })).toEqual(l)
+    expect(moveTo(l, '/a', { kind: 'group', id: 'g1' }, { kind: 'before', path: '/a' })).toEqual(l)
+  })
+
   it('a drop rendered onto a ghost-adjacent row still lands next to the right live worktree', () => {
     // Sidebar.tsx only ever anchors on paths it actually rendered, i.e. paths
     // with a live worktree — this simulates dragging /d onto /b (rendered after

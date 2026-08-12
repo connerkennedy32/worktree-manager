@@ -103,6 +103,11 @@ function detach(layout: Layout, path: string): Layout {
 }
 
 export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?: Anchor): Layout {
+  // A path anchored on itself (dropping a row onto its own position — HTML5
+  // DnD fires `drop` on the source element too) can never be resolved: detach
+  // removes it before the anchor lookup runs, so it would otherwise fall back
+  // to appending and bump the row to the end instead of leaving it in place.
+  if (anchor && 'path' in anchor && anchor.path === path) return layout
   if (target.kind === 'group' && !layout.groups.some(g => g.id === target.id)) return layout
   // Dropping on a repo section just means "ungrouped": detaching is the whole job.
   const next = detach(layout, path)
