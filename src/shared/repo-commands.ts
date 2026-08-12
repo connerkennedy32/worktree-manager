@@ -58,6 +58,12 @@ export function substitute(tokens: string[], vars: Record<string, string>): stri
   return tokens.map(t => t.replace(PLACEHOLDER, (_m, name: string) => vars[name] ?? ''))
 }
 
+// Non-shell substitution for a value that is not a command line — a path, or a
+// line of terminal input — so it is not tokenized and not shell-quoted.
+export function substituteText(text: string, vars: Record<string, string>): string {
+  return text.replace(PLACEHOLDER, (_m, name: string) => vars[name] ?? '')
+}
+
 // Single quotes with '\'' for embedded ones: inside single quotes sh treats
 // everything literally, so a commit message with spaces, $, backticks or a
 // stray `;` reaches the command as one argument instead of being run.

@@ -3,6 +3,7 @@ import type { CommandOutcome, RunRepoCommandRequest } from '@shared/ipc-types'
 import { promptVars, substitute, substituteShell, tokenize } from '@shared/repo-commands'
 import { runCommand, lastLine } from './shell'
 import { repoRoot } from './git/repo-root'
+import { resolveFollowUps } from './command-followups'
 
 export async function runRepoCommand(
   req: RunRepoCommandRequest,
@@ -34,5 +35,6 @@ export async function runRepoCommand(
 
   const { code, output } = await runCommand(cwd, file, args, onOutput)
   if (code !== 0) return { ok: false, message: lastLine(output) || `${file} exited ${code}.` }
-  return { ok: true, message: `${command.label} done` }
+  // Only on success: a command that failed should not select or type anything.
+  return { ok: true, message: `${command.label} done`, ...resolveFollowUps(command, cwd, vars) }
 }
