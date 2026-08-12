@@ -9,6 +9,25 @@ export interface Worktree {
   locked?: boolean      // worktree marked locked via `git worktree lock`
 }
 
+// Sidebar organization: user-made groups, plus the paths tucked into the Hidden
+// section. Persisted in userData/layout.json (like names.json) so it survives a
+// renderer storage clear. A path appears in at most one group or in `hidden`;
+// anything absent from both renders under its repo section.
+export interface WorktreeGroup {
+  id: string
+  name: string
+  collapsed: boolean
+  paths: string[]
+}
+
+export interface Layout {
+  groups: WorktreeGroup[]
+  hidden: string[]
+  hiddenCollapsed: boolean
+}
+
+export const emptyLayout = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true })
+
 export interface FileChange {
   path: string          // repo-relative
   index: string         // porcelain XY: staged status char

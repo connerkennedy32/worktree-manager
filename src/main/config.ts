@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs'
 import { join, basename, extname } from 'path'
-import type { RepoCommandEntry } from '@shared/ipc-types'
+import { emptyLayout, type Layout, type RepoCommandEntry } from '@shared/ipc-types'
 import { repoRoot } from './git/repo-root'
 import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
 
@@ -13,6 +13,7 @@ export function configDir(): string {
 function file(): string { return join(configDir(), 'repos.json') }
 function namesFile(): string { return join(configDir(), 'names.json') }
 function commandsFile(): string { return join(configDir(), 'commands.json') }
+function layoutFile(): string { return join(configDir(), 'layout.json') }
 
 export async function listRepos(): Promise<string[]> {
   const f = file()
@@ -45,6 +46,28 @@ export async function setName(path: string, name: string): Promise<Record<string
   else delete names[path]
   writeFileSync(namesFile(), JSON.stringify({ names }, null, 2))
   return names
+}
+
+// Sidebar groups / hidden worktrees. Cosmetic, so a missing or corrupt file
+// degrades to "no groups" rather than throwing — the sidebar then just renders
+// its repo sections, which is exactly the pre-groups behavior.
+export async function readLayout(): Promise<Layout> {
+  const f = layoutFile()
+  if (!existsSync(f)) return emptyLayout()
+  try {
+    const parsed = JSON.parse(readFileSync(f, 'utf8'))
+    return {
+      groups: Array.isArray(parsed?.groups) ? parsed.groups : [],
+      hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
+      hiddenCollapsed: parsed?.hiddenCollapsed !== false
+    }
+  } catch { return emptyLayout() }
+}
+
+export async function writeLayout(layout: Layout): Promise<Layout> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(layoutFile(), `${JSON.stringify(layout, null, 2)}\n`)
+  return layout
 }
 
 // --- Backgrounds -----------------------------------------------------------
