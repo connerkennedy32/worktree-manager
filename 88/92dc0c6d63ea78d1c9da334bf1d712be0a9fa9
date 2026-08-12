@@ -1,0 +1,27 @@
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_edaa06991dff82 158-166
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_e0817f224f177e 226-245
+  s_5f96099e541340::t_da78cd8250c829 5
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_36a1a8ec049ac8 9
+  s_5f96099e541340::t_0092abfb59cd03 165-166
+.superpowers/repo-order-fix-report.md
+  s_5f96099e541340::t_349a61abaac4c6 145-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8892dc0c6d63ea78d1c9da334bf1d712be0a9fa9",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
