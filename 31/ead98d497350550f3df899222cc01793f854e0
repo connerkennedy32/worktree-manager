@@ -1,0 +1,37 @@
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_d93381a44ef03b 45-46
+  s_5f96099e541340::t_92560481ebfee2 21-22,27,33
+  s_5f96099e541340::t_d3fe0928198ad5 73-120
+  s_5f96099e541340::t_9db845d4af39b2 144-154
+  s_5f96099e541340::t_3594f36a74edc0 2,4
+  s_5f96099e541340::t_9f540b7b507936 18
+tests/main/layout-config.test.ts
+  s_5f96099e541340::t_607068fcd8e598 39-71
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_78ea6536dde6de 9
+  s_5f96099e541340::t_d3cd8b9a3c9c3c 151
+  s_5f96099e541340::t_1865bfe9c3075e 239-241
+  s_5f96099e541340::t_c76c62db3be285 194-198
+  s_5f96099e541340::t_163fbc2c966845 128-130,145
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_efec2ff47559f7 63-74,85-94,105,110,113-115
+  s_5f96099e541340::t_54e5059005163e 137-143,145,147-148
+src/main/config.ts
+  s_5f96099e541340::t_36c5838b5e98e6 51-61,71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "31ead98d497350550f3df899222cc01793f854e0",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
