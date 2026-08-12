@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { Worktree, WorktreeStatus } from '@shared/ipc-types'
+import { emptyLayout, type Layout, type Worktree, type WorktreeStatus } from '@shared/ipc-types'
 import type { AgentReport } from '@shared/agent-status'
 import { loadSeenAt, saveSeenAt } from './seen'
+import { deriveSections, navOrder } from '../components/sidebar-layout'
 
 // A file the diff modal can show. Renderer-only view state, so it stays out of
 // @shared/ipc-types — it never crosses the IPC boundary.
@@ -21,6 +22,10 @@ interface State {
   seenAt: Record<string, number>
   names: Record<string, string>
   rename: (p: string, name: string) => Promise<void>
+  // Sidebar organization. Held here rather than in Sidebar.tsx because keyboard
+  // nav (selectRelative) has to walk the same order the sidebar renders.
+  layout: Layout
+  applyLayout: (next: Layout) => void
   // Current backdrop selection ('' = built-in default). Managed from the
   // Background app menu; the renderer just mirrors it to paint the backdrop.
   selectedBackground: string
@@ -44,6 +49,7 @@ interface State {
 export const useStore = create<State>((set, get) => ({
   repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
   names: {},
+  layout: emptyLayout(),
   selectedBackground: '',
   openDiff: null, modalOpen: 0,
   // Names are persisted in the main process (userData/names.json), so an empty
@@ -51,6 +57,13 @@ export const useStore = create<State>((set, get) => ({
   rename: async (p, name) => {
     const names = await window.api.setName(p, name)
     set({ names })
+  },
+  // Optimistic: state updates now, disk catches up. A failed write is logged and
+  // left alone rather than reverted — snapping a row back under the user's cursor
+  // is worse than a layout that repairs itself on the next successful write.
+  applyLayout: (next) => {
+    set({ layout: next })
+    window.api.setLayout(next).catch(e => console.error('layout write failed', e))
   },
   refreshBackground: async () => {
     set({ selectedBackground: await window.api.getSelectedBackground() })
@@ -60,7 +73,7 @@ export const useStore = create<State>((set, get) => ({
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
-    set({ repos, names: await window.api.listNames() })
+    set({ repos, names: await window.api.listNames(), layout: await window.api.getLayout() })
     await get().refreshBackground()
     // The Background app menu changes the selection in the main process; re-read
     // it when notified so the backdrop updates live.
@@ -110,18 +123,20 @@ export const useStore = create<State>((set, get) => ({
     set({ selected: p, seenAt })
     localStorage.setItem('wtm.selected', p)
   },
-  // Step through the flat worktree list, wrapping at both ends. The list is built
-  // in `repos` order and the sidebar groups by repo in that same order, so this
-  // walks the sidebar top-to-bottom as it appears on screen.
+  // Walk the sidebar exactly as rendered: groups first in layout order, then repo
+  // sections, then Hidden — with collapsed sections skipped, so Cmd+Up/Down never
+  // jumps to a row that isn't on screen.
   selectRelative: (delta) => {
-    const { worktrees, selected, modalOpen, openDiff, select } = get()
+    const { worktrees, repos, layout, selected, modalOpen, openDiff, select } = get()
     if (modalOpen > 0 || openDiff) return
-    const n = worktrees.length
+    const order = navOrder(deriveSections(layout, worktrees, repos))
+    const n = order.length
     if (n === 0) return
-    const i = worktrees.findIndex(w => w.path === selected)
-    // i === -1 covers both "nothing selected yet" and a `selected` path that has
-    // since disappeared from the list, which the 3s refresh above can produce.
-    if (i === -1) return select(worktrees[delta === 1 ? 0 : n - 1].path)
-    select(worktrees[(i + delta + n) % n].path)
+    const i = order.indexOf(selected ?? '')
+    // i === -1 covers nothing selected yet, a selection that has disappeared from
+    // the list (the 3s refresh can produce this), and a selection that is hidden
+    // inside a collapsed section.
+    if (i === -1) return select(order[delta === 1 ? 0 : n - 1])
+    select(order[(i + delta + n) % n])
   }
 }))

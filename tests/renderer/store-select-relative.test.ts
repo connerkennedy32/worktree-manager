@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import type { Worktree } from '@shared/ipc-types'
+import type { Layout, Worktree } from '@shared/ipc-types'
 
 // store.ts's `select` persists to localStorage, which doesn't exist in the node
 // test environment. A minimal in-memory stand-in is enough: these tests care about
@@ -15,8 +15,13 @@ const { useStore } = await import('../../src/renderer/state/store')
 const wt = (path: string, repoName = 'repo'): Worktree =>
   ({ path, branch: path.slice(1), head: 'abc1234', isMain: false, repoName })
 
-const seed = (paths: string[], selected?: string) =>
-  useStore.setState({ worktrees: paths.map(p => wt(p)), selected, modalOpen: 0, openDiff: null })
+const seed = (paths: string[], selected?: string, layout?: Partial<Layout>) =>
+  useStore.setState({
+    worktrees: paths.map(p => wt(p)),
+    repos: ['/code/repo'],
+    layout: { groups: [], hidden: [], hiddenCollapsed: true, ...layout },
+    selected, modalOpen: 0, openDiff: null
+  })
 
 const selectedPath = () => useStore.getState().selected
 
@@ -109,5 +114,44 @@ describe('pushModal / popModal', () => {
     popModal()
     useStore.getState().selectRelative(1)
     expect(selectedPath()).toBe('/c')
+  })
+})
+
+describe('selectRelative with a layout', () => {
+  it('follows group order rather than git order', () => {
+    seed(['/a', '/b', '/c'], '/c', {
+      groups: [{ id: 'g1', name: 'G', collapsed: false, paths: ['/c', '/b'] }]
+    })
+    // Sidebar order is /c, /b (group), then /a (repo section).
+    useStore.getState().selectRelative(1)
+    expect(selectedPath()).toBe('/b')
+  })
+
+  it('skips a collapsed group', () => {
+    seed(['/a', '/b', '/c'], '/a', {
+      groups: [{ id: 'g1', name: 'G', collapsed: true, paths: ['/b'] }]
+    })
+    useStore.getState().selectRelative(1)
+    expect(selectedPath()).toBe('/c')
+  })
+
+  it('skips hidden worktrees while the hidden section is collapsed', () => {
+    seed(['/a', '/b', '/c'], '/a', { hidden: ['/b'] })
+    useStore.getState().selectRelative(1)
+    expect(selectedPath()).toBe('/c')
+  })
+
+  it('reaches hidden worktrees when the hidden section is expanded', () => {
+    seed(['/a', '/b', '/c'], '/c', { hidden: ['/b'], hiddenCollapsed: false })
+    useStore.getState().selectRelative(1)
+    expect(selectedPath()).toBe('/b')
+  })
+
+  it('keeps a hidden selection selected and steps forward from the visible list', () => {
+    // Hiding the selected worktree leaves it selected (its terminal stays open),
+    // but it isn't in nav order, so stepping starts from the top.
+    seed(['/a', '/b', '/c'], '/b', { hidden: ['/b'] })
+    useStore.getState().selectRelative(1)
+    expect(selectedPath()).toBe('/a')
   })
 })
