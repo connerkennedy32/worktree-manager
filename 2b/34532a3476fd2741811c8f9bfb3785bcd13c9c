@@ -1,0 +1,21 @@
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_54261e6c048d4f 60-148
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_7f29e8d35c5990 1-123
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "2b34532a3476fd2741811c8f9bfb3785bcd13c9c",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
