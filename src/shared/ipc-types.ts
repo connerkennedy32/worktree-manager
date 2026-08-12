@@ -12,7 +12,7 @@ export interface Worktree {
 // Sidebar organization: user-made groups, plus the paths tucked into the Hidden
 // section. Persisted in userData/layout.json (like names.json) so it survives a
 // renderer storage clear. A path appears in at most one group or in `hidden`;
-// anything absent from both renders under its repo section.
+// anything absent from both renders in the flat ungrouped list.
 export interface WorktreeGroup {
   id: string
   name: string

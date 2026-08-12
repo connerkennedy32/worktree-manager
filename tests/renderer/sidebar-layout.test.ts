@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Layout, Worktree } from '../../src/shared/ipc-types'
-import { deriveSections, navOrder } from '../../src/renderer/components/sidebar-layout'
+import { deriveSections, mainRepoPath, navOrder } from '../../src/renderer/components/sidebar-layout'
 
 const wt = (path: string, repoName: string): Worktree =>
   ({ path, branch: path.slice(1), head: 'abc1234', isMain: false, repoName })
@@ -123,5 +123,33 @@ describe('navOrder', () => {
   it('includes hidden worktrees, last, when the hidden section is expanded', () => {
     expect(build({ hidden: ['/r1/b'], hiddenCollapsed: false }))
       .toEqual(['/r1/a', '/r2/c', '/r1/b'])
+  })
+})
+
+describe('mainRepoPath', () => {
+  it('resolves a main worktree to the repo whose path it equals', () => {
+    const main = wt('/code/api', 'api')
+    expect(mainRepoPath({ ...main, isMain: true }, ['/code/api', '/other/thing'])).toBe('/code/api')
+  })
+
+  it('returns undefined for a non-main worktree', () => {
+    expect(mainRepoPath(wt('/code/api', 'api'), ['/code/api'])).toBeUndefined()
+  })
+
+  it('returns undefined when no connected repo matches, by path or by label', () => {
+    expect(mainRepoPath({ ...wt('/code/api', 'api'), isMain: true }, ['/elsewhere/web'])).toBeUndefined()
+  })
+
+  // The bug: two connected repos with the same directory basename ("api") both
+  // produce repoName "api". Matching on that label alone would resolve BOTH
+  // repos' main rows to whichever repo happens to be first in `repos`,
+  // opening the wrong "Disconnect repo?" modal. Path identity — the main
+  // checkout's own path IS the repo path — disambiguates correctly.
+  it('resolves the correct repo when two connected repos share a basename', () => {
+    const repos = ['/work/api', '/oss/api']
+    const workMain = { ...wt('/work/api', 'api'), isMain: true }
+    const ossMain = { ...wt('/oss/api', 'api'), isMain: true }
+    expect(mainRepoPath(workMain, repos)).toBe('/work/api')
+    expect(mainRepoPath(ossMain, repos)).toBe('/oss/api')
   })
 })

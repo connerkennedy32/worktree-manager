@@ -46,26 +46,6 @@
 }
 .wt-input:focus { border-color: #0e639c; background: rgba(255, 255, 255, 0.08); }
 
-.wt-repo-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #8a8f98;
-}
-.wt-repo-disconnect {
-  opacity: 0;
-  color: #888;
-  cursor: pointer;
-  transition: opacity 0.12s ease, color 0.12s ease;
-}
-.wt-repo-header:hover .wt-repo-disconnect { opacity: 1; }
-.wt-repo-disconnect:hover { color: #f28b82; }
-
 .wt-row {
   padding: 6px 10px 6px 18px;
   cursor: pointer;
@@ -171,7 +151,7 @@
    shifts as the indicator moves between rows. */
 .wt-row.drop-top { box-shadow: inset 0 2px 0 0 #0e639c; }
 .wt-row.drop-bottom { box-shadow: inset 0 -2px 0 0 #0e639c; }
-.wt-group-header.drop-into, .wt-repo-header.drop-into {
+.wt-group-header.drop-into {
   background: rgba(14, 99, 156, 0.25);
 }
 .wt-group-header.drop-above { box-shadow: inset 0 2px 0 0 #0e639c; }

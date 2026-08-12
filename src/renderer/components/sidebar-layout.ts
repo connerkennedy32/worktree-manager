@@ -14,6 +14,21 @@ export function repoLabel(repo: string): string {
   return repo.split('/').filter(Boolean).pop() ?? repo
 }
 
+// Resolves a main checkout's row back to the repo path it belongs to, for the
+// row's disconnect control. Matches on path identity first — a main
+// checkout's path IS the repo path — rather than repoName (a bare basename),
+// since two connected repos with the same directory name (differing only in
+// their parent, e.g. /work/api and /oss/api) would otherwise both compare
+// equal on the label and resolve to whichever repo happens to come first in
+// `repos`, misattributing the row. The label match is kept as a fallback for
+// the case where the main worktree's own path doesn't literally match a
+// connected repo path (never observed in practice, but cheap to keep rather
+// than resolve to nothing).
+export function mainRepoPath(w: Worktree, repos: string[]): string | undefined {
+  if (!w.isMain) return undefined
+  return repos.find(r => r === w.path) ?? repos.find(r => repoLabel(r) === w.repoName)
+}
+
 export function deriveSections(layout: Layout, worktrees: Worktree[]): Section[] {
   const byPath = new Map(worktrees.map(w => [w.path, w]))
   // Claimed paths are consumed as we go, which enforces the "at most one place"

@@ -5,8 +5,8 @@ import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
 import {
-  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, purgePaths, renameGroup, reorderGroup,
-  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
+  addGroup, deleteGroup, deriveSections, mainRepoPath, moveTo, newGroupId, purgePaths, renameGroup,
+  reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
 
@@ -54,10 +54,14 @@ export function Sidebar() {
     if (!pendingRepo) return
     setBusy(true); setError(undefined)
     try {
-      // Capture before the refresh: once the repo is gone its worktrees vanish
-      // from state, and we'd have nothing left to match layout entries against.
-      const name = repoLabel(pendingRepo)
-      const gone = useStore.getState().worktrees.filter(w => w.repoName === name).map(w => w.path)
+      // Ask git directly for this repo's own worktrees rather than matching
+      // the global worktree list by repoName (a bare basename) — two connected
+      // repos with the same directory name would otherwise both match and get
+      // their layout entries purged together. listWorktrees(pendingRepo) is
+      // scoped to exactly this path, so it's correct regardless of naming.
+      // Captured before removeRepo/refresh, since afterward these worktrees
+      // are gone from state and there'd be nothing left to match against.
+      const gone = (await window.api.listWorktrees(pendingRepo)).map(w => w.path)
       const repos = await window.api.removeRepo(pendingRepo)
       useStore.setState({ repos })
       // These worktrees are gone from the app for good, so really forget them —
@@ -96,12 +100,9 @@ export function Sidebar() {
     () => deriveSections(layout, worktrees), [layout, worktrees]
   )
   // Maps a main checkout back to the repo path it came from, so its row can
-  // open the disconnect flow — repoName is only the directory's basename, so
-  // this matches on that rather than assuming the two strings are equal.
-  // Returns undefined (never renders a disconnect ✕) if nothing resolves,
-  // rather than guessing.
-  const repoPathFor = (w: Worktree): string | undefined =>
-    w.isMain ? repos.find(r => repoLabel(r) === w.repoName) : undefined
+  // open the disconnect flow. Returns undefined (never renders a disconnect
+  // ✕) if nothing resolves, rather than guessing.
+  const repoPathFor = (w: Worktree): string | undefined => mainRepoPath(w, repos)
   // Which group header is being renamed, and its draft. Kept separate from the
   // row rename state above so editing a group can't cancel a row edit.
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
