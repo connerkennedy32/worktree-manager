@@ -3,35 +3,11 @@ import { useStore } from '../state/store'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
-import { deriveDot } from '@shared/agent-status'
+import { WorktreeRow } from './WorktreeRow'
 import './sidebar-theme.css'
 
-function MainDotIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="5" cy="5" r="4" fill="currentColor" />
-    </svg>
-  )
-}
-
-function BranchIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="2.5" cy="2.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="2.5" cy="7.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 V7.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 C2.5 6 4 6 5.5 6" stroke="currentColor" strokeWidth="1.2" fill="none" />
-      <circle cx="7" cy="6" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  )
-}
-
-function WorkingSpinner() {
-  return <span className="wt-row-spinner" title="Agent working" />
-}
-
 export function Sidebar() {
-  const { worktrees, statuses, agentStatuses, seenAt, names, rename, selected, select, refreshWorktrees, repos } = useStore()
+  const { worktrees, statuses, names, rename, selected, select, refreshWorktrees, repos } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string>()
@@ -138,53 +114,21 @@ export function Sidebar() {
                 <span className="wt-repo-disconnect" title="Disconnect repo"
                       onClick={() => setPendingRepo(repo)}>✕</span>
               </div>
-              {repoWorktrees.map(w => {
-                const count = statuses[w.path]?.changeCount ?? 0
-                const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
-                return (
-                  <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}`}
-                       onClick={() => select(w.path)}
-                       onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}>
-                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6,
-                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            onDoubleClick={(e) => { e.stopPropagation(); startEdit(w) }}
-                            title="Double-click to rename">
-                        {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
-                        {editingPath === w.path ? (
-                          <input
-                            className="wt-input"
-                            autoFocus
-                            value={draft}
-                            onChange={e => setDraft(e.target.value)}
-                            onClick={e => e.stopPropagation()}
-                            onBlur={commitEdit}
-                            onKeyDown={e => {
-                              e.stopPropagation()
-                              if (e.key === 'Enter') commitEdit()
-                              else if (e.key === 'Escape') setEditingPath(null)
-                            }}
-                            style={{ flex: 1, minWidth: 0 }}
-                          />
-                        ) : (
-                          names[w.path] ?? w.path.split('/').filter(Boolean).pop()
-                        )}
-                      </span>
-                      <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
-                                     whiteSpace: 'nowrap', paddingLeft: 29 }}>
-                        {w.branch}
-                      </span>
-                    </div>
-                    <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                      {count > 0 && <span className="wt-badge">{count}</span>}
-                      {!w.isMain && <span className="wt-row-remove" title="Remove worktree" onClick={(e) => {
-                        e.stopPropagation()
-                        setError(undefined); setPending(w)
-                      }}>✕</span>}
-                    </span>
-                  </div>
-                )
-              })}
+              {repoWorktrees.map(w => (
+                <WorktreeRow
+                  key={w.path}
+                  worktree={w}
+                  editing={editingPath === w.path}
+                  draft={draft}
+                  onDraftChange={setDraft}
+                  onStartEdit={() => startEdit(w)}
+                  onCommitEdit={commitEdit}
+                  onCancelEdit={() => setEditingPath(null)}
+                  onRemove={() => { setError(undefined); setPending(w) }}
+                  onShowTip={e => showTip(e, w.path)}
+                  onHideTip={hideTip}
+                />
+              ))}
             </div>
           )
         })}
