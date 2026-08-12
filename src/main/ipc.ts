@@ -36,6 +36,10 @@ let registered = false
 // needs to observe a worktree's output registers here instead.
 const dataTaps = new Map<string, Set<() => void>>()
 
+// Lines asked for before the renderer has started that path's pty, flushed by
+// term:start. One entry per path: a newer request is the one the user meant.
+const pendingLines = new Map<string, string[]>()
+
 function ptySink(path: string): LineSink {
   return {
     write: data => ptys.write(path, data),
@@ -144,7 +148,11 @@ export async function registerIpc(w: BrowserWindow) {
   })
 
   ipcMain.on(IPC.termRunLines, (_e, p: string, lines: string[]) => {
-    ptys.start(p)
+    // Starting the pty here would spawn the shell before TerminalView exists, so
+    // its first output lands in nothing and the shell gets the daemon's default
+    // size. For a path the client doesn't know yet, wait for term:start — the
+    // renderer owns that first start. A path that never starts never flushes.
+    if (!ptys.has(p)) { pendingLines.set(p, lines); return }
     // Best-effort: a failed write must not take down the command that asked for it.
     void sendLines(lines, ptySink(p)).catch(() => {})
   })
@@ -184,6 +192,11 @@ export async function registerIpc(w: BrowserWindow) {
       send(IPC.termData, p, ptys.getBuffer(p))
     } else {
       ptys.start(p)
+    }
+    const queued = pendingLines.get(p)
+    if (queued) {
+      pendingLines.delete(p)
+      void sendLines(queued, ptySink(p)).catch(() => {})
     }
     const head = await wt.headPath(p).catch(() => undefined)
     watchers.watch(p, () => send(IPC.statusChanged, p), head)

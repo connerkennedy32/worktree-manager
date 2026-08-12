@@ -4,7 +4,7 @@ import { useChangedFiles, codeColor, type Row, type SectionId } from './changed-
 import { InputsPromptModal } from './InputsPromptModal'
 import type { RepoCommand, RepoCommandEntry } from '@shared/ipc-types'
 import { isCommandGroup } from '@shared/ipc-types'
-import { promptVars } from '@shared/repo-commands'
+import { commandPromptVars } from '@shared/repo-commands'
 import './diff-panel.css'
 
 // Stroked icons rather than the glyphs this panel used to borrow from the text
@@ -229,7 +229,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   }
 
   const startRepoCommand = (id: string, command: RepoCommand) => {
-    if (promptVars(command.run).length) setPrompt({ id, cmd: command })
+    if (commandPromptVars(command).length) setPrompt({ id, cmd: command })
     else doRepoCommand(id, command)
   }
 
@@ -239,7 +239,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
     // Clicking this one opens a dialog rather than running immediately, which
     // is worth knowing before you click — especially next to buttons that fire
     // straight away.
-    const asks = promptVars(cmd.run)
+    const asks = commandPromptVars(cmd)
     return (
       <button key={id} className="dp-action" onClick={() => startRepoCommand(id, cmd)}
               disabled={!selected || busy}
@@ -470,7 +470,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
         {prompt && (
           <InputsPromptModal title={prompt.cmd.label}
                              hint={prompt.cmd.run}
-                             fields={promptVars(prompt.cmd.run)}
+                             fields={commandPromptVars(prompt.cmd)}
                              confirmLabel="Run"
                              onSubmit={values => doRepoCommand(prompt.id, prompt.cmd, values)}
                              onClose={() => setPrompt(undefined)} />

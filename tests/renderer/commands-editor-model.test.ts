@@ -59,6 +59,15 @@ describe('clean', () => {
     expect(clean([{ label: 'a', run: 'b', width: 'half' }])).toEqual([{ label: 'a', run: 'b' }])
   })
 
+  it('carries select and terminal through, since the editor has no fields to re-enter them', () => {
+    const cmd = {
+      label: 'Create worktree', run: 'git worktree add x', cwd: 'repo' as const,
+      select: '../.worktrees/{{name}}', terminal: ['tmux new -s {{name}}']
+    }
+    expect(clean([cmd])).toEqual([cmd])
+    expect(clean([{ label: 'G', commands: [cmd] }])).toEqual([{ label: 'G', commands: [cmd] }])
+  })
+
   it('trims a group and its commands, dropping open when false', () => {
     expect(clean([{ label: ' G ', commands: [{ label: ' a ', run: ' b ' }], open: false }]))
       .toEqual([{ label: 'G', commands: [{ label: 'a', run: 'b' }] }])

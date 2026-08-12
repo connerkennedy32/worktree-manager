@@ -37,6 +37,36 @@ describe('resolveFollowUps', () => {
     expect(out.terminal).toEqual([`cc 'it'\\''s'`])
   })
 
+  // A newline in a value would end the typed command at the tty and run the
+  // rest of it as the next command.
+  it('collapses a newline in a value in non-shell mode', () => {
+    const out = resolveFollowUps(
+      { ...base, terminal: ['cc "{{message}}"'] }, '/code/app', { message: 'fix\nrm -rf /' }
+    )
+    expect(out.terminal).toEqual(['cc "fix rm -rf /"'])
+  })
+
+  it('collapses a CRLF in a value in non-shell mode', () => {
+    const out = resolveFollowUps(
+      { ...base, terminal: ['cc "{{message}}"'] }, '/code/app', { message: 'fix\r\nrm -rf /' }
+    )
+    expect(out.terminal).toEqual(['cc "fix rm -rf /"'])
+  })
+
+  it('collapses a newline in a value in shell mode', () => {
+    const out = resolveFollowUps(
+      { ...base, shell: true, terminal: ['cc {{message}}'] }, '/code/app', { message: 'fix\nrm -rf /' }
+    )
+    expect(out.terminal).toEqual(["cc 'fix rm -rf /'"])
+  })
+
+  it('collapses a CRLF in a value in shell mode', () => {
+    const out = resolveFollowUps(
+      { ...base, shell: true, terminal: ['cc {{message}}'] }, '/code/app', { message: 'fix\r\nrm -rf /' }
+    )
+    expect(out.terminal).toEqual(["cc 'fix rm -rf /'"])
+  })
+
   it('resolves an unknown placeholder to empty rather than leaving it literal', () => {
     const out = resolveFollowUps({ ...base, terminal: ['cc {{nope}}'] }, '/code/app', vars)
     expect(out.terminal).toEqual(['cc '])

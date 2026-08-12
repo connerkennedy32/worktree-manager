@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  tokenize, promptVars, placeholders, substitute, substituteShell, parseCommandsFile,
-  exampleCommandsFile
+  tokenize, promptVars, placeholders, commandPromptVars, commandPlaceholders, substitute,
+  substituteShell, parseCommandsFile, exampleCommandsFile
 } from '../../src/shared/repo-commands'
 import { isCommandGroup } from '../../src/shared/ipc-types'
 
@@ -251,5 +251,43 @@ describe('select and terminal follow-ups', () => {
       { label: 'good', run: 'y' }
     ] })['/repo']
     expect(entries.map(e => (e as { label: string }).label)).toEqual(['good'])
+  })
+})
+
+describe('commandPromptVars', () => {
+  const base = { label: 'Create worktree', run: 'git worktree add ../wt/x' }
+
+  it('asks for a placeholder that appears only in select', () => {
+    expect(commandPromptVars({ ...base, select: '../wt/{{name}}' })).toEqual(['name'])
+  })
+
+  it('asks for a placeholder that appears only in a terminal line', () => {
+    expect(commandPromptVars({ ...base, terminal: ['echo {{ticket}}'] })).toEqual(['ticket'])
+  })
+
+  it('lists each name once across run, select and terminal, in first-appearance order', () => {
+    expect(commandPromptVars({
+      label: 'x', run: 'git worktree add -b {{name}} {{worktree}}',
+      select: '../wt/{{name}}', terminal: ['cc {{name}}', 'echo {{ticket}}', 'echo {{name}}']
+    })).toEqual(['name', 'ticket'])
+  })
+
+  it('still excludes implicit vars wherever they appear', () => {
+    expect(commandPromptVars({ label: 'x', run: 'echo hi', select: '{{worktree}}', terminal: ['cc {{branch}}'] }))
+      .toEqual([])
+  })
+})
+
+describe('commandPlaceholders', () => {
+  it('reports auto and ask names from every substituted field', () => {
+    expect(commandPlaceholders({
+      label: 'x', run: 'deploy {{repo}}', select: '../wt/{{name}}',
+      terminal: ['echo {{branch}} {{ticket}}']
+    })).toEqual({ auto: ['repo', 'branch'], ask: ['name', 'ticket'] })
+  })
+
+  it('matches the run-only reading when there are no follow-ups', () => {
+    expect(commandPlaceholders({ label: 'x', run: 'deploy {{name}} --on {{branch}}' }))
+      .toEqual({ auto: ['branch'], ask: ['name'] })
   })
 })

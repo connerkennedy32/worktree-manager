@@ -10,15 +10,22 @@ function realIfPossible(path: string): string {
   try { return realpathSync(path) } catch { return path }
 }
 
-// Placeholders in these fields follow the same rule as `run`: shell mode quotes
-// values for you, plain mode inserts them verbatim.
+// A newline inside a substituted value would end the typed command at the tty
+// and run the rest as the next one, so line breaks in a value collapse to a
+// space — in the value only, never in the author's own template text. Quoting is
+// left alone: shell mode quotes values, plain mode inserts them as written.
+function withoutLineBreaks(vars: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, v.replace(/[\r\n]+/g, ' ')]))
+}
+
 export function resolveFollowUps(
   command: RepoCommand,
   cwd: string,
   vars: Record<string, string>
 ): { select?: string; terminal?: string[] } {
+  const lineVars = withoutLineBreaks(vars)
   const sub = (text: string): string =>
-    command.shell ? substituteShell(text, vars) : substituteText(text, vars)
+    command.shell ? substituteShell(text, lineVars) : substituteText(text, lineVars)
 
   const out: { select?: string; terminal?: string[] } = {}
   if (command.select) out.select = realIfPossible(resolve(cwd, substituteText(command.select, vars)))

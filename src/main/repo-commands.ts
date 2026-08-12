@@ -1,6 +1,6 @@
 import { basename } from 'node:path'
 import type { CommandOutcome, RunRepoCommandRequest } from '@shared/ipc-types'
-import { promptVars, substitute, substituteShell, tokenize } from '@shared/repo-commands'
+import { commandPromptVars, substitute, substituteShell, tokenize } from '@shared/repo-commands'
 import { runCommand, lastLine } from './shell'
 import { repoRoot } from './git/repo-root'
 import { resolveFollowUps } from './command-followups'
@@ -22,7 +22,7 @@ export async function runRepoCommand(
     branch: req.branch ?? '',
     message: req.message ?? ''
   }
-  for (const name of promptVars(command.run)) {
+  for (const name of commandPromptVars(command)) {
     const value = req.inputs?.[name]?.trim()
     if (!value) return { ok: false, message: `${name} is required.` }
     vars[name] = value
