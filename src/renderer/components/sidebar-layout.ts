@@ -61,7 +61,16 @@ export function navOrder(sections: Section[]): string[] {
   return out
 }
 
-export type DropTarget = { kind: 'group'; id: string } | { kind: 'repo'; repo: string } | { kind: 'hidden' }
+// `members` is the repo section's currently rendered paths, in render order —
+// the same array deriveSections just produced for it. moveTo needs this to
+// materialize a COMPLETE order on the first drag: repoOrder starts as {} for
+// every real user, and resolving an anchor against that sparse array (rather
+// than the full rendered section) can never place the dragged row anywhere
+// but the end, since the anchor path itself isn't in the sparse array yet.
+export type DropTarget =
+  | { kind: 'group'; id: string }
+  | { kind: 'repo'; repo: string; members: string[] }
+  | { kind: 'hidden' }
 
 // Where within a target section a dropped path lands, expressed relative to a
 // real neighbour rather than a count. A numeric index breaks in two ways: (1)
@@ -120,10 +129,22 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
   if (target.kind === 'group' && !layout.groups.some(g => g.id === target.id)) return layout
   const next = detach(layout, path)
   // Dropping on a repo section means "ungrouped, in this position" — the same
-  // detach-then-insert pattern as group/hidden, anchored into that repo's order.
+  // detach-then-insert pattern as group/hidden, but first materialized into a
+  // COMPLETE order: start from whatever repoOrder already has (any entry not
+  // in `members` is a ghost — a worktree temporarily gone — and is kept in
+  // place), then append the rest of `members` in their rendered order. Only
+  // then is the anchor resolved and the drag applied, so a second drag has
+  // real positions for every visible row to anchor against.
   if (target.kind === 'repo') {
-    const order = next.repoOrder[target.repo] ?? []
-    return { ...next, repoOrder: { ...next.repoOrder, [target.repo]: insert(order, path, resolveAnchor(order, anchor)) } }
+    const existing = next.repoOrder[target.repo] ?? []
+    const known = new Set(existing)
+    // `members` is the section as rendered before the drop, so it still
+    // includes the dragged path itself (unless it's arriving from elsewhere)
+    // — exclude it here so `complete` is the "rest" array resolveAnchor
+    // expects, the same way detach already stripped it from every other list.
+    const complete = [...existing, ...target.members.filter(p => !known.has(p) && p !== path)]
+    const order = insert(complete, path, resolveAnchor(complete, anchor))
+    return { ...next, repoOrder: { ...next.repoOrder, [target.repo]: order } }
   }
   if (target.kind === 'hidden') return { ...next, hidden: insert(next.hidden, path, resolveAnchor(next.hidden, anchor)) }
   return {

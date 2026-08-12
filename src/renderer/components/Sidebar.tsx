@@ -98,7 +98,7 @@ export function Sidebar() {
   // Rows only carry a worktree's repoName (a directory basename), not the full
   // repo path repoOrder is keyed by. Resolved against the connected repos list,
   // the same match doDisconnectRepo makes in the other direction.
-  const repoPathFor = (w: Worktree) => repos.find(r => repoLabel(r) === w.repoName) ?? w.repoName
+  const repoPathFor = (w: Worktree) => repos.find(r => repoLabel(r) === w.repoName)
   // Which group header is being renamed, and its draft. Kept separate from the
   // row rename state above so editing a group can't cancel a row edit.
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -166,8 +166,15 @@ export function Sidebar() {
       onShowTip={e => showTip(e, w.path)}
       onHideTip={hideTip}
       hidden={isHidden}
-      onToggleHidden={() =>
-        applyLayout(moveTo(layout, w.path, isHidden ? { kind: 'repo', repo: repoPathFor(w) } : { kind: 'hidden' }))}
+      onToggleHidden={() => {
+        if (!isHidden) return applyLayout(moveTo(layout, w.path, { kind: 'hidden' }))
+        // repoPathFor can fail to resolve (no connected repo matches this
+        // worktree's basename) — skip the move rather than write a
+        // repoOrder entry under a key no repo section will ever read.
+        const repo = repoPathFor(w)
+        if (!repo) return
+        applyLayout(moveTo(layout, w.path, { kind: 'repo', repo, members: [] }))
+      }}
       dragging={drag?.kind === 'path' && drag.path === w.path}
       dropEdge={over?.kind === 'row' && over.path === w.path ? over.edge : null}
       onDragStart={e => {
@@ -292,7 +299,7 @@ export function Sidebar() {
           }
           if (section.kind === 'repo') {
             return (
-              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo', repo: section.repo })}>
+              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo', repo: section.repo, members: section.worktrees.map(w => w.path) })}>
                 <div className={`wt-repo-header${
                        over?.kind === 'section' && over.key === `r:${section.repo}` ? ' drop-into' : ''}`}
                      title={section.repo}>
@@ -303,7 +310,7 @@ export function Sidebar() {
                   <span className="wt-repo-disconnect" title="Disconnect repo"
                         onClick={() => setPendingRepo(section.repo)}>✕</span>
                 </div>
-                {renderRows(section.worktrees, false, { kind: 'repo', repo: section.repo })}
+                {renderRows(section.worktrees, false, { kind: 'repo', repo: section.repo, members: section.worktrees.map(w => w.path) })}
               </div>
             )
           }

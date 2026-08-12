@@ -97,6 +97,51 @@ passed) before implementing, then again after: all green.
 Did not launch the Electron app per instructions (`npm run dev` hangs in this
 environment).
 
+## Follow-up: sparse repoOrder never actually reordered a fresh section
+
+Code review caught a real gap: with `repoOrder: {}` (every real user's
+starting state), `moveTo`'s repo branch resolved the anchor against that
+sparse array. The anchor path wasn't in it yet, `resolveAnchor` returned
+`undefined`, and `insert` appended — reproducing the exact reported symptom
+on the very first drag. Upward drags only looked correct by coincidence
+(appending into `[]` happens to land at index 0).
+
+Fix: `DropTarget`'s repo variant now carries `members: string[]` — the
+section's currently rendered paths, in order (`section.worktrees.map(w =>
+w.path)`, which `Sidebar.tsx` already had at both call sites). `moveTo`
+materializes a *complete* order before resolving the anchor: start from
+`repoOrder[repo]` (post-detach, so entries not in `members` are ghosts and
+are kept in place), append whatever's in `members` but not yet in that list
+(minus the dragged path itself, since `members` is captured before the
+drop), then resolve the anchor and insert against that complete array. This
+writes a full ordering on the very first drag, so every subsequent drag has
+real positions for every visible row to anchor against.
+
+`src/renderer/components/Sidebar.tsx`:
+- Both repo `DropTarget` constructions (`sectionDropProps` and `renderRows`
+  call sites) now pass `members: section.worktrees.map(w => w.path)`.
+- `repoPathFor` no longer falls back to the bare `w.repoName` (a basename
+  that's never a `repoOrder` key any section reads) — it returns `undefined`
+  on no match, and `onToggleHidden` now skips the move entirely rather than
+  writing an orphaned key.
+
+New tests in `tests/renderer/sidebar-mutations.test.ts`, all round-tripping
+through `deriveSections` and asserting on the *rendered* order rather than
+`repoOrder` directly, starting from `repoOrder: {}`:
+- a downward drag actually reorders the section (the reported bug, direct repro)
+- an upward drag reorders the section
+- a second drag lands correctly after the first materialized the order
+- a ghost entry is preserved in place while the visible rows reorder around it
+
+Also updated the earlier repo-target tests (written before this follow-up)
+to pass `members` explicitly, since the type grew a required field; their
+assertions are unchanged.
+
+Verified again after this follow-up: `npx tsc --noEmit` clean;
+`npm test` — **32 test files, 377 tests, all passing** (4 net new tests
+versus the previous report; one prior test updated in place for the new
+`members` field, not weakened).
+
 ## Deliberately left alone
 - `Worktree` still only carries `repoName` (a basename), not a repo path
   field. Rather than widen that shared type, `repoPathFor` in `Sidebar.tsx`
