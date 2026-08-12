@@ -166,3 +166,13 @@
 .wt-row:hover .wt-row-hide, .wt-row.selected .wt-row-hide { opacity: 1; }
 .wt-row-hide:hover { color: #fff; }
 
+.wt-row.dragging { opacity: 0.4; }
+/* Insertion line. Inset shadow rather than a border so the row's height never
+   shifts as the indicator moves between rows. */
+.wt-row.drop-top { box-shadow: inset 0 2px 0 0 #0e639c; }
+.wt-row.drop-bottom { box-shadow: inset 0 -2px 0 0 #0e639c; }
+.wt-group-header.drop-into, .wt-repo-header.drop-into {
+  background: rgba(14, 99, 156, 0.25);
+}
+.wt-group-header.drop-above { box-shadow: inset 0 2px 0 0 #0e639c; }
+

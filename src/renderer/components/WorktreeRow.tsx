@@ -40,17 +40,31 @@ export interface WorktreeRowProps {
   // In the Hidden section the same control un-hides, so one prop covers both.
   hidden: boolean
   onToggleHidden: () => void
+  dragging: boolean
+  // Which edge to draw the insertion line on while a drag hovers this row.
+  dropEdge: 'top' | 'bottom' | null
+  onDragStart: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDrop: (e: React.DragEvent) => void
 }
 
 export function WorktreeRow({
   worktree: w, editing, draft, onDraftChange, onStartEdit, onCommitEdit,
-  onCancelEdit, onRemove, onShowTip, onHideTip, hidden, onToggleHidden
+  onCancelEdit, onRemove, onShowTip, onHideTip, hidden, onToggleHidden,
+  dragging, dropEdge, onDragStart, onDragEnd, onDragOver, onDrop
 }: WorktreeRowProps) {
   const { statuses, agentStatuses, seenAt, names, selected, select } = useStore()
   const count = statuses[w.path]?.changeCount ?? 0
   const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
   return (
-    <div className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}`}
+    <div className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}` +
+                     `${dragging ? ' dragging' : ''}${dropEdge ? ` drop-${dropEdge}` : ''}`}
+         draggable={!editing}
+         onDragStart={onDragStart}
+         onDragEnd={onDragEnd}
+         onDragOver={onDragOver}
+         onDrop={onDrop}
          onClick={() => select(w.path)}
          onMouseEnter={onShowTip} onMouseLeave={onHideTip}>
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>

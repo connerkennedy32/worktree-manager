@@ -5,8 +5,8 @@ import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
 import {
-  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, renameGroup,
-  toggleGroupCollapsed, toggleHiddenCollapsed
+  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, renameGroup, reorderGroup,
+  toggleGroupCollapsed, toggleHiddenCollapsed, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
 
@@ -104,7 +104,44 @@ export function Sidebar() {
     setEditingGroup(null)
   }
 
-  const renderRows = (list: Worktree[], isHidden: boolean) => list.map(w => (
+  // Native HTML5 DnD. `drag` is what's being dragged; `over` is where the
+  // insertion indicator currently draws. Both are cleared on drop or dragend.
+  const [drag, setDrag] = useState<{ kind: 'path'; path: string } | { kind: 'group'; id: string } | null>(null)
+  const [over, setOver] = useState<
+    { kind: 'row'; path: string; edge: 'top' | 'bottom' } |
+    { kind: 'section'; key: string } |
+    { kind: 'groupHeader'; id: string } | null
+  >(null)
+
+  const clearDrag = () => { setDrag(null); setOver(null) }
+
+  const PATH_MIME = 'application/x-wtm-path'
+  const GROUP_MIME = 'application/x-wtm-group'
+
+  // Where a row would land: the target section, plus the index within it.
+  const dropRow = (path: string, target: DropTarget, index?: number) => {
+    applyLayout(moveTo(layout, path, target, index))
+    clearDrag()
+  }
+
+  const sectionDropProps = (key: string, target: DropTarget) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(PATH_MIME)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setOver({ kind: 'section', key })
+    },
+    onDrop: (e: React.DragEvent) => {
+      const path = e.dataTransfer.getData(PATH_MIME)
+      if (!path) return
+      e.preventDefault()
+      // No index: a drop on the section itself appends.
+      dropRow(path, target)
+    }
+  })
+
+  const renderRows = (list: Worktree[], isHidden: boolean, target: DropTarget) =>
+    list.map((w, i) => (
     <WorktreeRow
       key={w.path}
       worktree={w}
@@ -120,6 +157,32 @@ export function Sidebar() {
       hidden={isHidden}
       onToggleHidden={() =>
         applyLayout(moveTo(layout, w.path, { kind: isHidden ? 'repo' : 'hidden' }))}
+      dragging={drag?.kind === 'path' && drag.path === w.path}
+      dropEdge={over?.kind === 'row' && over.path === w.path ? over.edge : null}
+      onDragStart={e => {
+        e.dataTransfer.setData(PATH_MIME, w.path)
+        e.dataTransfer.effectAllowed = 'move'
+        setDrag({ kind: 'path', path: w.path })
+      }}
+      onDragEnd={clearDrag}
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes(PATH_MIME)) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        // Halfway down the row flips the indicator to the bottom edge, so the
+        // line always sits at the boundary the drop will actually use.
+        const r = e.currentTarget.getBoundingClientRect()
+        const edge = e.clientY - r.top > r.height / 2 ? 'bottom' : 'top'
+        setOver({ kind: 'row', path: w.path, edge })
+      }}
+      onDrop={e => {
+        const path = e.dataTransfer.getData(PATH_MIME)
+        if (!path) return
+        e.preventDefault(); e.stopPropagation()
+        const r = e.currentTarget.getBoundingClientRect()
+        const after = e.clientY - r.top > r.height / 2
+        dropRow(path, target, i + (after ? 1 : 0))
+      }}
     />
   ))
 
@@ -141,9 +204,33 @@ export function Sidebar() {
         {sections.map(section => {
           if (section.kind === 'group') {
             return (
-              <div key={`g:${section.id}`}>
-                <div className="wt-group-header"
-                     onClick={() => applyLayout(toggleGroupCollapsed(layout, section.id))}>
+              <div key={`g:${section.id}`} {...sectionDropProps(`g:${section.id}`, { kind: 'group', id: section.id })}>
+                <div onClick={() => applyLayout(toggleGroupCollapsed(layout, section.id))}
+                     draggable={editingGroup !== section.id}
+                     onDragStart={e => {
+                       e.dataTransfer.setData(GROUP_MIME, section.id)
+                       e.dataTransfer.effectAllowed = 'move'
+                       setDrag({ kind: 'group', id: section.id })
+                     }}
+                     onDragEnd={clearDrag}
+                     onDragOver={e => {
+                       if (!e.dataTransfer.types.includes(GROUP_MIME)) return
+                       e.preventDefault()
+                       setOver({ kind: 'groupHeader', id: section.id })
+                     }}
+                     onDrop={e => {
+                       const id = e.dataTransfer.getData(GROUP_MIME)
+                       if (!id || id === section.id) return clearDrag()
+                       e.preventDefault(); e.stopPropagation()
+                       // Drop lands the dragged group at the target's current index,
+                       // i.e. immediately above it.
+                       const index = layout.groups.findIndex(g => g.id === section.id)
+                       applyLayout(reorderGroup(layout, id, index))
+                       clearDrag()
+                     }}
+                     className={`wt-group-header${
+                       over?.kind === 'groupHeader' && over.id === section.id ? ' drop-above' : ''}${
+                       over?.kind === 'section' && over.key === `g:${section.id}` ? ' drop-into' : ''}`}>
                   <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
                   {editingGroup === section.id ? (
                     <input className="wt-input" autoFocus value={groupDraft}
@@ -173,7 +260,7 @@ export function Sidebar() {
                     ✕
                   </span>
                 </div>
-                {!section.collapsed && renderRows(section.worktrees, false)}
+                {!section.collapsed && renderRows(section.worktrees, false, { kind: 'group', id: section.id })}
                 {!section.collapsed && section.worktrees.length === 0 && (
                   <div style={{ padding: '6px 10px 8px 24px', color: '#777', fontSize: 11 }}>
                     Drag worktrees here
@@ -184,8 +271,10 @@ export function Sidebar() {
           }
           if (section.kind === 'repo') {
             return (
-              <div key={`r:${section.repo}`}>
-                <div className="wt-repo-header" title={section.repo}>
+              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo' })}>
+                <div className={`wt-repo-header${
+                       over?.kind === 'section' && over.key === `r:${section.repo}` ? ' drop-into' : ''}`}
+                     title={section.repo}>
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
                                  whiteSpace: 'nowrap' }}>
                     {section.name}
@@ -193,20 +282,22 @@ export function Sidebar() {
                   <span className="wt-repo-disconnect" title="Disconnect repo"
                         onClick={() => setPendingRepo(section.repo)}>✕</span>
                 </div>
-                {renderRows(section.worktrees, false)}
+                {renderRows(section.worktrees, false, { kind: 'repo' })}
               </div>
             )
           }
           // Hidden always renders its header, even when empty, so it's a stable
           // drop target — and collapsed by default so it stays out of the way.
           return (
-            <div key="hidden">
-              <div className="wt-group-header" onClick={() => applyLayout(toggleHiddenCollapsed(layout))}>
+            <div key="hidden" {...sectionDropProps('hidden', { kind: 'hidden' })}>
+              <div className={`wt-group-header${
+                     over?.kind === 'section' && over.key === 'hidden' ? ' drop-into' : ''}`}
+                   onClick={() => applyLayout(toggleHiddenCollapsed(layout))}>
                 <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
                 <span style={{ flex: 1 }}>Hidden</span>
                 <span className="wt-group-count">{section.worktrees.length}</span>
               </div>
-              {!section.collapsed && renderRows(section.worktrees, true)}
+              {!section.collapsed && renderRows(section.worktrees, true, { kind: 'hidden' })}
             </div>
           )
         })}
