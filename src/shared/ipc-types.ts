@@ -242,6 +242,9 @@ export interface Api {
   termStart(worktreePath: string): void
   termReset(worktreePath: string): Promise<void>
   termInput(worktreePath: string, data: string): void
+  // Types lines into a worktree's terminal, starting it if needed. Fire-and-
+  // forget: pacing between lines happens in main.
+  termRunLines(worktreePath: string, lines: string[]): void
   termResize(worktreePath: string, cols: number, rows: number): void
   // Brings the app window to the foreground (e.g. when a file drag enters it),
   // so drops land without first clicking the app to focus it.
@@ -287,6 +290,7 @@ export const IPC = {
   previewUrl: 'preview:url',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
+  termRunLines: 'term:runLines',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
   focusWindow: 'win:focus',
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',

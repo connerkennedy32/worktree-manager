@@ -16,6 +16,7 @@ import * as diff from './git/diff'
 import * as files from './files'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
+import { sendLines, type LineSink } from './term-lines'
 import { WatcherManager } from './watcher'
 import { previewUrl } from './preview'
 import { setAgentStatus, seedAgentStatuses, flashDone } from './dock'
@@ -30,6 +31,22 @@ let win: BrowserWindow
 let ptys: PtyDaemonClient
 let watchers: WatcherManager
 let registered = false
+
+// The daemon client delivers output through one callback, so anything else that
+// needs to observe a worktree's output registers here instead.
+const dataTaps = new Map<string, Set<() => void>>()
+
+function ptySink(path: string): LineSink {
+  return {
+    write: data => ptys.write(path, data),
+    onData: cb => {
+      const set = dataTaps.get(path) ?? new Set()
+      dataTaps.set(path, set)
+      set.add(cb)
+      return () => { set.delete(cb); if (!set.size) dataTaps.delete(path) }
+    }
+  }
+}
 
 // node-pty and chokidar callbacks are async and can still fire after the
 // window that owns them has been closed (e.g. buffered pty output draining
@@ -64,7 +81,7 @@ export async function registerIpc(w: BrowserWindow) {
   registered = true
 
   ptys = await PtyDaemonClient.connect(
-    (p, d) => send(IPC.termData, p, d),
+    (p, d) => { send(IPC.termData, p, d); dataTaps.get(p)?.forEach(cb => cb()) },
     (p, r) => { send(IPC.agentStatus, p, r); signalDone(r); setAgentStatus(p, r) }
   )
   // Sessions outlive the app, so agents can already be mid-turn on connect.
@@ -124,6 +141,12 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.on(IPC.openLazygit, (_e, p: string) => {
     ptys.start(p)
     ptys.write(p, 'lazygit\n')
+  })
+
+  ipcMain.on(IPC.termRunLines, (_e, p: string, lines: string[]) => {
+    ptys.start(p)
+    // Best-effort: a failed write must not take down the command that asked for it.
+    void sendLines(lines, ptySink(p)).catch(() => {})
   })
 
   ipcMain.on(IPC.openInEditor, (_e, p: string, file?: string) => {

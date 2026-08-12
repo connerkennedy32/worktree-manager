@@ -65,6 +65,7 @@ const api: Api = {
   termStart: (p) => ipcRenderer.send(IPC.termStart, p),
   termReset: (p) => ipcRenderer.invoke(IPC.termReset, p),
   termInput: (p, d) => ipcRenderer.send(IPC.termInput, p, d),
+  termRunLines: (p, lines) => ipcRenderer.send(IPC.termRunLines, p, lines),
   termResize: (p, c, r) => ipcRenderer.send(IPC.termResize, p, c, r),
   focusWindow: () => ipcRenderer.send(IPC.focusWindow),
   onTermData: (cb) => {
