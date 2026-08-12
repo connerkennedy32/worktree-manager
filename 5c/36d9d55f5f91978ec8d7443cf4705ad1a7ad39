@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-08-12-worktree-groups-design.md
+  s_5f96099e541340::t_a4ee46d24f7c08 1-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5c36d9d55f5f91978ec8d7443cf4705ad1a7ad39",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
