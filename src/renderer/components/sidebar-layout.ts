@@ -155,6 +155,15 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
   }
 }
 
+// Unhiding (or ungrouping outside of a drag) removes the path from wherever
+// it's filed without recording a position for it. Deliberately does not
+// touch repoOrder: an unhidden worktree has no user-chosen position yet, so
+// it should fall back to git order among the unlisted rows, not jump to the
+// top of repoOrder just because that's index 0 of an empty/short array.
+export function ungroup(layout: Layout, path: string): Layout {
+  return detach(layout, path)
+}
+
 export function addGroup(layout: Layout, id: string, name = 'New group'): Layout {
   return { ...layout, groups: [...layout.groups, { id, name, collapsed: false, paths: [] }] }
 }

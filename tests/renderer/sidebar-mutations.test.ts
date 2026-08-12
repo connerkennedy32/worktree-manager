@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { Layout, Worktree } from '../../src/shared/ipc-types'
 import {
   addGroup, deleteGroup, deriveSections, moveTo, newGroupId, purgePaths, renameGroup,
-  reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed
+  reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup
 } from '../../src/renderer/components/sidebar-layout'
 
 const base = (): Layout => ({
@@ -220,6 +220,26 @@ describe('moveTo with a repo target, from a fresh layout (repoOrder: {})', () =>
       { kind: 'before', path: '/a' })
     expect(dropped.repoOrder['/code/r']).toEqual(['/c', '/a', '/ghost', '/b'])
     expect(renderedOrder(dropped)).toEqual(['/c', '/a', '/b'])
+  })
+})
+
+// Unhiding must not acquire a manual position just by leaving the hidden
+// section — it should fall back to git order among the rows repoOrder
+// doesn't mention, not jump to the top of an empty/short repoOrder array.
+describe('ungroup', () => {
+  const wts = [w('/a'), w('/b'), w('/c')]
+  const renderedOrder = (l: Layout) => deriveSections(l, wts, ['/code/r']).find(s => s.kind === 'repo')!.worktrees.map(x => x.path)
+
+  it('returns an unhidden worktree to its git-order position, not the top', () => {
+    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, repoOrder: {} }
+    expect(renderedOrder(l)).toEqual(['/a', '/c'])
+    expect(renderedOrder(ungroup(l, '/b'))).toEqual(['/a', '/b', '/c'])
+  })
+
+  it('lands among the unlisted tail when the repo already has a manual order', () => {
+    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, repoOrder: { '/code/r': ['/c', '/a'] } }
+    // /b isn't in repoOrder, so unhiding it must not write it in at index 0.
+    expect(renderedOrder(ungroup(l, '/b'))).toEqual(['/c', '/a', '/b'])
   })
 })
 

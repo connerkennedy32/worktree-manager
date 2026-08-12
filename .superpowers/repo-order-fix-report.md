@@ -142,6 +142,41 @@ Verified again after this follow-up: `npx tsc --noEmit` clean;
 versus the previous report; one prior test updated in place for the new
 `members` field, not weakened).
 
+## Follow-up: unhide jumping to the top of its repo section
+
+Verified by execution: hide `/b`, section renders `/a /c`; unhide `/b` and it
+rendered `/b /a /c` — jumped to the top instead of returning to its git-order
+slot. Root cause: the unhide call went through `moveTo`'s repo branch with
+`members: []`, so `resolveAnchor` against an empty/short `repoOrder[repo]`
+(no anchor given, either way) landed the path at index 0 of the materialized
+order.
+
+Fix: added `ungroup(layout, path)` to `sidebar-layout.ts` — a thin wrapper
+around the existing `detach()` — and use it for the unhide call in
+`Sidebar.tsx` instead of `moveTo`. Unhiding only removes the path from
+`hidden`; it deliberately writes no `repoOrder` entry, so `deriveSections`
+falls back to git order among the worktrees `repoOrder` doesn't mention —
+exactly where an unhidden row belongs, since it has no user-chosen position
+yet. `moveTo` itself is untouched — drags onto a repo section still position
+exactly as before.
+
+Also removed `repoPathFor` from `Sidebar.tsx`: it existed only to resolve a
+repo path for the old unhide-via-moveTo call, which `ungroup` no longer
+needs.
+
+New tests in `tests/renderer/sidebar-mutations.test.ts` (`describe('ungroup'
+...)`), round-tripping through `deriveSections` and asserting on rendered
+order:
+- unhiding returns a worktree to its git-order slot, not the top, from `repoOrder: {}`
+- unhiding lands among the unlisted tail when the repo already has a manual `repoOrder`
+
+Verified again: `npx tsc --noEmit` clean; `npm test` — **32 test files, 379
+tests, all passing** (2 net new tests versus the previous report). No
+transient failures observed in this run; if the earlier transient the
+reviewer flagged recurs, it should be reported by exact test name rather
+than assumed to be the pty timing test, since this run didn't reproduce
+anything flaky.
+
 ## Deliberately left alone
 - `Worktree` still only carries `repoName` (a basename), not a repo path
   field. Rather than widen that shared type, `repoPathFor` in `Sidebar.tsx`

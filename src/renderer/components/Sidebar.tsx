@@ -6,7 +6,7 @@ import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
 import {
   addGroup, deleteGroup, deriveSections, moveTo, newGroupId, purgePaths, renameGroup, reorderGroup,
-  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, type Anchor, type DropTarget
+  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
 
@@ -95,10 +95,6 @@ export function Sidebar() {
   const sections = useMemo(
     () => deriveSections(layout, worktrees, repos), [layout, worktrees, repos]
   )
-  // Rows only carry a worktree's repoName (a directory basename), not the full
-  // repo path repoOrder is keyed by. Resolved against the connected repos list,
-  // the same match doDisconnectRepo makes in the other direction.
-  const repoPathFor = (w: Worktree) => repos.find(r => repoLabel(r) === w.repoName)
   // Which group header is being renamed, and its draft. Kept separate from the
   // row rename state above so editing a group can't cancel a row edit.
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -166,15 +162,8 @@ export function Sidebar() {
       onShowTip={e => showTip(e, w.path)}
       onHideTip={hideTip}
       hidden={isHidden}
-      onToggleHidden={() => {
-        if (!isHidden) return applyLayout(moveTo(layout, w.path, { kind: 'hidden' }))
-        // repoPathFor can fail to resolve (no connected repo matches this
-        // worktree's basename) — skip the move rather than write a
-        // repoOrder entry under a key no repo section will ever read.
-        const repo = repoPathFor(w)
-        if (!repo) return
-        applyLayout(moveTo(layout, w.path, { kind: 'repo', repo, members: [] }))
-      }}
+      onToggleHidden={() => applyLayout(
+        isHidden ? ungroup(layout, w.path) : moveTo(layout, w.path, { kind: 'hidden' }))}
       dragging={drag?.kind === 'path' && drag.path === w.path}
       dropEdge={over?.kind === 'row' && over.path === w.path ? over.edge : null}
       onDragStart={e => {
