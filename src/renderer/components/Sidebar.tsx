@@ -5,8 +5,8 @@ import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
 import {
-  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, renameGroup, reorderGroup,
-  toggleGroupCollapsed, toggleHiddenCollapsed, type DropTarget
+  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, purgePaths, renameGroup, reorderGroup,
+  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
 
@@ -54,8 +54,15 @@ export function Sidebar() {
     if (!pendingRepo) return
     setBusy(true); setError(undefined)
     try {
+      // Capture before the refresh: once the repo is gone its worktrees vanish
+      // from state, and we'd have nothing left to match layout entries against.
+      const name = repoLabel(pendingRepo)
+      const gone = useStore.getState().worktrees.filter(w => w.repoName === name).map(w => w.path)
       const repos = await window.api.removeRepo(pendingRepo)
       useStore.setState({ repos })
+      // These worktrees are gone from the app for good, so really forget them —
+      // unlike a missing worktree, which render-time filtering handles.
+      applyLayout(purgePaths(useStore.getState().layout, gone))
       await refreshWorktrees()
       // Clear selection if the active worktree belonged to the disconnected repo.
       const stillThere = useStore.getState().worktrees.some(w => w.path === selected)
