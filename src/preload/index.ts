@@ -9,6 +9,8 @@ const api: Api = {
   pickRepo: () => ipcRenderer.invoke(IPC.pickRepo),
   listNames: () => ipcRenderer.invoke(IPC.listNames),
   setName: (p, name) => ipcRenderer.invoke(IPC.setName, p, name),
+  getLayout: () => ipcRenderer.invoke(IPC.getLayout),
+  setLayout: (layout) => ipcRenderer.invoke(IPC.setLayout, layout),
   getSelectedBackground: () => ipcRenderer.invoke(IPC.getSelectedBackground),
   onBackgroundChanged: (cb) => {
     const h = () => cb()

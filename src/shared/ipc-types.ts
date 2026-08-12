@@ -154,6 +154,10 @@ export interface Api {
   // clears the override.
   listNames(): Promise<Record<string, string>>
   setName(worktreePath: string, name: string): Promise<Record<string, string>>
+  // Sidebar groups / hidden worktrees. setLayout replaces the whole document and
+  // echoes back what was stored, matching setName's shape.
+  getLayout(): Promise<Layout>
+  setLayout(layout: Layout): Promise<Layout>
   // Background backdrop. Files live in userData/backgrounds and are managed from
   // the Background app menu; the renderer only reads the current selection (a
   // bare filename, or '' for the built-in default) and re-reads it when the menu
@@ -242,7 +246,7 @@ export type BuiltinBackgroundId = typeof BUILTIN_BACKGROUNDS[number]['id']
 
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
-  listNames: 'names:list', setName: 'names:set',
+  listNames: 'names:list', setName: 'names:set', getLayout: 'layout:get', setLayout: 'layout:set',
   getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
   listWorktrees: 'wt:list', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',

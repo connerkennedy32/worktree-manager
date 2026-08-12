@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
-import { IPC, type GtCreateRequest, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
+import { IPC, type GtCreateRequest, type Layout, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
@@ -82,6 +82,8 @@ export async function registerIpc(w: BrowserWindow) {
   })
   ipcMain.handle(IPC.listNames, () => config.listNames())
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
+  ipcMain.handle(IPC.getLayout, () => config.readLayout())
+  ipcMain.handle(IPC.setLayout, (_e, layout: Layout) => config.writeLayout(layout))
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
