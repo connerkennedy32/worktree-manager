@@ -1,0 +1,41 @@
+tests/renderer/store-select-relative.test.ts
+  s_5f96099e541340::t_3d9ac4bcdcb032 22
+tests/renderer/sidebar-layout.test.ts
+  s_5f96099e541340::t_00951683eb3f66 10,15-20,23,29-30,33,39-41,48,50,59,67,71-73,76-78,81-83,86-88,91,94-96,101
+src/renderer/components/WorktreeRow.tsx
+  s_5f96099e541340::t_eefc0cd4a2c7f1 115-118
+  s_5f96099e541340::t_b9a7eb4751f24b 38-42
+  s_5f96099e541340::t_16048541fcdbf1 59
+src/shared/ipc-types.ts
+  s_5f96099e541340::t_eff85146ba6a0e 27-31,34
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_922e3d895b0b5f 4-7,10,17,40-47,57,63-69,72,109-111,117,129-138,146,159-162,180,217
+src/main/config.ts
+  s_5f96099e541340::t_464b7658f19bbf 62-78,85,95
+src/renderer/state/store.ts
+  s_5f96099e541340::t_6447324027f5c8 126-128,130,132
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_189b60f14bca75 15,38-39,42,80,104,124,126,133-134,137-139,141,144-146,148,151-153,156,160-161,163,166-173,177-178,180,183-185,187-188,193,199,205,209,216-218,220,226-228,231,233-234,239-241,264,306-307,309
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_3b004710a894ee 96,98-104
+  s_5f96099e541340::t_392e0820e615ee 299-302,304-305
+  s_5f96099e541340::t_83cbf3d5edf982 169-171
+tests/main/layout-config.test.ts
+  s_5f96099e541340::t_80aae0dfafcdea 14,20,32,38,41-44,47-72,77,79,82,85,88,101,115,121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0935e4b232a66bc117ff98a48bf4704265204673",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
