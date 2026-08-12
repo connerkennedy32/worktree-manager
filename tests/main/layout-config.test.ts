@@ -36,4 +36,37 @@ describe('layout config', () => {
     const { readLayout } = await import('../../src/main/config')
     expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true })
   })
+
+  // A group entry missing `paths` used to reach deriveSections, where
+  // `take(g.paths)` iterates `undefined` and throws — an uncaught render error
+  // with no in-app recovery. readLayout must drop malformed entries instead.
+  it('drops a group entry missing paths rather than letting it through', async () => {
+    writeFileSync(join(dir, 'layout.json'), JSON.stringify({
+      groups: [{ id: 'g1', name: 'Ok', collapsed: false, paths: ['/a'] }, { id: 'g2', name: 'Bad', collapsed: false }],
+      hidden: [], hiddenCollapsed: true
+    }))
+    const { readLayout } = await import('../../src/main/config')
+    expect(await readLayout()).toEqual({
+      groups: [{ id: 'g1', name: 'Ok', collapsed: false, paths: ['/a'] }], hidden: [], hiddenCollapsed: true
+    })
+  })
+
+  it('drops group entries with the wrong field types', async () => {
+    writeFileSync(join(dir, 'layout.json'), JSON.stringify({
+      groups: [
+        { id: 1, name: 'Bad id', collapsed: false, paths: [] },
+        { id: 'g2', name: 'Bad collapsed', collapsed: 'no', paths: [] },
+        { id: 'g3', name: 'Bad paths', collapsed: false, paths: ['/a', 2] },
+        { id: 'g4', name: 42, collapsed: false, paths: [] }
+      ]
+    }))
+    const { readLayout } = await import('../../src/main/config')
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true })
+  })
+
+  it('drops a group entry that is not an object', async () => {
+    writeFileSync(join(dir, 'layout.json'), JSON.stringify({ groups: [null, 'nope', 5] }))
+    const { readLayout } = await import('../../src/main/config')
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true })
+  })
 })

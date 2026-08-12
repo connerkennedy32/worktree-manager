@@ -6,7 +6,7 @@ import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
 import {
   addGroup, deleteGroup, deriveSections, moveTo, newGroupId, purgePaths, renameGroup, reorderGroup,
-  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, type DropTarget
+  repoLabel, toggleGroupCollapsed, toggleHiddenCollapsed, type Anchor, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
 
@@ -125,9 +125,9 @@ export function Sidebar() {
   const PATH_MIME = 'application/x-wtm-path'
   const GROUP_MIME = 'application/x-wtm-group'
 
-  // Where a row would land: the target section, plus the index within it.
-  const dropRow = (path: string, target: DropTarget, index?: number) => {
-    applyLayout(moveTo(layout, path, target, index))
+  // Where a row would land: the target section, plus an anchor within it.
+  const dropRow = (path: string, target: DropTarget, anchor?: Anchor) => {
+    applyLayout(moveTo(layout, path, target, anchor))
     clearDrag()
   }
 
@@ -142,13 +142,13 @@ export function Sidebar() {
       const path = e.dataTransfer.getData(PATH_MIME)
       if (!path) return
       e.preventDefault()
-      // No index: a drop on the section itself appends.
+      // No anchor: a drop on the section itself appends.
       dropRow(path, target)
     }
   })
 
   const renderRows = (list: Worktree[], isHidden: boolean, target: DropTarget) =>
-    list.map((w, i) => (
+    list.map(w => (
     <WorktreeRow
       key={w.path}
       worktree={w}
@@ -191,7 +191,11 @@ export function Sidebar() {
         e.preventDefault(); e.stopPropagation()
         const r = e.currentTarget.getBoundingClientRect()
         const after = e.clientY - r.top > r.height / 2
-        dropRow(path, target, i + (after ? 1 : 0))
+        // Anchor on this row's own path — a real entry in the target's raw
+        // paths array — rather than a rendered-list index, so the drop lands
+        // exactly where the insertion line is drawn even with a ghost path
+        // elsewhere in the section.
+        dropRow(path, target, { kind: after ? 'after' : 'before', path: w.path })
       }}
     />
   ))
@@ -232,10 +236,9 @@ export function Sidebar() {
                        const id = e.dataTransfer.getData(GROUP_MIME)
                        e.preventDefault(); e.stopPropagation()
                        if (!id || id === section.id) return clearDrag()
-                       // Drop lands the dragged group at the target's current index,
-                       // i.e. immediately above it.
-                       const index = layout.groups.findIndex(g => g.id === section.id)
-                       applyLayout(reorderGroup(layout, id, index))
+                       // Drop lands the dragged group immediately above this one,
+                       // regardless of which direction it was dragged from.
+                       applyLayout(reorderGroup(layout, id, section.id))
                        clearDrag()
                      }}
                      className={`wt-group-header${

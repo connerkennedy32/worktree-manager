@@ -60,6 +60,18 @@ export function navOrder(sections: Section[]): string[] {
 
 export type DropTarget = { kind: 'group'; id: string } | { kind: 'repo' } | { kind: 'hidden' }
 
+// Where within a target section a dropped path lands, expressed relative to a
+// real neighbour rather than a count. A numeric index breaks in two ways: (1)
+// insert() detaches the dragged path before inserting, which shifts every
+// index after the detach point, so a caller handing over a pre-detach index is
+// off by one on every downward move within the same section; (2) the row list
+// on screen is rendered from deriveSections, which filters out "ghost" paths
+// (kept in the layout, but with no live worktree) — so a rendered index and a
+// raw group.paths index disagree as soon as a ghost path is in the mix.
+// Anchoring on a real path sidesteps both: the anchor is always resolved
+// against the raw array being mutated.
+export type Anchor = { kind: 'end' } | { kind: 'before' | 'after'; path: string }
+
 // Every mutation returns a new Layout and never touches its input: the store
 // keeps layout in immutable state and writes the result straight to disk.
 const without = (paths: string[], path: string) => paths.filter(p => p !== path)
@@ -68,6 +80,16 @@ const insert = (paths: string[], path: string, index?: number): string[] => {
   const rest = without(paths, path)
   const at = index === undefined ? rest.length : Math.max(0, Math.min(index, rest.length))
   return [...rest.slice(0, at), path, ...rest.slice(at)]
+}
+
+// Resolves an anchor against `paths` (the real array insert() will slice into,
+// already understood to have the dragged path removed). Falls back to
+// appending if the anchor names a path that isn't actually there.
+const resolveAnchor = (paths: string[], anchor?: Anchor): number | undefined => {
+  if (!anchor || anchor.kind === 'end') return undefined
+  const i = paths.indexOf(anchor.path)
+  if (i === -1) return undefined
+  return anchor.kind === 'before' ? i : i + 1
 }
 
 // Detach first, then attach, so a path can never end up in two places — including
@@ -80,15 +102,17 @@ function detach(layout: Layout, path: string): Layout {
   }
 }
 
-export function moveTo(layout: Layout, path: string, target: DropTarget, index?: number): Layout {
+export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?: Anchor): Layout {
   if (target.kind === 'group' && !layout.groups.some(g => g.id === target.id)) return layout
   // Dropping on a repo section just means "ungrouped": detaching is the whole job.
   const next = detach(layout, path)
   if (target.kind === 'repo') return next
-  if (target.kind === 'hidden') return { ...next, hidden: insert(next.hidden, path, index) }
+  if (target.kind === 'hidden') return { ...next, hidden: insert(next.hidden, path, resolveAnchor(next.hidden, anchor)) }
   return {
     ...next,
-    groups: next.groups.map(g => g.id === target.id ? { ...g, paths: insert(g.paths, path, index) } : g)
+    groups: next.groups.map(g => g.id === target.id
+      ? { ...g, paths: insert(g.paths, path, resolveAnchor(g.paths, anchor)) }
+      : g)
   }
 }
 
@@ -110,11 +134,18 @@ export function deleteGroup(layout: Layout, id: string): Layout {
   return { ...layout, groups: layout.groups.filter(g => g.id !== id) }
 }
 
-export function reorderGroup(layout: Layout, id: string, index: number): Layout {
+// Lands the dragged group immediately above `beforeId`, in either direction.
+// Named by target id rather than a numeric index for the same reason moveTo
+// takes an Anchor: an index taken before the dragged group is detached lands
+// one slot too low on a downward drag, since detaching shifts everything after
+// it. Resolving against `rest` (the list with the dragged group already gone)
+// keeps "immediately above" true regardless of which way the drag went.
+export function reorderGroup(layout: Layout, id: string, beforeId: string): Layout {
   const g = layout.groups.find(x => x.id === id)
-  if (!g) return layout
+  if (!g || id === beforeId) return layout
   const rest = layout.groups.filter(x => x.id !== id)
-  const at = Math.max(0, Math.min(index, rest.length))
+  const i = rest.findIndex(x => x.id === beforeId)
+  const at = i === -1 ? rest.length : i
   return { ...layout, groups: [...rest.slice(0, at), g, ...rest.slice(at)] }
 }
 

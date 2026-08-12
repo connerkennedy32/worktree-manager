@@ -48,6 +48,17 @@ export async function setName(path: string, name: string): Promise<Record<string
   return names
 }
 
+// A well-formed group entry. Anything else (missing paths, wrong field types,
+// not even an object) is dropped below rather than passed through: deriveSections
+// does `take(g.paths)`, which throws on undefined, and that would take the
+// whole sidebar down with no in-app recovery.
+function isWellFormedGroup(g: unknown): g is Layout['groups'][number] {
+  const group = g as Record<string, unknown>
+  return typeof group?.id === 'string' && typeof group?.name === 'string' &&
+    typeof group?.collapsed === 'boolean' &&
+    Array.isArray(group?.paths) && group.paths.every(p => typeof p === 'string')
+}
+
 // Sidebar groups / hidden worktrees. Cosmetic, so a missing or corrupt file
 // degrades to "no groups" rather than throwing — the sidebar then just renders
 // its repo sections, which is exactly the pre-groups behavior.
@@ -57,7 +68,7 @@ export async function readLayout(): Promise<Layout> {
   try {
     const parsed = JSON.parse(readFileSync(f, 'utf8'))
     return {
-      groups: Array.isArray(parsed?.groups) ? parsed.groups : [],
+      groups: Array.isArray(parsed?.groups) ? parsed.groups.filter(isWellFormedGroup) : [],
       hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
       hiddenCollapsed: parsed?.hiddenCollapsed !== false
     }
