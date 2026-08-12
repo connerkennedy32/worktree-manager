@@ -1,0 +1,28 @@
+tests/renderer/store-select-relative.test.ts
+  s_5f96099e541340::t_e981b8b06bd62a 2
+  s_5f96099e541340::t_251165c64c914b 18-24
+  s_5f96099e541340::t_8972bde73c71fe 119-157
+src/renderer/state/store.ts
+  s_5f96099e541340::t_99954e869ce8c1 61-67
+  s_5f96099e541340::t_e4bf181738601d 52
+  s_5f96099e541340::t_15efd31aa6054d 2,5
+  s_5f96099e541340::t_a5d9df0845b95d 25-28
+  s_5f96099e541340::t_678e74478d39dd 76
+  s_5f96099e541340::t_f210060fd0c326 126-128,130,132-133,135-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "8271f4089571c8c23fb36509fb27ef8e2d2c4aa1",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
