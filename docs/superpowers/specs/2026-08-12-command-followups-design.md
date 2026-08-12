@@ -41,9 +41,11 @@ button. Anything else configured in the commands file gains the same power.
 
 Both fields run through the existing placeholder substitution and share its
 variables (`{{name}}` and other prompt vars, plus `worktree`, `worktreeName`,
-`repo`, `branch`, `message`). Substitution for these fields uses the shell-quoting
-variant only when the command itself sets `shell: true`; otherwise values are
-inserted literally, matching how `run` behaves in the same mode.
+`repo`, `branch`, `message`). `terminal` lines use the shell-quoting variant only
+when the command itself sets `shell: true`; otherwise values are inserted
+literally, matching how `run` behaves in the same mode. `select` is always
+substituted literally regardless of `shell`, because it is a path rather than a
+command line — quoting it would embed quote characters and guarantee no match.
 
 Both are validated per-entry by `isRepoCommand`: a `select` that is not a
 non-empty string, or a `terminal` that is not an array of non-empty strings,
