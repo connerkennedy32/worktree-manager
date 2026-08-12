@@ -1,0 +1,52 @@
+tests/main/layout-config.test.ts
+  s_5f96099e541340::t_99dbcc6d30e20e 13-14
+  s_5f96099e541340::t_a3831145bd377e 32,38-65
+  s_5f96099e541340::t_bed9b978132b58 92,98
+  s_5f96099e541340::t_629abbb538fb67 78
+  s_5f96099e541340::t_79b426df586dc8 20
+tests/renderer/store-select-relative.test.ts
+  s_5f96099e541340::t_ffb908a911838c 22
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_72fb66dcc6ac57 183-190,194-195
+  s_5f96099e541340::t_7443b4a9baec79 64
+  s_5f96099e541340::t_1ae8f4ec681f0e 41-47
+  s_5f96099e541340::t_c6499bd733545f 99-102,107-110
+  s_5f96099e541340::t_baa872371a323c 122-127
+src/shared/ipc-types.ts
+  s_5f96099e541340::t_34956c83f6187c 27-30,33
+src/main/config.ts
+  s_5f96099e541340::t_822c5ccebbf569 85-86
+  s_5f96099e541340::t_575cc39ce9286e 62-73
+.superpowers/repo-order-fix-report.md
+  s_5f96099e541340::t_d2089c2940395b 1-107
+tests/renderer/sidebar-layout.test.ts
+  s_5f96099e541340::t_ce7ee174ba43b2 76-98
+  s_5f96099e541340::t_670a0582538ca7 11
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_9bf729f84b3748 98-101
+  s_5f96099e541340::t_ddd632aac14caa 306
+  s_5f96099e541340::t_58990d92366335 170
+  s_5f96099e541340::t_e0bdecd26f890b 295
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_908b7119e1d401 230-236
+  s_5f96099e541340::t_3adca491d3eb8a 133-170
+  s_5f96099e541340::t_e8914e97e1824a 14-15
+  s_5f96099e541340::t_22f6a61d8eddb3 80,104,124
+  s_5f96099e541340::t_4cf7f2ad75c2f7 39,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f7d6762b58b424d7860a590bbf5ca2b602c0c45d",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
