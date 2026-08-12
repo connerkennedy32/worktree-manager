@@ -41,6 +41,7 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
   const refreshWorktrees = useStore(s => s.refreshWorktrees)
   const setOpenDiff = useStore(s => s.setOpenDiff)
   const worktrees = useStore(s => s.worktrees)
+  const select = useStore(s => s.select)
   const branch = worktrees.find(w => w.path === selected)?.branch
 
   const { stagedRows, unstagedRows, committedRows, committed, stagedCount, total } =
@@ -210,6 +211,20 @@ export function DiffPanel({ collapsed, onToggle, width = 460 }:
       setResult({ ...outcome, source: 'command' })
       await refreshStatus(selected)
       await refreshWorktrees()
+
+      // Follow-ups are best-effort and never change the reported outcome: a
+      // select that matches nothing (the command made no worktree, or made it
+      // somewhere else) simply types nothing rather than typing into the wrong
+      // terminal.
+      if (outcome.ok) {
+        const target = outcome.select
+          ? useStore.getState().worktrees.find(w => w.path === outcome.select)?.path
+          : selected
+        if (target) {
+          if (target !== selected) select(target)
+          if (outcome.terminal?.length) window.api.termRunLines(target, outcome.terminal)
+        }
+      }
     } finally { setRunning(undefined) }
   }
 
