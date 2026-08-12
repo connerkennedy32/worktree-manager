@@ -168,6 +168,9 @@ export function Sidebar() {
       onDragOver={e => {
         if (!e.dataTransfer.types.includes(PATH_MIME)) return
         e.preventDefault()
+        // Stop the section wrapper's onDragOver from also firing and
+        // clobbering this row's indicator with its own drop-into highlight.
+        e.stopPropagation()
         e.dataTransfer.dropEffect = 'move'
         // Halfway down the row flips the indicator to the bottom edge, so the
         // line always sits at the boundary the drop will actually use.
@@ -220,8 +223,8 @@ export function Sidebar() {
                      }}
                      onDrop={e => {
                        const id = e.dataTransfer.getData(GROUP_MIME)
-                       if (!id || id === section.id) return clearDrag()
                        e.preventDefault(); e.stopPropagation()
+                       if (!id || id === section.id) return clearDrag()
                        // Drop lands the dragged group at the target's current index,
                        // i.e. immediately above it.
                        const index = layout.groups.findIndex(g => g.id === section.id)
