@@ -221,3 +221,35 @@ describe('parseCommandsFile', () => {
     expect(exampleCommandsFile(['/Users/me/Code/thing'])).not.toContain('/Users/you')
   })
 })
+
+describe('select and terminal follow-ups', () => {
+  const wrap = (cmd: unknown) => parseCommandsFile({ '/repo': [cmd] })['/repo']
+
+  it('keeps valid select and terminal fields', () => {
+    const entries = wrap({
+      label: 'New worktree', run: 'git worktree add ../wt/{{name}}',
+      select: '../wt/{{name}}', terminal: ['tmux new -s {{name}}']
+    })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ select: '../wt/{{name}}', terminal: ['tmux new -s {{name}}'] })
+  })
+
+  it('drops an entry whose select is not a non-empty string', () => {
+    expect(wrap({ label: 'a', run: 'b', select: '   ' })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', select: 3 })).toHaveLength(0)
+  })
+
+  it('drops an entry whose terminal is not an array of non-empty strings', () => {
+    expect(wrap({ label: 'a', run: 'b', terminal: 'tmux' })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', terminal: ['ok', ''] })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', terminal: [1] })).toHaveLength(0)
+  })
+
+  it('keeps sibling entries when one has a bad follow-up', () => {
+    const entries = parseCommandsFile({ '/repo': [
+      { label: 'bad', run: 'x', terminal: 'nope' },
+      { label: 'good', run: 'y' }
+    ] })['/repo']
+    expect(entries.map(e => (e as { label: string }).label)).toEqual(['good'])
+  })
+})

@@ -76,7 +76,15 @@ export type PushOutcome = { ok: true } | { ok: false; message: string }
 // merged anything, and how much — so success carries a summary too.
 export type SyncOutcome = { ok: boolean; message: string }
 
-export type CommandOutcome = { ok: boolean; message: string }
+export type CommandOutcome = {
+  ok: boolean
+  message: string
+  // Follow-ups the command asked for, resolved by main: an absolute worktree
+  // path to select, and terminal lines with placeholders already substituted.
+  // Only present on a successful run.
+  select?: string
+  terminal?: string[]
+}
 
 export interface RepoCommand {
   label: string
@@ -93,6 +101,13 @@ export interface RepoCommand {
   // instead of being tokenized, so `&&`, pipes, redirects and `&` work. Opt-in
   // because it also means a {{placeholder}} value is interpreted by the shell.
   shell?: boolean
+  // After the command succeeds, select this worktree in the sidebar. Resolved
+  // against the command's effective cwd, so `../.worktrees/{{name}}` works from
+  // a `cwd: "repo"` command. A path that matches no worktree is a no-op.
+  select?: string
+  // Lines typed into the selected worktree's terminal, each followed by Enter.
+  // Without `select`, they go to whatever worktree is already selected.
+  terminal?: string[]
 }
 
 // A named, collapsible set of buttons. Groups don't nest: one level keeps the

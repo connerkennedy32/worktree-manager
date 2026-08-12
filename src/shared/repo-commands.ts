@@ -80,6 +80,11 @@ function isRepoCommand(value: unknown): value is RepoCommand {
   if (v.cwd !== undefined && v.cwd !== 'worktree' && v.cwd !== 'repo') return false
   if (v.width !== undefined && v.width !== 'half' && v.width !== 'full') return false
   if (v.shell !== undefined && typeof v.shell !== 'boolean') return false
+  if (v.select !== undefined && (typeof v.select !== 'string' || !v.select.trim())) return false
+  if (v.terminal !== undefined) {
+    if (!Array.isArray(v.terminal)) return false
+    if (!v.terminal.every(l => typeof l === 'string' && l.trim())) return false
+  }
   return true
 }
 
@@ -131,6 +136,9 @@ export function exampleCommandsFile(repoPaths: string[]): string {
       'any other {{placeholder}} is prompted for before the command runs.',
       'In shell mode placeholders are quoted for you - do not quote them yourself.',
       'cwd is "worktree" (default) or "repo".',
+      'select: a path to select in the sidebar once the command succeeds -',
+      'resolved against cwd, e.g. "../.worktrees/{{name}}" for a cwd:"repo" command.',
+      'terminal: lines typed into that worktree\'s terminal, each with Enter.',
       'width is "half" (default) or "full" - full spans both button columns.',
       'To group buttons, use { "label": ..., "commands": [ ... ] } instead of a',
       'command: it renders as a collapsible section. Add "open": true to start',
