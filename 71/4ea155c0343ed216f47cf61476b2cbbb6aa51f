@@ -1,0 +1,39 @@
+tests/renderer/sidebar-mutations.test.ts
+  s_5f96099e541340::t_32c181e24d5d93 134-136,140-141,148-149,155-156,164-165,172,178-223
+  s_5f96099e541340::t_b397594a3951a3 39,42
+  s_9f5512ac23de27::t_50b885a1260783 224-225
+src/renderer/components/sidebar-layout.ts
+  s_5f96099e541340::t_fc1558a2162e5d 141-145
+  s_5f96099e541340::t_57fdccc6411f3b 64-73
+  s_5f96099e541340::t_d0329380482d8d 132-137,139-140,146-147
+src/renderer/components/Sidebar.tsx
+  s_5f96099e541340::t_2dea3c2a864f2d 101
+  s_5f96099e541340::t_ea0191780d53e0 169-177
+  s_5f96099e541340::t_7b8de2616de665 302,313
+.superpowers/repo-order-fix-report.md
+  s_5f96099e541340::t_bfaf0bd522cbee 100-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "714ea155c0343ed216f47cf61476b2cbbb6aa51f",
+  "prompts": {},
+  "sessions": {
+    "s_5f96099e541340": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f9e79d1-c57f-4b9b-bc21-3b8a92b68a6c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    },
+    "s_9f5512ac23de27": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8b413b8-f847-448b-8882-615b9f716ff9",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-2.local>"
+    }
+  }
+}
