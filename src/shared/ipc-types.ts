@@ -24,13 +24,14 @@ export interface Layout {
   groups: WorktreeGroup[]
   hidden: string[]
   hiddenCollapsed: boolean
-  // Per-repo ordering hint for ungrouped worktrees, keyed by repo path (the
-  // absolute path stored in repos.json). Not a membership list — a path here
-  // that's actually grouped or hidden is simply unused by deriveSections.
-  repoOrder: Record<string, string[]>
+  // Ordering hint for ungrouped worktrees across every connected repo — one
+  // flat list, since the sidebar no longer sections them by repo. Not a
+  // membership list — a path here that's actually grouped or hidden is
+  // simply unused by deriveSections.
+  ungroupedOrder: string[]
 }
 
-export const emptyLayout = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+export const emptyLayout = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
 
 export interface FileChange {
   path: string          // repo-relative

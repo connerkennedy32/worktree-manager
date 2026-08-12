@@ -123,13 +123,13 @@ export const useStore = create<State>((set, get) => ({
     set({ selected: p, seenAt })
     localStorage.setItem('wtm.selected', p)
   },
-  // Walk the sidebar exactly as rendered: groups first in layout order, then repo
-  // sections, then Hidden — with collapsed sections skipped, so Cmd+Up/Down never
-  // jumps to a row that isn't on screen.
+  // Walk the sidebar exactly as rendered: groups first in layout order, then the
+  // ungrouped section, then Hidden — with collapsed sections skipped, so
+  // Cmd+Up/Down never jumps to a row that isn't on screen.
   selectRelative: (delta) => {
-    const { worktrees, repos, layout, selected, modalOpen, openDiff, select } = get()
+    const { worktrees, layout, selected, modalOpen, openDiff, select } = get()
     if (modalOpen > 0 || openDiff) return
-    const order = navOrder(deriveSections(layout, worktrees, repos))
+    const order = navOrder(deriveSections(layout, worktrees))
     const n = order.length
     if (n === 0) return
     const i = order.indexOf(selected ?? '')

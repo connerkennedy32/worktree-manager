@@ -59,21 +59,30 @@ function isWellFormedGroup(g: unknown): g is Layout['groups'][number] {
     Array.isArray(group?.paths) && group.paths.every(p => typeof p === 'string')
 }
 
-// Same fail-soft contract as groups: a malformed entry (wrong shape, or a file
-// written before repoOrder existed) is dropped rather than passed through.
-function readRepoOrder(parsed: unknown): Record<string, string[]> {
-  const raw = (parsed as Record<string, unknown>)?.repoOrder
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
-  const out: Record<string, string[]> = {}
-  for (const [repo, paths] of Object.entries(raw as Record<string, unknown>)) {
-    if (Array.isArray(paths) && paths.every(p => typeof p === 'string')) out[repo] = paths
+// Same fail-soft contract as groups: a malformed entry is dropped rather than
+// passed through. Reads either the current `ungroupedOrder` shape, or the
+// pre-flatten `repoOrder` shape (a file written by an older version) and
+// flattens its per-repo arrays into one list, in repos.json order — so an
+// existing user's manual ordering survives the upgrade instead of resetting.
+function readUngroupedOrder(parsed: unknown, repos: string[]): string[] {
+  const doc = parsed as Record<string, unknown>
+  if (Array.isArray(doc?.ungroupedOrder) && doc.ungroupedOrder.every(p => typeof p === 'string')) {
+    return doc.ungroupedOrder
+  }
+  const raw = doc?.repoOrder
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return []
+  const byRepo = raw as Record<string, unknown>
+  const out: string[] = []
+  for (const repo of repos) {
+    const paths = byRepo[repo]
+    if (Array.isArray(paths) && paths.every(p => typeof p === 'string')) out.push(...paths)
   }
   return out
 }
 
 // Sidebar groups / hidden worktrees. Cosmetic, so a missing or corrupt file
 // degrades to "no groups" rather than throwing — the sidebar then just renders
-// its repo sections, which is exactly the pre-groups behavior.
+// its ungrouped section, which is exactly the pre-groups behavior.
 export async function readLayout(): Promise<Layout> {
   const f = layoutFile()
   if (!existsSync(f)) return emptyLayout()
@@ -83,7 +92,7 @@ export async function readLayout(): Promise<Layout> {
       groups: Array.isArray(parsed?.groups) ? parsed.groups.filter(isWellFormedGroup) : [],
       hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
       hiddenCollapsed: parsed?.hiddenCollapsed !== false,
-      repoOrder: readRepoOrder(parsed)
+      ungroupedOrder: readUngroupedOrder(parsed, await listRepos())
     }
   } catch { return emptyLayout() }
 }

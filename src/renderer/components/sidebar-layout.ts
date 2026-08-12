@@ -1,19 +1,20 @@
 import type { Layout, Worktree } from '@shared/ipc-types'
 
 // The sidebar renders a flat list of sections, top to bottom: the user's groups,
-// then one section per connected repo holding everything ungrouped, then Hidden.
-// Deriving this in a pure function (rather than inline in Sidebar.tsx) keeps the
-// ordering rules testable and gives keyboard nav a single source of truth.
+// then a single section holding every ungrouped worktree from every connected
+// repo, then Hidden. Deriving this in a pure function (rather than inline in
+// Sidebar.tsx) keeps the ordering rules testable and gives keyboard nav a
+// single source of truth.
 export type Section =
   | { kind: 'group'; id: string; name: string; collapsed: boolean; worktrees: Worktree[] }
-  | { kind: 'repo'; repo: string; name: string; worktrees: Worktree[] }
+  | { kind: 'ungrouped'; worktrees: Worktree[] }
   | { kind: 'hidden'; collapsed: boolean; worktrees: Worktree[] }
 
 export function repoLabel(repo: string): string {
   return repo.split('/').filter(Boolean).pop() ?? repo
 }
 
-export function deriveSections(layout: Layout, worktrees: Worktree[], repos: string[]): Section[] {
+export function deriveSections(layout: Layout, worktrees: Worktree[]): Section[] {
   const byPath = new Map(worktrees.map(w => [w.path, w]))
   // Claimed paths are consumed as we go, which enforces the "at most one place"
   // invariant even if layout.json somehow lists a path twice: the first section
@@ -36,16 +37,14 @@ export function deriveSections(layout: Layout, worktrees: Worktree[], repos: str
     kind: 'group' as const, id: g.id, name: g.name, collapsed: g.collapsed, worktrees: take(g.paths)
   }))
   const hidden = take(layout.hidden)
-  for (const repo of repos) {
-    const name = repoLabel(repo)
-    // repoOrder is an ordering hint, not a membership list: order by it first
-    // (skipping anything already claimed by a group or hidden, and any ghost
-    // entry with no live worktree), then git order for whatever's left — a
-    // worktree the user has never dragged lands at the end.
-    const ordered = layout.repoOrder[repo] ?? []
-    const rest = worktrees.filter(w => w.repoName === name).map(w => w.path)
-    sections.push({ kind: 'repo', repo, name, worktrees: take([...ordered, ...rest]) })
-  }
+  // ungroupedOrder is an ordering hint, not a membership list: order by it
+  // first (take() skips anything already claimed by a group or hidden, and
+  // any ghost entry with no live worktree), then whatever's left in the
+  // `worktrees` array's own order (built repo by repo, in repos.json order) —
+  // a worktree the user has never dragged lands at the end.
+  const ordered = take(layout.ungroupedOrder)
+  const rest = take(worktrees.map(w => w.path))
+  sections.push({ kind: 'ungrouped', worktrees: [...ordered, ...rest] })
   sections.push({ kind: 'hidden', collapsed: layout.hiddenCollapsed, worktrees: hidden })
   return sections
 }
@@ -55,21 +54,22 @@ export function deriveSections(layout: Layout, worktrees: Worktree[], repos: str
 export function navOrder(sections: Section[]): string[] {
   const out: string[] = []
   for (const s of sections) {
-    if (s.kind !== 'repo' && s.collapsed) continue
+    if (s.kind !== 'ungrouped' && s.collapsed) continue
     out.push(...s.worktrees.map(w => w.path))
   }
   return out
 }
 
-// `members` is the repo section's currently rendered paths, in render order —
-// the same array deriveSections just produced for it. moveTo needs this to
-// materialize a COMPLETE order on the first drag: repoOrder starts as {} for
-// every real user, and resolving an anchor against that sparse array (rather
-// than the full rendered section) can never place the dragged row anywhere
-// but the end, since the anchor path itself isn't in the sparse array yet.
+// `members` is the ungrouped section's currently rendered paths, in render
+// order — the same array deriveSections just produced for it. moveTo needs
+// this to materialize a COMPLETE order on the first drag: ungroupedOrder
+// starts as [] for every real user, and resolving an anchor against that
+// sparse array (rather than the full rendered section) can never place the
+// dragged row anywhere but the end, since the anchor path itself isn't in
+// the sparse array yet.
 export type DropTarget =
   | { kind: 'group'; id: string }
-  | { kind: 'repo'; repo: string; members: string[] }
+  | { kind: 'ungrouped'; members: string[] }
   | { kind: 'hidden' }
 
 // Where within a target section a dropped path lands, expressed relative to a
@@ -106,17 +106,15 @@ const resolveAnchor = (paths: string[], anchor?: Anchor): number | undefined => 
 
 // Detach first, then attach, so a path can never end up in two places — including
 // when the source and destination are the same group (a plain reorder). Also
-// strips the path from every repo's order list: repoOrder is an ordering hint
-// for wherever the path currently lands ungrouped, not a second membership
-// list, so a stale entry under another repo would otherwise linger unused.
+// strips the path from ungroupedOrder: it's an ordering hint for wherever the
+// path currently lands ungrouped, not a second membership list, so a stale
+// entry there would otherwise linger unused.
 function detach(layout: Layout, path: string): Layout {
   return {
     ...layout,
     groups: layout.groups.map(g => ({ ...g, paths: without(g.paths, path) })),
     hidden: without(layout.hidden, path),
-    repoOrder: Object.fromEntries(
-      Object.entries(layout.repoOrder).map(([repo, paths]) => [repo, without(paths, path)])
-    )
+    ungroupedOrder: without(layout.ungroupedOrder, path)
   }
 }
 
@@ -128,15 +126,16 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
   if (anchor && 'path' in anchor && anchor.path === path) return layout
   if (target.kind === 'group' && !layout.groups.some(g => g.id === target.id)) return layout
   const next = detach(layout, path)
-  // Dropping on a repo section means "ungrouped, in this position" — the same
-  // detach-then-insert pattern as group/hidden, but first materialized into a
-  // COMPLETE order: start from whatever repoOrder already has (any entry not
-  // in `members` is a ghost — a worktree temporarily gone — and is kept in
-  // place), then append the rest of `members` in their rendered order. Only
-  // then is the anchor resolved and the drag applied, so a second drag has
-  // real positions for every visible row to anchor against.
-  if (target.kind === 'repo') {
-    const existing = next.repoOrder[target.repo] ?? []
+  // Dropping on the ungrouped section means "ungrouped, in this position" —
+  // the same detach-then-insert pattern as group/hidden, but first
+  // materialized into a COMPLETE order: start from whatever ungroupedOrder
+  // already has (any entry not in `members` is a ghost — a worktree
+  // temporarily gone — and is kept in place), then append the rest of
+  // `members` in their rendered order. Only then is the anchor resolved and
+  // the drag applied, so a second drag has real positions for every visible
+  // row to anchor against.
+  if (target.kind === 'ungrouped') {
+    const existing = next.ungroupedOrder
     const known = new Set(existing)
     // `members` is the section as rendered before the drop, so it still
     // includes the dragged path itself (unless it's arriving from elsewhere)
@@ -144,7 +143,7 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
     // expects, the same way detach already stripped it from every other list.
     const complete = [...existing, ...target.members.filter(p => !known.has(p) && p !== path)]
     const order = insert(complete, path, resolveAnchor(complete, anchor))
-    return { ...next, repoOrder: { ...next.repoOrder, [target.repo]: order } }
+    return { ...next, ungroupedOrder: order }
   }
   if (target.kind === 'hidden') return { ...next, hidden: insert(next.hidden, path, resolveAnchor(next.hidden, anchor)) }
   return {
@@ -157,9 +156,10 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
 
 // Unhiding (or ungrouping outside of a drag) removes the path from wherever
 // it's filed without recording a position for it. Deliberately does not
-// touch repoOrder: an unhidden worktree has no user-chosen position yet, so
-// it should fall back to git order among the unlisted rows, not jump to the
-// top of repoOrder just because that's index 0 of an empty/short array.
+// touch ungroupedOrder: an unhidden worktree has no user-chosen position yet,
+// so it should fall back to its natural order among the unlisted rows, not
+// jump to the top of ungroupedOrder just because that's index 0 of an
+// empty/short array.
 export function ungroup(layout: Layout, path: string): Layout {
   return detach(layout, path)
 }
@@ -177,7 +177,7 @@ export function renameGroup(layout: Layout, id: string, name: string): Layout {
 }
 
 // Deleting a group only removes the grouping: its worktrees become ungrouped and
-// reappear under their repo sections.
+// reappear in the ungrouped section.
 export function deleteGroup(layout: Layout, id: string): Layout {
   return { ...layout, groups: layout.groups.filter(g => g.id !== id) }
 }
@@ -210,19 +210,11 @@ export function toggleHiddenCollapsed(layout: Layout): Layout {
 // are kept: the user made them, and they're still valid drop targets.
 export function purgePaths(layout: Layout, paths: string[]): Layout {
   const drop = new Set(paths)
-  const repoOrder: Record<string, string[]> = {}
-  for (const [repo, order] of Object.entries(layout.repoOrder)) {
-    const filtered = order.filter(p => !drop.has(p))
-    // Drop the key too once it's empty: for the repo actually being
-    // disconnected this really forgets it, rather than leaving a dangling
-    // empty array behind forever.
-    if (filtered.length > 0) repoOrder[repo] = filtered
-  }
   return {
     ...layout,
     groups: layout.groups.map(g => ({ ...g, paths: g.paths.filter(p => !drop.has(p)) })),
     hidden: layout.hidden.filter(p => !drop.has(p)),
-    repoOrder
+    ungroupedOrder: layout.ungroupedOrder.filter(p => !drop.has(p))
   }
 }
 

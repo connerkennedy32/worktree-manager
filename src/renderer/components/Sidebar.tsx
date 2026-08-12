@@ -93,8 +93,15 @@ export function Sidebar() {
 
   const { layout, applyLayout } = useStore()
   const sections = useMemo(
-    () => deriveSections(layout, worktrees, repos), [layout, worktrees, repos]
+    () => deriveSections(layout, worktrees), [layout, worktrees]
   )
+  // Maps a main checkout back to the repo path it came from, so its row can
+  // open the disconnect flow — repoName is only the directory's basename, so
+  // this matches on that rather than assuming the two strings are equal.
+  // Returns undefined (never renders a disconnect ✕) if nothing resolves,
+  // rather than guessing.
+  const repoPathFor = (w: Worktree): string | undefined =>
+    w.isMain ? repos.find(r => repoLabel(r) === w.repoName) : undefined
   // Which group header is being renamed, and its draft. Kept separate from the
   // row rename state above so editing a group can't cancel a row edit.
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -159,6 +166,9 @@ export function Sidebar() {
       onCommitEdit={commitEdit}
       onCancelEdit={() => setEditingPath(null)}
       onRemove={() => { setError(undefined); setPending(w) }}
+      onDisconnect={
+        repoPathFor(w) ? () => { setError(undefined); setPendingRepo(repoPathFor(w)!) } : undefined
+      }
       onShowTip={e => showTip(e, w.path)}
       onHideTip={hideTip}
       hidden={isHidden}
@@ -286,20 +296,13 @@ export function Sidebar() {
               </div>
             )
           }
-          if (section.kind === 'repo') {
+          if (section.kind === 'ungrouped') {
+            // No header at all: every connected repo's ungrouped worktrees
+            // share this one flat, freely-reorderable list.
+            const target: DropTarget = { kind: 'ungrouped', members: section.worktrees.map(w => w.path) }
             return (
-              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo', repo: section.repo, members: section.worktrees.map(w => w.path) })}>
-                <div className={`wt-repo-header${
-                       over?.kind === 'section' && over.key === `r:${section.repo}` ? ' drop-into' : ''}`}
-                     title={section.repo}>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
-                                 whiteSpace: 'nowrap' }}>
-                    {section.name}
-                  </span>
-                  <span className="wt-repo-disconnect" title="Disconnect repo"
-                        onClick={() => setPendingRepo(section.repo)}>✕</span>
-                </div>
-                {renderRows(section.worktrees, false, { kind: 'repo', repo: section.repo, members: section.worktrees.map(w => w.path) })}
+              <div key="ungrouped" {...sectionDropProps('ungrouped', target)}>
+                {renderRows(section.worktrees, false, target)}
               </div>
             )
           }

@@ -12,7 +12,7 @@ const base = (): Layout => ({
   ],
   hidden: ['/d'],
   hiddenCollapsed: true,
-  repoOrder: {}
+  ungroupedOrder: []
 })
 const ids = (l: Layout) => l.groups.map(g => g.id)
 const pathsOf = (l: Layout, id: string) => l.groups.find(g => g.id === id)!.paths
@@ -35,11 +35,11 @@ describe('moveTo', () => {
       .toEqual(['/b', '/a'])
   })
 
-  it('moving to a repo target removes the path from every group and from hidden', () => {
-    const l = moveTo(base(), '/a', { kind: 'repo', repo: '/code/r1', members: [] })
+  it('moving to the ungrouped target removes the path from every group and from hidden', () => {
+    const l = moveTo(base(), '/a', { kind: 'ungrouped', members: [] })
     expect(pathsOf(l, 'g1')).toEqual(['/b'])
     expect(l.hidden).toEqual(['/d'])
-    const h = moveTo(base(), '/d', { kind: 'repo', repo: '/code/r1', members: [] })
+    const h = moveTo(base(), '/d', { kind: 'ungrouped', members: [] })
     expect(h.hidden).toEqual([])
   })
 
@@ -77,7 +77,7 @@ describe('moveTo with an anchor', () => {
   // numeric-index API was off by one here because insert() detaches the dragged
   // path first, shifting every later index.
   it('moves after a later path in the same group (downward drag)', () => {
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/b', '/c', '/d'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/b', '/c', '/d'] }], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] }
     const dropped = moveTo(l, '/a', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/c' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/b', '/c', '/a', '/d'])
   })
@@ -101,7 +101,7 @@ describe('moveTo with an anchor', () => {
   // off the index math: the anchor is a real path in the raw group.paths array,
   // so it resolves correctly regardless of what deriveSections filtered out.
   it('resolves correctly around a ghost path with no live worktree', () => {
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] }
     const dropped = moveTo(l, '/b', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/a' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/a', '/b', '/ghost'])
   })
@@ -121,124 +121,124 @@ describe('moveTo with an anchor', () => {
     // Sidebar.tsx only ever anchors on paths it actually rendered, i.e. paths
     // with a live worktree — this simulates dragging /d onto /b (rendered after
     // the ghost) and dropping below it.
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] }
     const worktrees = [w('/a'), w('/b'), w('/d')]
-    const before = deriveSections(l, worktrees, [])
+    const before = deriveSections(l, worktrees)
     expect(before[0].worktrees.map(x => x.path)).toEqual(['/a', '/b'])
     const dropped = moveTo(l, '/d', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/b' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/a', '/ghost', '/b', '/d'])
   })
 })
 
-describe('moveTo with a repo target', () => {
-  // These pre-seed repoOrder with the section's full membership already —
+describe('moveTo with the ungrouped target', () => {
+  // These pre-seed ungroupedOrder with the section's full membership already —
   // a state the app only reaches after a first drag. They exercise the
   // insert/anchor math on an already-complete array.
-  it('reorders downward within a repo section', () => {
-    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
-      repoOrder: { '/code/r1': ['/a', '/b', '/c', '/d'] } }
-    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r1', members: ['/a', '/b', '/c', '/d'] },
+  it('reorders downward within the ungrouped section', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/a', '/b', '/c', '/d'] }
+    const dropped = moveTo(l, '/a', { kind: 'ungrouped', members: ['/a', '/b', '/c', '/d'] },
       { kind: 'after', path: '/c' })
-    expect(dropped.repoOrder['/code/r1']).toEqual(['/b', '/c', '/a', '/d'])
+    expect(dropped.ungroupedOrder).toEqual(['/b', '/c', '/a', '/d'])
   })
 
-  it('reorders upward within a repo section', () => {
-    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
-      repoOrder: { '/code/r1': ['/a', '/b', '/c', '/d'] } }
-    const dropped = moveTo(l, '/c', { kind: 'repo', repo: '/code/r1', members: ['/a', '/b', '/c', '/d'] },
+  it('reorders upward within the ungrouped section', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/a', '/b', '/c', '/d'] }
+    const dropped = moveTo(l, '/c', { kind: 'ungrouped', members: ['/a', '/b', '/c', '/d'] },
       { kind: 'before', path: '/a' })
-    expect(dropped.repoOrder['/code/r1']).toEqual(['/c', '/a', '/b', '/d'])
+    expect(dropped.ungroupedOrder).toEqual(['/c', '/a', '/b', '/d'])
   })
 
-  it('drops a path from a group into a repo section at a chosen position', () => {
-    const l = { ...base(), repoOrder: { '/code/r1': ['/x', '/y'] } }
-    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r1', members: ['/x', '/y'] },
+  it('drops a path from a group into the ungrouped section at a chosen position', () => {
+    const l = { ...base(), ungroupedOrder: ['/x', '/y'] }
+    const dropped = moveTo(l, '/a', { kind: 'ungrouped', members: ['/x', '/y'] },
       { kind: 'after', path: '/x' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/b'])
-    expect(dropped.repoOrder['/code/r1']).toEqual(['/x', '/a', '/y'])
+    expect(dropped.ungroupedOrder).toEqual(['/x', '/a', '/y'])
   })
 
   it('resolves correctly around a ghost path with no live worktree', () => {
-    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
-      repoOrder: { '/code/r1': ['/a', '/ghost', '/b'] } }
-    const dropped = moveTo(l, '/b', { kind: 'repo', repo: '/code/r1', members: ['/a', '/b'] },
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/a', '/ghost', '/b'] }
+    const dropped = moveTo(l, '/b', { kind: 'ungrouped', members: ['/a', '/b'] },
       { kind: 'after', path: '/a' })
-    expect(dropped.repoOrder['/code/r1']).toEqual(['/a', '/b', '/ghost'])
+    expect(dropped.ungroupedOrder).toEqual(['/a', '/b', '/ghost'])
   })
 
-  it('never lists a path under two repos', () => {
-    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
-      repoOrder: { '/code/r1': ['/a', '/b'], '/code/r2': ['/c'] } }
-    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r2', members: ['/c'] })
-    expect(dropped.repoOrder['/code/r1']).toEqual(['/b'])
-    expect(dropped.repoOrder['/code/r2']).toEqual(['/c', '/a'])
+  // Now legal: the ungrouped section is one flat list, so a drag can move a
+  // worktree from behind one repo's rows past another's — there is no longer
+  // a repo boundary to stop it.
+  it('moves a worktree past another repo\'s worktrees within the same flat list', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/r1/a', '/r1/b', '/r2/c'] }
+    const dropped = moveTo(l, '/r2/c', { kind: 'ungrouped', members: ['/r1/a', '/r1/b', '/r2/c'] },
+      { kind: 'before', path: '/r1/a' })
+    expect(dropped.ungroupedOrder).toEqual(['/r2/c', '/r1/a', '/r1/b'])
   })
 })
 
-// The bug the review caught: every case above starts from a repoOrder that
-// already lists the section's full membership — a state the app only
+// The bug the review caught: every case above starts from an ungroupedOrder
+// that already lists the section's full membership — a state the app only
 // reaches after the user has dragged every row at least once. A brand-new
-// layout has repoOrder: {}, and resolving an anchor against that sparse
+// layout has ungroupedOrder: [], and resolving an anchor against that sparse
 // array can never place the drop anywhere but the end, since the anchor
 // path itself isn't in the array yet. These round-trip through
-// deriveSections, on the RENDERED order, starting from repoOrder: {} — the
-// state every real user actually starts in.
-describe('moveTo with a repo target, from a fresh layout (repoOrder: {})', () => {
+// deriveSections, on the RENDERED order, starting from ungroupedOrder: [] —
+// the state every real user actually starts in.
+describe('moveTo with the ungrouped target, from a fresh layout (ungroupedOrder: [])', () => {
   const wts = [w('/a'), w('/b'), w('/c')]
-  const fresh = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
-  const renderedOrder = (l: Layout) => deriveSections(l, wts, ['/code/r'])[0].worktrees.map(x => x.path)
+  const fresh = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
+  const renderedOrder = (l: Layout) => deriveSections(l, wts)[0].worktrees.map(x => x.path)
 
   it('a downward drag actually reorders the section (the reported bug)', () => {
     // Sidebar.tsx anchors on the row actually rendered under the cursor —
     // dragging /a to just below /b means "after /b".
-    const dropped = moveTo(fresh(), '/a', { kind: 'repo', repo: '/code/r', members: ['/a', '/b', '/c'] },
+    const dropped = moveTo(fresh(), '/a', { kind: 'ungrouped', members: ['/a', '/b', '/c'] },
       { kind: 'after', path: '/b' })
     expect(renderedOrder(dropped)).toEqual(['/b', '/a', '/c'])
   })
 
   it('an upward drag reorders the section', () => {
-    const dropped = moveTo(fresh(), '/c', { kind: 'repo', repo: '/code/r', members: ['/a', '/b', '/c'] },
+    const dropped = moveTo(fresh(), '/c', { kind: 'ungrouped', members: ['/a', '/b', '/c'] },
       { kind: 'before', path: '/a' })
     expect(renderedOrder(dropped)).toEqual(['/c', '/a', '/b'])
   })
 
   it('a second drag lands correctly after the first materialized the order', () => {
-    const first = moveTo(fresh(), '/a', { kind: 'repo', repo: '/code/r', members: ['/a', '/b', '/c'] },
+    const first = moveTo(fresh(), '/a', { kind: 'ungrouped', members: ['/a', '/b', '/c'] },
       { kind: 'after', path: '/b' })
     expect(renderedOrder(first)).toEqual(['/b', '/a', '/c'])
     // Now drag /c (rendered last) to the top.
-    const second = moveTo(first, '/c', { kind: 'repo', repo: '/code/r', members: renderedOrder(first) },
+    const second = moveTo(first, '/c', { kind: 'ungrouped', members: renderedOrder(first) },
       { kind: 'before', path: '/b' })
     expect(renderedOrder(second)).toEqual(['/c', '/b', '/a'])
   })
 
   it('preserves a ghost entry in place while the visible rows reorder around it', () => {
     // /ghost has no live worktree, so it never appears in `members`, but a
-    // prior drag already recorded it in repoOrder.
-    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, repoOrder: { '/code/r': ['/a', '/ghost', '/b'] } }
-    const dropped = moveTo(l, '/c', { kind: 'repo', repo: '/code/r', members: ['/a', '/b'] },
+    // prior drag already recorded it in ungroupedOrder.
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/a', '/ghost', '/b'] }
+    const dropped = moveTo(l, '/c', { kind: 'ungrouped', members: ['/a', '/b'] },
       { kind: 'before', path: '/a' })
-    expect(dropped.repoOrder['/code/r']).toEqual(['/c', '/a', '/ghost', '/b'])
+    expect(dropped.ungroupedOrder).toEqual(['/c', '/a', '/ghost', '/b'])
     expect(renderedOrder(dropped)).toEqual(['/c', '/a', '/b'])
   })
 })
 
 // Unhiding must not acquire a manual position just by leaving the hidden
-// section — it should fall back to git order among the rows repoOrder
-// doesn't mention, not jump to the top of an empty/short repoOrder array.
+// section — it should fall back to natural order among the rows
+// ungroupedOrder doesn't mention, not jump to the top of an empty/short
+// ungroupedOrder array.
 describe('ungroup', () => {
   const wts = [w('/a'), w('/b'), w('/c')]
-  const renderedOrder = (l: Layout) => deriveSections(l, wts, ['/code/r']).find(s => s.kind === 'repo')!.worktrees.map(x => x.path)
+  const renderedOrder = (l: Layout) => deriveSections(l, wts).find(s => s.kind === 'ungrouped')!.worktrees.map(x => x.path)
 
-  it('returns an unhidden worktree to its git-order position, not the top', () => {
-    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, repoOrder: {} }
+  it('returns an unhidden worktree to its natural-order position, not the top', () => {
+    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, ungroupedOrder: [] }
     expect(renderedOrder(l)).toEqual(['/a', '/c'])
     expect(renderedOrder(ungroup(l, '/b'))).toEqual(['/a', '/b', '/c'])
   })
 
-  it('lands among the unlisted tail when the repo already has a manual order', () => {
-    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, repoOrder: { '/code/r': ['/c', '/a'] } }
-    // /b isn't in repoOrder, so unhiding it must not write it in at index 0.
+  it('lands among the unlisted tail when there is already a manual order', () => {
+    const l: Layout = { groups: [], hidden: ['/b'], hiddenCollapsed: true, ungroupedOrder: ['/c', '/a'] }
+    // /b isn't in ungroupedOrder, so unhiding it must not write it in at index 0.
     expect(renderedOrder(ungroup(l, '/b'))).toEqual(['/c', '/a', '/b'])
   })
 })
@@ -261,7 +261,7 @@ describe('group management', () => {
   it('deletes a group without hiding its worktrees', () => {
     const l = deleteGroup(base(), 'g1')
     expect(ids(l)).toEqual(['g2'])
-    // /a and /b are now in no group, so they fall back to their repo sections.
+    // /a and /b are now in no group, so they fall back to the ungrouped section.
     expect(l.groups.flatMap(g => g.paths)).toEqual(['/c'])
     expect(l.hidden).toEqual(['/d'])
   })
@@ -303,10 +303,9 @@ describe('purgePaths', () => {
     expect(ids(purgePaths(base(), ['/c']))).toEqual(['g1', 'g2'])
   })
 
-  it('clears purged paths out of repoOrder, and the key once its repo is empty', () => {
-    const l = { ...base(), repoOrder: { '/code/r1': ['/a', '/b'], '/code/r2': ['/e'] } }
+  it('clears purged paths out of ungroupedOrder', () => {
+    const l = { ...base(), ungroupedOrder: ['/a', '/b', '/e'] }
     const purged = purgePaths(l, ['/a', '/b'])
-    expect(purged.repoOrder['/code/r1']).toBeUndefined()
-    expect(purged.repoOrder['/code/r2']).toEqual(['/e'])
+    expect(purged.ungroupedOrder).toEqual(['/e'])
   })
 })

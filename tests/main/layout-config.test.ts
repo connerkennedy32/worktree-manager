@@ -11,13 +11,13 @@ const sample = (): Layout => ({
   groups: [{ id: 'g1', name: 'Active', collapsed: false, paths: ['/a', '/b'] }],
   hidden: ['/c'],
   hiddenCollapsed: true,
-  repoOrder: { '/code/r1': ['/a', '/b'] }
+  ungroupedOrder: ['/x', '/y']
 })
 
 describe('layout config', () => {
   it('returns an empty layout when the file does not exist', async () => {
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
   it('round-trips a layout', async () => {
@@ -29,40 +29,63 @@ describe('layout config', () => {
   it('returns an empty layout when the file is corrupt', async () => {
     writeFileSync(join(dir, 'layout.json'), '{not json')
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
   it('fills in missing fields rather than returning undefined ones', async () => {
     writeFileSync(join(dir, 'layout.json'), JSON.stringify({ groups: [] }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
-  // A layout.json written before repoOrder existed has no such field at all;
-  // readLayout must default it to {} rather than throwing or returning undefined.
-  it('defaults repoOrder to {} when absent from an old layout file', async () => {
+  // A layout.json written before ungroupedOrder existed has no such field at
+  // all; readLayout must default it to [] rather than throwing or returning
+  // undefined.
+  it('defaults ungroupedOrder to [] when absent from an old layout file', async () => {
     writeFileSync(join(dir, 'layout.json'), JSON.stringify({ groups: [], hidden: [], hiddenCollapsed: true }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
+  })
+
+  // A file written by the pre-flatten version has `repoOrder`, keyed by repo
+  // path, instead of `ungroupedOrder`. readLayout flattens it into one list,
+  // walking repos.json in order, so an existing user's manual ordering
+  // survives the upgrade rather than silently resetting.
+  it('migrates an old repoOrder-shaped file into a flattened ungroupedOrder', async () => {
+    writeFileSync(join(dir, 'repos.json'), JSON.stringify({ repos: ['/code/r1', '/code/r2'] }))
+    writeFileSync(join(dir, 'layout.json'), JSON.stringify({
+      groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r2': ['/r2/b', '/r2/a'], '/code/r1': ['/r1/b', '/r1/a'] }
+    }))
+    const { readLayout } = await import('../../src/main/config')
+    // Flattened in repos.json order (r1 then r2), not the key order in the file.
+    expect((await readLayout()).ungroupedOrder).toEqual(['/r1/b', '/r1/a', '/r2/b', '/r2/a'])
+  })
+
+  it('skips repoOrder entries for repos not listed in repos.json', async () => {
+    writeFileSync(join(dir, 'repos.json'), JSON.stringify({ repos: ['/code/r1'] }))
+    writeFileSync(join(dir, 'layout.json'), JSON.stringify({
+      groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r1': ['/r1/a'], '/code/gone': ['/gone/a'] }
+    }))
+    const { readLayout } = await import('../../src/main/config')
+    expect((await readLayout()).ungroupedOrder).toEqual(['/r1/a'])
   })
 
   // Malformed entries are dropped rather than crashing the sidebar, the same
   // fail-soft contract as groups.
-  it('drops malformed repoOrder entries rather than throwing', async () => {
+  it('drops malformed ungroupedOrder rather than throwing', async () => {
     writeFileSync(join(dir, 'layout.json'), JSON.stringify({
-      groups: [], hidden: [], hiddenCollapsed: true,
-      repoOrder: { '/code/r1': ['/a', '/b'], '/code/r2': 'not-an-array', '/code/r3': ['/a', 2] }
+      groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: ['/a', 2]
     }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({
-      groups: [], hidden: [], hiddenCollapsed: true, repoOrder: { '/code/r1': ['/a', '/b'] }
-    })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
-  it('defaults repoOrder to {} when it is not an object', async () => {
+  it('defaults ungroupedOrder to [] when the legacy repoOrder is not an object', async () => {
     writeFileSync(join(dir, 'layout.json'), JSON.stringify({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: 'nope' }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
   // A group entry missing `paths` used to reach deriveSections, where
@@ -75,7 +98,7 @@ describe('layout config', () => {
     }))
     const { readLayout } = await import('../../src/main/config')
     expect(await readLayout()).toEqual({
-      groups: [{ id: 'g1', name: 'Ok', collapsed: false, paths: ['/a'] }], hidden: [], hiddenCollapsed: true, repoOrder: {}
+      groups: [{ id: 'g1', name: 'Ok', collapsed: false, paths: ['/a'] }], hidden: [], hiddenCollapsed: true, ungroupedOrder: []
     })
   })
 
@@ -89,12 +112,12 @@ describe('layout config', () => {
       ]
     }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 
   it('drops a group entry that is not an object', async () => {
     writeFileSync(join(dir, 'layout.json'), JSON.stringify({ groups: [null, 'nope', 5] }))
     const { readLayout } = await import('../../src/main/config')
-    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {} })
+    expect(await readLayout()).toEqual({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
   })
 })

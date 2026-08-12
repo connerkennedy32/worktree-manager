@@ -35,6 +35,11 @@ export interface WorktreeRowProps {
   onCommitEdit: () => void
   onCancelEdit: () => void
   onRemove: () => void
+  // Set only for a main checkout that resolves to a repo path (see
+  // Sidebar.tsx's repoPathFor); undefined means don't render the control at
+  // all rather than guess. Disconnecting is non-destructive (nothing on disk
+  // changes), so it's a separate control from onRemove — never the same ✕.
+  onDisconnect?: () => void
   onShowTip: (e: React.MouseEvent) => void
   onHideTip: () => void
   // In the Hidden section the same control un-hides, so one prop covers both.
@@ -51,7 +56,7 @@ export interface WorktreeRowProps {
 
 export function WorktreeRow({
   worktree: w, editing, draft, onDraftChange, onStartEdit, onCommitEdit,
-  onCancelEdit, onRemove, onShowTip, onHideTip, hidden, onToggleHidden,
+  onCancelEdit, onRemove, onDisconnect, onShowTip, onHideTip, hidden, onToggleHidden,
   dragging, dropEdge, onDragStart, onDragEnd, onDragOver, onDrop
 }: WorktreeRowProps) {
   const { statuses, agentStatuses, seenAt, names, selected, select } = useStore()
@@ -106,6 +111,10 @@ export function WorktreeRow({
         {!w.isMain && <span className="wt-row-remove" title="Remove worktree" onClick={(e) => {
           e.stopPropagation()
           onRemove()
+        }}>✕</span>}
+        {w.isMain && onDisconnect && <span className="wt-row-remove" title="Disconnect repo" onClick={(e) => {
+          e.stopPropagation()
+          onDisconnect()
         }}>✕</span>}
       </span>
     </div>
