@@ -1,0 +1,19 @@
+docs/superpowers/specs/2026-08-12-command-followups-design.md
+  s_dceab01d03ffb3::t_74c75b9b307ba7 1-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "cbe8965a4dfc853688cf733ee7c7a91585735633",
+  "prompts": {},
+  "sessions": {
+    "s_dceab01d03ffb3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e7dc0f5-7325-480c-a08b-129101b38c4c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
