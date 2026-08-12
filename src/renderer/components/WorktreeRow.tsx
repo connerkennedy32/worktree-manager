@@ -37,11 +37,14 @@ export interface WorktreeRowProps {
   onRemove: () => void
   onShowTip: (e: React.MouseEvent) => void
   onHideTip: () => void
+  // In the Hidden section the same control un-hides, so one prop covers both.
+  hidden: boolean
+  onToggleHidden: () => void
 }
 
 export function WorktreeRow({
   worktree: w, editing, draft, onDraftChange, onStartEdit, onCommitEdit,
-  onCancelEdit, onRemove, onShowTip, onHideTip
+  onCancelEdit, onRemove, onShowTip, onHideTip, hidden, onToggleHidden
 }: WorktreeRowProps) {
   const { statuses, agentStatuses, seenAt, names, selected, select } = useStore()
   const count = statuses[w.path]?.changeCount ?? 0
@@ -82,6 +85,10 @@ export function WorktreeRow({
       </div>
       <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
         {count > 0 && <span className="wt-badge">{count}</span>}
+        <span className="wt-row-hide" title={hidden ? 'Show in sidebar' : 'Hide'}
+              onClick={e => { e.stopPropagation(); onToggleHidden() }}>
+          {hidden ? '◇' : '◆'}
+        </span>
         {!w.isMain && <span className="wt-row-remove" title="Remove worktree" onClick={(e) => {
           e.stopPropagation()
           onRemove()

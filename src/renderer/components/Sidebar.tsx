@@ -4,6 +4,10 @@ import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
 import { WorktreeRow } from './WorktreeRow'
+import {
+  addGroup, deleteGroup, deriveSections, moveTo, newGroupId, renameGroup,
+  toggleGroupCollapsed, toggleHiddenCollapsed
+} from './sidebar-layout'
 import './sidebar-theme.css'
 
 export function Sidebar() {
@@ -80,14 +84,44 @@ export function Sidebar() {
     }
   }
 
-  // Worktrees are already produced repo-by-repo (see refreshWorktreeList), so
-  // grouping here just visually separates what's already in repo order.
-  const groups = useMemo(() => {
-    return repos.map(repo => ({
-      repo,
-      worktrees: worktrees.filter(w => w.repoName === repo.split('/').filter(Boolean).pop()),
-    }))
-  }, [repos, worktrees])
+  const { layout, applyLayout } = useStore()
+  const sections = useMemo(
+    () => deriveSections(layout, worktrees, repos), [layout, worktrees, repos]
+  )
+  // Which group header is being renamed, and its draft. Kept separate from the
+  // row rename state above so editing a group can't cancel a row edit.
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
+  const [groupDraft, setGroupDraft] = useState('')
+
+  const createGroup = () => {
+    const id = newGroupId(layout)
+    applyLayout(addGroup(layout, id))
+    setEditingGroup(id)
+    setGroupDraft('New group')
+  }
+  const commitGroupEdit = () => {
+    if (editingGroup) applyLayout(renameGroup(layout, editingGroup, groupDraft))
+    setEditingGroup(null)
+  }
+
+  const renderRows = (list: Worktree[], isHidden: boolean) => list.map(w => (
+    <WorktreeRow
+      key={w.path}
+      worktree={w}
+      editing={editingPath === w.path}
+      draft={draft}
+      onDraftChange={setDraft}
+      onStartEdit={() => startEdit(w)}
+      onCommitEdit={commitEdit}
+      onCancelEdit={() => setEditingPath(null)}
+      onRemove={() => { setError(undefined); setPending(w) }}
+      onShowTip={e => showTip(e, w.path)}
+      onHideTip={hideTip}
+      hidden={isHidden}
+      onToggleHidden={() =>
+        applyLayout(moveTo(layout, w.path, { kind: isHidden ? 'repo' : 'hidden' }))}
+    />
+  ))
 
   return (
     <div style={{ width: 260, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column',
@@ -95,6 +129,7 @@ export function Sidebar() {
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
+        <button className="wt-btn wt-btn-ghost" onClick={createGroup}>+ Group</button>
         <button className="wt-btn wt-btn-ghost" onClick={addRepo}>+ Repo</button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -103,32 +138,75 @@ export function Sidebar() {
             No repos yet. Click "+ Repo" to add a git repository.
           </div>
         )}
-        {groups.map(({ repo, worktrees: repoWorktrees }) => {
-          const name = repo.split('/').filter(Boolean).pop() ?? repo
-          return (
-            <div key={repo}>
-              <div className="wt-repo-header" title={repo}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </span>
-                <span className="wt-repo-disconnect" title="Disconnect repo"
-                      onClick={() => setPendingRepo(repo)}>✕</span>
+        {sections.map(section => {
+          if (section.kind === 'group') {
+            return (
+              <div key={`g:${section.id}`}>
+                <div className="wt-group-header"
+                     onClick={() => applyLayout(toggleGroupCollapsed(layout, section.id))}>
+                  <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
+                  {editingGroup === section.id ? (
+                    <input className="wt-input" autoFocus value={groupDraft}
+                           onChange={e => setGroupDraft(e.target.value)}
+                           onClick={e => e.stopPropagation()}
+                           onBlur={commitGroupEdit}
+                           onKeyDown={e => {
+                             e.stopPropagation()
+                             if (e.key === 'Enter') commitGroupEdit()
+                             else if (e.key === 'Escape') setEditingGroup(null)
+                           }}
+                           style={{ flex: 1, minWidth: 0 }} />
+                  ) : (
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
+                                   whiteSpace: 'nowrap' }}
+                          onDoubleClick={e => {
+                            e.stopPropagation()
+                            setEditingGroup(section.id); setGroupDraft(section.name)
+                          }}
+                          title="Double-click to rename">
+                      {section.name}
+                    </span>
+                  )}
+                  <span className="wt-group-count">{section.worktrees.length}</span>
+                  <span className="wt-group-delete" title="Delete group"
+                        onClick={e => { e.stopPropagation(); applyLayout(deleteGroup(layout, section.id)) }}>
+                    ✕
+                  </span>
+                </div>
+                {!section.collapsed && renderRows(section.worktrees, false)}
+                {!section.collapsed && section.worktrees.length === 0 && (
+                  <div style={{ padding: '6px 10px 8px 24px', color: '#777', fontSize: 11 }}>
+                    Drag worktrees here
+                  </div>
+                )}
               </div>
-              {repoWorktrees.map(w => (
-                <WorktreeRow
-                  key={w.path}
-                  worktree={w}
-                  editing={editingPath === w.path}
-                  draft={draft}
-                  onDraftChange={setDraft}
-                  onStartEdit={() => startEdit(w)}
-                  onCommitEdit={commitEdit}
-                  onCancelEdit={() => setEditingPath(null)}
-                  onRemove={() => { setError(undefined); setPending(w) }}
-                  onShowTip={e => showTip(e, w.path)}
-                  onHideTip={hideTip}
-                />
-              ))}
+            )
+          }
+          if (section.kind === 'repo') {
+            return (
+              <div key={`r:${section.repo}`}>
+                <div className="wt-repo-header" title={section.repo}>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap' }}>
+                    {section.name}
+                  </span>
+                  <span className="wt-repo-disconnect" title="Disconnect repo"
+                        onClick={() => setPendingRepo(section.repo)}>✕</span>
+                </div>
+                {renderRows(section.worktrees, false)}
+              </div>
+            )
+          }
+          // Hidden always renders its header, even when empty, so it's a stable
+          // drop target — and collapsed by default so it stays out of the way.
+          return (
+            <div key="hidden">
+              <div className="wt-group-header" onClick={() => applyLayout(toggleHiddenCollapsed(layout))}>
+                <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
+                <span style={{ flex: 1 }}>Hidden</span>
+                <span className="wt-group-count">{section.worktrees.length}</span>
+              </div>
+              {!section.collapsed && renderRows(section.worktrees, true)}
             </div>
           )
         })}
