@@ -8,7 +8,7 @@ const wt = (path: string, repoName: string): Worktree =>
 const worktrees = [wt('/r1/a', 'r1'), wt('/r1/b', 'r1'), wt('/r2/c', 'r2')]
 const repos = ['/code/r1', '/code/r2']
 const layout = (over: Partial<Layout> = {}): Layout =>
-  ({ groups: [], hidden: [], hiddenCollapsed: true, ...over })
+  ({ groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {}, ...over })
 
 const paths = (s: any) => s.worktrees.map((w: Worktree) => w.path)
 
@@ -72,6 +72,29 @@ describe('deriveSections', () => {
   it('labels repo sections with the repo directory name', () => {
     const s = deriveSections(layout(), worktrees, repos)
     expect(s[0]).toMatchObject({ kind: 'repo', repo: '/code/r1', name: 'r1' })
+  })
+
+  it('orders a repo section by repoOrder before falling back to git order', () => {
+    const s = deriveSections(layout({ repoOrder: { '/code/r1': ['/r1/b', '/r1/a'] } }), worktrees, repos)
+    expect(paths(s[0])).toEqual(['/r1/b', '/r1/a'])
+  })
+
+  it('appends a worktree absent from repoOrder last, in git order', () => {
+    const s = deriveSections(layout({ repoOrder: { '/code/r1': ['/r1/b'] } }), worktrees, repos)
+    expect(paths(s[0])).toEqual(['/r1/b', '/r1/a'])
+  })
+
+  it('skips a ghost path in repoOrder that has no live worktree', () => {
+    const s = deriveSections(layout({ repoOrder: { '/code/r1': ['/r1/ghost', '/r1/b', '/r1/a'] } }), worktrees, repos)
+    expect(paths(s[0])).toEqual(['/r1/b', '/r1/a'])
+  })
+
+  it('never renders a grouped path in its repo section even if repoOrder still lists it', () => {
+    const s = deriveSections(layout({
+      groups: [{ id: 'g1', name: 'Active', collapsed: false, paths: ['/r1/a'] }],
+      repoOrder: { '/code/r1': ['/r1/a', '/r1/b'] }
+    }), worktrees, repos)
+    expect(paths(s[1])).toEqual(['/r1/b'])
   })
 })
 

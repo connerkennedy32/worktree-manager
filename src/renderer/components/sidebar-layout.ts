@@ -38,10 +38,13 @@ export function deriveSections(layout: Layout, worktrees: Worktree[], repos: str
   const hidden = take(layout.hidden)
   for (const repo of repos) {
     const name = repoLabel(repo)
-    sections.push({
-      kind: 'repo', repo, name,
-      worktrees: take(worktrees.filter(w => w.repoName === name).map(w => w.path))
-    })
+    // repoOrder is an ordering hint, not a membership list: order by it first
+    // (skipping anything already claimed by a group or hidden, and any ghost
+    // entry with no live worktree), then git order for whatever's left — a
+    // worktree the user has never dragged lands at the end.
+    const ordered = layout.repoOrder[repo] ?? []
+    const rest = worktrees.filter(w => w.repoName === name).map(w => w.path)
+    sections.push({ kind: 'repo', repo, name, worktrees: take([...ordered, ...rest]) })
   }
   sections.push({ kind: 'hidden', collapsed: layout.hiddenCollapsed, worktrees: hidden })
   return sections
@@ -58,7 +61,7 @@ export function navOrder(sections: Section[]): string[] {
   return out
 }
 
-export type DropTarget = { kind: 'group'; id: string } | { kind: 'repo' } | { kind: 'hidden' }
+export type DropTarget = { kind: 'group'; id: string } | { kind: 'repo'; repo: string } | { kind: 'hidden' }
 
 // Where within a target section a dropped path lands, expressed relative to a
 // real neighbour rather than a count. A numeric index breaks in two ways: (1)
@@ -93,12 +96,18 @@ const resolveAnchor = (paths: string[], anchor?: Anchor): number | undefined => 
 }
 
 // Detach first, then attach, so a path can never end up in two places — including
-// when the source and destination are the same group (a plain reorder).
+// when the source and destination are the same group (a plain reorder). Also
+// strips the path from every repo's order list: repoOrder is an ordering hint
+// for wherever the path currently lands ungrouped, not a second membership
+// list, so a stale entry under another repo would otherwise linger unused.
 function detach(layout: Layout, path: string): Layout {
   return {
     ...layout,
     groups: layout.groups.map(g => ({ ...g, paths: without(g.paths, path) })),
-    hidden: without(layout.hidden, path)
+    hidden: without(layout.hidden, path),
+    repoOrder: Object.fromEntries(
+      Object.entries(layout.repoOrder).map(([repo, paths]) => [repo, without(paths, path)])
+    )
   }
 }
 
@@ -109,9 +118,13 @@ export function moveTo(layout: Layout, path: string, target: DropTarget, anchor?
   // to appending and bump the row to the end instead of leaving it in place.
   if (anchor && 'path' in anchor && anchor.path === path) return layout
   if (target.kind === 'group' && !layout.groups.some(g => g.id === target.id)) return layout
-  // Dropping on a repo section just means "ungrouped": detaching is the whole job.
   const next = detach(layout, path)
-  if (target.kind === 'repo') return next
+  // Dropping on a repo section means "ungrouped, in this position" — the same
+  // detach-then-insert pattern as group/hidden, anchored into that repo's order.
+  if (target.kind === 'repo') {
+    const order = next.repoOrder[target.repo] ?? []
+    return { ...next, repoOrder: { ...next.repoOrder, [target.repo]: insert(order, path, resolveAnchor(order, anchor)) } }
+  }
   if (target.kind === 'hidden') return { ...next, hidden: insert(next.hidden, path, resolveAnchor(next.hidden, anchor)) }
   return {
     ...next,
@@ -167,10 +180,19 @@ export function toggleHiddenCollapsed(layout: Layout): Layout {
 // are kept: the user made them, and they're still valid drop targets.
 export function purgePaths(layout: Layout, paths: string[]): Layout {
   const drop = new Set(paths)
+  const repoOrder: Record<string, string[]> = {}
+  for (const [repo, order] of Object.entries(layout.repoOrder)) {
+    const filtered = order.filter(p => !drop.has(p))
+    // Drop the key too once it's empty: for the repo actually being
+    // disconnected this really forgets it, rather than leaving a dangling
+    // empty array behind forever.
+    if (filtered.length > 0) repoOrder[repo] = filtered
+  }
   return {
     ...layout,
     groups: layout.groups.map(g => ({ ...g, paths: g.paths.filter(p => !drop.has(p)) })),
-    hidden: layout.hidden.filter(p => !drop.has(p))
+    hidden: layout.hidden.filter(p => !drop.has(p)),
+    repoOrder
   }
 }
 

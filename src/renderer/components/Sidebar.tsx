@@ -95,6 +95,10 @@ export function Sidebar() {
   const sections = useMemo(
     () => deriveSections(layout, worktrees, repos), [layout, worktrees, repos]
   )
+  // Rows only carry a worktree's repoName (a directory basename), not the full
+  // repo path repoOrder is keyed by. Resolved against the connected repos list,
+  // the same match doDisconnectRepo makes in the other direction.
+  const repoPathFor = (w: Worktree) => repos.find(r => repoLabel(r) === w.repoName) ?? w.repoName
   // Which group header is being renamed, and its draft. Kept separate from the
   // row rename state above so editing a group can't cancel a row edit.
   const [editingGroup, setEditingGroup] = useState<string | null>(null)
@@ -163,7 +167,7 @@ export function Sidebar() {
       onHideTip={hideTip}
       hidden={isHidden}
       onToggleHidden={() =>
-        applyLayout(moveTo(layout, w.path, { kind: isHidden ? 'repo' : 'hidden' }))}
+        applyLayout(moveTo(layout, w.path, isHidden ? { kind: 'repo', repo: repoPathFor(w) } : { kind: 'hidden' }))}
       dragging={drag?.kind === 'path' && drag.path === w.path}
       dropEdge={over?.kind === 'row' && over.path === w.path ? over.edge : null}
       onDragStart={e => {
@@ -288,7 +292,7 @@ export function Sidebar() {
           }
           if (section.kind === 'repo') {
             return (
-              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo' })}>
+              <div key={`r:${section.repo}`} {...sectionDropProps(`r:${section.repo}`, { kind: 'repo', repo: section.repo })}>
                 <div className={`wt-repo-header${
                        over?.kind === 'section' && over.key === `r:${section.repo}` ? ' drop-into' : ''}`}
                      title={section.repo}>
@@ -299,7 +303,7 @@ export function Sidebar() {
                   <span className="wt-repo-disconnect" title="Disconnect repo"
                         onClick={() => setPendingRepo(section.repo)}>✕</span>
                 </div>
-                {renderRows(section.worktrees, false, { kind: 'repo' })}
+                {renderRows(section.worktrees, false, { kind: 'repo', repo: section.repo })}
               </div>
             )
           }

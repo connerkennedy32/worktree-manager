@@ -59,6 +59,18 @@ function isWellFormedGroup(g: unknown): g is Layout['groups'][number] {
     Array.isArray(group?.paths) && group.paths.every(p => typeof p === 'string')
 }
 
+// Same fail-soft contract as groups: a malformed entry (wrong shape, or a file
+// written before repoOrder existed) is dropped rather than passed through.
+function readRepoOrder(parsed: unknown): Record<string, string[]> {
+  const raw = (parsed as Record<string, unknown>)?.repoOrder
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
+  const out: Record<string, string[]> = {}
+  for (const [repo, paths] of Object.entries(raw as Record<string, unknown>)) {
+    if (Array.isArray(paths) && paths.every(p => typeof p === 'string')) out[repo] = paths
+  }
+  return out
+}
+
 // Sidebar groups / hidden worktrees. Cosmetic, so a missing or corrupt file
 // degrades to "no groups" rather than throwing — the sidebar then just renders
 // its repo sections, which is exactly the pre-groups behavior.
@@ -70,7 +82,8 @@ export async function readLayout(): Promise<Layout> {
     return {
       groups: Array.isArray(parsed?.groups) ? parsed.groups.filter(isWellFormedGroup) : [],
       hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
-      hiddenCollapsed: parsed?.hiddenCollapsed !== false
+      hiddenCollapsed: parsed?.hiddenCollapsed !== false,
+      repoOrder: readRepoOrder(parsed)
     }
   } catch { return emptyLayout() }
 }

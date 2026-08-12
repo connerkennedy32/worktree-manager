@@ -11,7 +11,8 @@ const base = (): Layout => ({
     { id: 'g2', name: 'Two', collapsed: false, paths: ['/c'] }
   ],
   hidden: ['/d'],
-  hiddenCollapsed: true
+  hiddenCollapsed: true,
+  repoOrder: {}
 })
 const ids = (l: Layout) => l.groups.map(g => g.id)
 const pathsOf = (l: Layout, id: string) => l.groups.find(g => g.id === id)!.paths
@@ -35,10 +36,10 @@ describe('moveTo', () => {
   })
 
   it('moving to a repo target removes the path from every group and from hidden', () => {
-    const l = moveTo(base(), '/a', { kind: 'repo' })
+    const l = moveTo(base(), '/a', { kind: 'repo', repo: '/code/r1' })
     expect(pathsOf(l, 'g1')).toEqual(['/b'])
     expect(l.hidden).toEqual(['/d'])
-    const h = moveTo(base(), '/d', { kind: 'repo' })
+    const h = moveTo(base(), '/d', { kind: 'repo', repo: '/code/r1' })
     expect(h.hidden).toEqual([])
   })
 
@@ -76,7 +77,7 @@ describe('moveTo with an anchor', () => {
   // numeric-index API was off by one here because insert() detaches the dragged
   // path first, shifting every later index.
   it('moves after a later path in the same group (downward drag)', () => {
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/b', '/c', '/d'] }], hidden: [], hiddenCollapsed: true }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/b', '/c', '/d'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
     const dropped = moveTo(l, '/a', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/c' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/b', '/c', '/a', '/d'])
   })
@@ -100,7 +101,7 @@ describe('moveTo with an anchor', () => {
   // off the index math: the anchor is a real path in the raw group.paths array,
   // so it resolves correctly regardless of what deriveSections filtered out.
   it('resolves correctly around a ghost path with no live worktree', () => {
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
     const dropped = moveTo(l, '/b', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/a' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/a', '/b', '/ghost'])
   })
@@ -120,12 +121,50 @@ describe('moveTo with an anchor', () => {
     // Sidebar.tsx only ever anchors on paths it actually rendered, i.e. paths
     // with a live worktree — this simulates dragging /d onto /b (rendered after
     // the ghost) and dropping below it.
-    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true }
+    const l: Layout = { groups: [{ id: 'g1', name: 'One', collapsed: false, paths: ['/a', '/ghost', '/b'] }], hidden: [], hiddenCollapsed: true, repoOrder: {} }
     const worktrees = [w('/a'), w('/b'), w('/d')]
     const before = deriveSections(l, worktrees, [])
     expect(before[0].worktrees.map(x => x.path)).toEqual(['/a', '/b'])
     const dropped = moveTo(l, '/d', { kind: 'group', id: 'g1' }, { kind: 'after', path: '/b' })
     expect(pathsOf(dropped, 'g1')).toEqual(['/a', '/ghost', '/b', '/d'])
+  })
+})
+
+describe('moveTo with a repo target', () => {
+  it('reorders downward within a repo section', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r1': ['/a', '/b', '/c', '/d'] } }
+    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r1' }, { kind: 'after', path: '/c' })
+    expect(dropped.repoOrder['/code/r1']).toEqual(['/b', '/c', '/a', '/d'])
+  })
+
+  it('reorders upward within a repo section', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r1': ['/a', '/b', '/c', '/d'] } }
+    const dropped = moveTo(l, '/c', { kind: 'repo', repo: '/code/r1' }, { kind: 'before', path: '/a' })
+    expect(dropped.repoOrder['/code/r1']).toEqual(['/c', '/a', '/b', '/d'])
+  })
+
+  it('drops a path from a group into a repo section at a chosen position', () => {
+    const l = { ...base(), repoOrder: { '/code/r1': ['/x', '/y'] } }
+    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r1' }, { kind: 'after', path: '/x' })
+    expect(pathsOf(dropped, 'g1')).toEqual(['/b'])
+    expect(dropped.repoOrder['/code/r1']).toEqual(['/x', '/a', '/y'])
+  })
+
+  it('resolves correctly around a ghost path with no live worktree', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r1': ['/a', '/ghost', '/b'] } }
+    const dropped = moveTo(l, '/b', { kind: 'repo', repo: '/code/r1' }, { kind: 'after', path: '/a' })
+    expect(dropped.repoOrder['/code/r1']).toEqual(['/a', '/b', '/ghost'])
+  })
+
+  it('never lists a path under two repos', () => {
+    const l: Layout = { groups: [], hidden: [], hiddenCollapsed: true,
+      repoOrder: { '/code/r1': ['/a', '/b'], '/code/r2': ['/c'] } }
+    const dropped = moveTo(l, '/a', { kind: 'repo', repo: '/code/r2' })
+    expect(dropped.repoOrder['/code/r1']).toEqual(['/b'])
+    expect(dropped.repoOrder['/code/r2']).toEqual(['/c', '/a'])
   })
 })
 
@@ -187,5 +226,12 @@ describe('purgePaths', () => {
 
   it('keeps empty groups rather than deleting them', () => {
     expect(ids(purgePaths(base(), ['/c']))).toEqual(['g1', 'g2'])
+  })
+
+  it('clears purged paths out of repoOrder, and the key once its repo is empty', () => {
+    const l = { ...base(), repoOrder: { '/code/r1': ['/a', '/b'], '/code/r2': ['/e'] } }
+    const purged = purgePaths(l, ['/a', '/b'])
+    expect(purged.repoOrder['/code/r1']).toBeUndefined()
+    expect(purged.repoOrder['/code/r2']).toEqual(['/e'])
   })
 })

@@ -19,7 +19,7 @@ const seed = (paths: string[], selected?: string, layout?: Partial<Layout>) =>
   useStore.setState({
     worktrees: paths.map(p => wt(p)),
     repos: ['/code/repo'],
-    layout: { groups: [], hidden: [], hiddenCollapsed: true, ...layout },
+    layout: { groups: [], hidden: [], hiddenCollapsed: true, repoOrder: {}, ...layout },
     selected, modalOpen: 0, openDiff: null
   })
 
