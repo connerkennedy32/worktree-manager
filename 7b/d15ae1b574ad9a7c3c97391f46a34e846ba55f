@@ -1,0 +1,26 @@
+src/main/command-followups.ts
+  s_dceab01d03ffb3::t_0facf6979a245b 1-27
+src/main/repo-commands.ts
+  s_dceab01d03ffb3::t_5ee670ad23f2e6 6
+  s_dceab01d03ffb3::t_6fd12cae093276 38-39
+src/shared/repo-commands.ts
+  s_dceab01d03ffb3::t_8bb6530b379395 61-66
+tests/main/command-followups.test.ts
+  s_dceab01d03ffb3::t_d7af11d4ffd546 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "7bd15ae1b574ad9a7c3c97391f46a34e846ba55f",
+  "prompts": {},
+  "sessions": {
+    "s_dceab01d03ffb3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e7dc0f5-7325-480c-a08b-129101b38c4c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
