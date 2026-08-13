@@ -1,0 +1,25 @@
+src/main/stale-ptys.ts
+  s_dceab01d03ffb3::t_3c06e06ccb50a1 1-17
+src/main/ipc.ts
+  s_dceab01d03ffb3::t_6643bade47f9d2 4
+  s_dceab01d03ffb3::t_60b7c422ce662e 21
+  s_dceab01d03ffb3::t_e8484f1869d1fe 111-116
+tests/main/stale-ptys.test.ts
+  s_dceab01d03ffb3::t_74cc46a378e09e 1-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "d59a4e56280464a857541aa216e01b78a2962d8f",
+  "prompts": {},
+  "sessions": {
+    "s_dceab01d03ffb3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e7dc0f5-7325-480c-a08b-129101b38c4c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
