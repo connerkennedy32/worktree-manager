@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { emptyLayout, type Layout, type Worktree, type WorktreeStatus } from '@shared/ipc-types'
 import type { AgentReport } from '@shared/agent-status'
+import type { PrStatus } from '@shared/pr-status'
 import { loadSeenAt, saveSeenAt } from './seen'
 import { deriveSections, navOrder } from '../components/sidebar-layout'
 
@@ -20,6 +21,12 @@ interface State {
   statuses: Record<string, WorktreeStatus>
   agentStatuses: Record<string, AgentReport>
   seenAt: Record<string, number>
+  // GitHub PR state per worktree path. Refreshed only when the user asks — the
+  // sidebar header button — and seeded from the main-process disk cache at init.
+  prStatuses: Record<string, PrStatus>
+  prRefreshing: boolean
+  prError?: string
+  refreshPrStatuses: () => Promise<void>
   names: Record<string, string>
   rename: (p: string, name: string) => Promise<void>
   // Sidebar organization. Held here rather than in Sidebar.tsx because keyboard
@@ -49,6 +56,7 @@ interface State {
 export const useStore = create<State>((set, get) => ({
   repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
   names: {},
+  prStatuses: {}, prRefreshing: false,
   layout: emptyLayout(),
   selectedBackground: '',
   openDiff: null, modalOpen: 0,
@@ -86,6 +94,7 @@ export const useStore = create<State>((set, get) => ({
     // connects to the daemon a single time (ipc.ts:37), so a window reload does
     // not re-trigger the daemon's connect-time snapshot.
     set({ agentStatuses: await window.api.getAgentStatuses() })
+    set({ prStatuses: await window.api.getPrStatuses() })
     window.api.onAgentStatus((p, r) => set(st => ({ agentStatuses: { ...st.agentStatuses, [p]: r } })))
     // Safety net: periodically re-list worktrees (branch names) and refresh the
     // selected worktree's status, so the sidebar stays current even if a file
@@ -113,6 +122,21 @@ export const useStore = create<State>((set, get) => ({
   refreshStatus: async (p) => {
     const s = await window.api.getStatus(p)
     set(st => ({ statuses: { ...st.statuses, [p]: s } }))
+  },
+  refreshPrStatuses: async () => {
+    if (get().prRefreshing) return
+    set({ prRefreshing: true })
+    try {
+      const paths = get().worktrees.map(w => w.path)
+      const res = await window.api.refreshPrStatuses(paths)
+      // On error the main process returns no statuses at all, so keep the ones
+      // already on screen and just surface the message on the button.
+      set(res.error ? { prError: res.error } : { prStatuses: res.statuses, prError: undefined })
+    } catch (e: any) {
+      set({ prError: e?.message ?? String(e) })
+    } finally {
+      set({ prRefreshing: false })
+    }
   },
   // Note: we do NOT call termStart here. The terminal is started by TerminalView
   // once its xterm instance exists and the onTermData handler is bound, so the

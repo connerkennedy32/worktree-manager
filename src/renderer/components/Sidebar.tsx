@@ -11,7 +11,8 @@ import {
 import './sidebar-theme.css'
 
 export function Sidebar() {
-  const { worktrees, statuses, names, rename, selected, select, refreshWorktrees, repos } = useStore()
+  const { worktrees, statuses, names, rename, selected, select, refreshWorktrees, repos,
+          prRefreshing, prError, refreshPrStatuses } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string>()
@@ -221,6 +222,12 @@ export function Sidebar() {
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
+        <button className="wt-btn wt-btn-ghost"
+                onClick={refreshPrStatuses}
+                disabled={prRefreshing}
+                title={prError ?? 'Refresh PR status'}>
+          <span className={prRefreshing ? 'wt-pr-spin' : undefined}>↻</span>
+        </button>
         <button className="wt-btn wt-btn-ghost" onClick={createGroup}>+ Group</button>
         <button className="wt-btn wt-btn-ghost" onClick={addRepo}>+ Repo</button>
       </div>

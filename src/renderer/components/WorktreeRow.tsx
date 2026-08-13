@@ -1,6 +1,7 @@
 import { useStore } from '../state/store'
 import type { Worktree } from '@shared/ipc-types'
 import { deriveDot } from '@shared/agent-status'
+import { PR_STATE_LABEL } from '@shared/pr-status'
 
 function MainDotIcon() {
   return (
@@ -24,6 +25,17 @@ function BranchIcon() {
 
 function WorkingSpinner() {
   return <span className="wt-row-spinner" title="Agent working" />
+}
+
+function PrDot({ path }: { path: string }) {
+  const pr = useStore(st => st.prStatuses[path])
+  if (!pr || pr.state === 'none') return null
+  const label = pr.number ? `PR #${pr.number} · ${PR_STATE_LABEL[pr.state]}` : PR_STATE_LABEL[pr.state]
+  return (
+    <span className={`wt-pr-dot wt-pr-${pr.state}`}
+          title={label}
+          onClick={e => { e.stopPropagation(); if (pr.url) window.api.openUrl(pr.url) }} />
+  )
 }
 
 export interface WorktreeRowProps {
@@ -78,6 +90,7 @@ export function WorktreeRow({
               onDoubleClick={(e) => { e.stopPropagation(); onStartEdit() }}
               title="Double-click to rename">
           {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
+          <PrDot path={w.path} />
           {editing ? (
             <input
               className="wt-input"
