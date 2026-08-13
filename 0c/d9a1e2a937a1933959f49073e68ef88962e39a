@@ -1,0 +1,32 @@
+src/renderer/components/Sidebar.tsx
+  s_301ee782d70406::t_2b9450259347a5 225-230
+  s_301ee782d70406::t_cf266ee8e0242f 14-15
+src/renderer/components/WorktreeRow.tsx
+  s_301ee782d70406::t_7df304240d765b 4
+  s_301ee782d70406::t_125778070e46a6 93
+  s_301ee782d70406::t_00345e27bc8d0c 30-40
+src/renderer/components/sidebar-theme.css
+  s_301ee782d70406::t_182d1439a17ff7 159-181
+src/renderer/state/store.ts
+  s_301ee782d70406::t_3382c1428b89b3 4
+  s_301ee782d70406::t_8015c37a338213 97
+  s_301ee782d70406::t_b584af52a3c3a6 126-140
+  s_301ee782d70406::t_d400acbcaaa9a9 24-29
+  s_301ee782d70406::t_0b1b3720b23f1c 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "0cd9a1e2a937a1933959f49073e68ef88962e39a",
+  "prompts": {},
+  "sessions": {
+    "s_301ee782d70406": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e9158b4-df13-47ac-ae3c-6565819bbc0d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
