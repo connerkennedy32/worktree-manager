@@ -38,6 +38,30 @@ describe('fetchPrStatus', () => {
     expect(seen[0].cwd).toBe('/wt/a')
     expect(seen[0].args).toEqual(['pr', 'view', '--json', 'number,url,isDraft,state,reviewDecision'])
   })
+
+  // Graphite rebases a stack before landing it, so the commits that reach trunk
+  // have new shas and GitHub marks the PR closed rather than merged.
+  it('reports a closed PR whose work reached trunk as merged', async () => {
+    const run = async () => ok({ number: 9, url: 'u', isDraft: false, state: 'CLOSED', reviewDecision: '' })
+    expect(await fetchPrStatus('/wt/a', run, async () => true))
+      .toEqual({ state: 'merged', number: 9, url: 'u' })
+  })
+
+  it('leaves a genuinely abandoned PR closed', async () => {
+    const run = async () => ok({ number: 9, url: 'u', isDraft: false, state: 'CLOSED', reviewDecision: '' })
+    expect(await fetchPrStatus('/wt/a', run, async () => false))
+      .toEqual({ state: 'closed', number: 9, url: 'u' })
+  })
+
+  it('never consults git for a PR GitHub has not closed', async () => {
+    let asked = false
+    const landed = async () => { asked = true; return true }
+    for (const state of ['OPEN', 'MERGED']) {
+      const run = async () => ok({ number: 9, url: 'u', isDraft: false, state, reviewDecision: '' })
+      await fetchPrStatus('/wt/a', run, landed)
+    }
+    expect(asked).toBe(false)
+  })
 })
 
 describe('refreshAll', () => {
