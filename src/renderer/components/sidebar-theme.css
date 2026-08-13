@@ -167,7 +167,9 @@
 .wt-pr-dot.wt-pr-link { cursor: pointer; }
 .wt-pr-draft            { background: #8b949e; }
 .wt-pr-review           { background: #d29922; }
-.wt-pr-changesRequested { background: #f28b82; }
+/* A saturated red, not the salmon this started as: next to the amber of
+   'in review' that read as two shades of the same warm color. */
+.wt-pr-changesRequested { background: #f8443c; }
 .wt-pr-approved         { background: #3fb950; }
 .wt-pr-merged           { background: #a371f7; }
 .wt-pr-closed           { background: #6e7681; }
