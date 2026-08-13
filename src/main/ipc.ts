@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
 import { IPC, type GtCreateRequest, type Layout, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
@@ -17,6 +18,7 @@ import * as files from './files'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
 import { sendLines, type LineSink } from './term-lines'
+import { stalePtyPaths } from './stale-ptys'
 import { WatcherManager } from './watcher'
 import { previewUrl } from './preview'
 import { setAgentStatus, seedAgentStatuses, flashDone } from './dock'
@@ -106,7 +108,12 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.getLayout, () => config.readLayout())
   ipcMain.handle(IPC.setLayout, (_e, layout: Layout) => config.writeLayout(layout))
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
-  ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
+  ipcMain.handle(IPC.listWorktrees, (_e, r: string) => {
+    // Piggy-backed on the renderer's 3s re-list rather than given its own timer:
+    // it is the moment the app already looks at what worktrees still exist.
+    for (const p of stalePtyPaths(ptys.list(), existsSync)) ptys.kill(p)
+    return wt.listWorktrees(r)
+  })
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
     const result = await wt.removeWorktree(p, f)
     // The worktree dir is gone; free its terminal and stop watching it.
