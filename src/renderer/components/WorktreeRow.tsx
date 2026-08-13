@@ -1,7 +1,7 @@
 import { useStore } from '../state/store'
 import type { Worktree } from '@shared/ipc-types'
 import { deriveDot } from '@shared/agent-status'
-import { PR_STATE_LABEL } from '@shared/pr-status'
+import { PR_STATE_LABEL, graphiteUrl } from '@shared/pr-status'
 
 function WorkingSpinner() {
   return <span className="wt-row-spinner" title="Agent working" />
@@ -14,7 +14,7 @@ function PrDot({ path }: { path: string }) {
   return (
     <span className={`wt-pr-dot wt-pr-${pr.state}${pr.url ? ' wt-pr-link' : ''}`}
           title={label}
-          onClick={e => { e.stopPropagation(); if (pr.url) window.api.openUrl(pr.url) }} />
+          onClick={e => { e.stopPropagation(); if (pr.url) window.api.openUrl(graphiteUrl(pr.url)) }} />
   )
 }
 

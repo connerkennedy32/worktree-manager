@@ -40,3 +40,16 @@ export function derivePrState(raw: RawPr): PrState {
   if (raw.reviewDecision === 'CHANGES_REQUESTED') return 'changesRequested'
   return 'review'
 }
+
+// gh only ever hands back a github.com URL, so opening the PR in Graphite means
+// rewriting it here rather than asking for a second source. Done at click time,
+// not at fetch time, so what's cached stays the canonical GitHub URL and this
+// preference can change without invalidating anything on disk. Anything that
+// isn't a recognizable github.com PR URL — an enterprise host, a future gh
+// format — falls through unchanged and opens on GitHub, which is still right.
+const GITHUB_PR = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/
+
+export function graphiteUrl(url: string): string {
+  const m = GITHUB_PR.exec(url)
+  return m ? `https://app.graphite.dev/github/pr/${m[1]}/${m[2]}/${m[3]}` : url
+}
