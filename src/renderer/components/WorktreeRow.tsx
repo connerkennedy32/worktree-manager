@@ -3,26 +3,6 @@ import type { Worktree } from '@shared/ipc-types'
 import { deriveDot } from '@shared/agent-status'
 import { PR_STATE_LABEL } from '@shared/pr-status'
 
-function MainDotIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="5" cy="5" r="4" fill="currentColor" />
-    </svg>
-  )
-}
-
-function BranchIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="2.5" cy="2.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="2.5" cy="7.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 V7.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 C2.5 6 4 6 5.5 6" stroke="currentColor" strokeWidth="1.2" fill="none" />
-      <circle cx="7" cy="6" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
-  )
-}
-
 function WorkingSpinner() {
   return <span className="wt-row-spinner" title="Agent working" />
 }
@@ -89,7 +69,7 @@ export function WorktreeRow({
                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               onDoubleClick={(e) => { e.stopPropagation(); onStartEdit() }}
               title="Double-click to rename">
-          {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
+          {dot === 'working' && <WorkingSpinner />}
           <PrDot path={w.path} />
           {editing ? (
             <input
@@ -111,7 +91,7 @@ export function WorktreeRow({
           )}
         </span>
         <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
-                       whiteSpace: 'nowrap', paddingLeft: 29 }}>
+                       whiteSpace: 'nowrap' }}>
           {w.branch}
         </span>
       </div>
