@@ -1,0 +1,36 @@
+tests/pty-daemon/sessionStore.test.ts
+  s_301ee782d70406::t_1e6825f12e7d94 23-26,68-71
+tests/main/pr-status.test.ts
+  s_301ee782d70406::t_0fc38a5ada4eff 41-64
+src/main/git/landed.ts
+  s_301ee782d70406::t_782c0ad2129707 49-52
+  s_301ee782d70406::t_fe4ffeb81f9773 54-57,60
+  s_301ee782d70406::t_dc0af02f2e34fa 1-9,17-18,26-48,53,58-59,61-64
+  s_301ee782d70406::t_853e80b93c14ee 10-16
+  s_301ee782d70406::t_62ee27e5367512 19-25
+src/main/github/pr-status.ts
+  s_301ee782d70406::t_9a9010ba78aefc 67
+  s_301ee782d70406::t_85c933bf5fb7be 52
+  s_301ee782d70406::t_cc4d725d542fc4 8-11
+  s_301ee782d70406::t_02d40daced7936 3
+  s_301ee782d70406::t_550e549d47bac0 19,25-30
+tests/git/landed.test.ts
+  s_301ee782d70406::t_acbc59a474711b 1-73,79,81-86
+  s_301ee782d70406::t_125d7818b0259c 74-78,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4f0a1220da9e9e0b35afca28d7b6631430ad5253",
+  "prompts": {},
+  "sessions": {
+    "s_301ee782d70406": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e9158b4-df13-47ac-ae3c-6565819bbc0d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
