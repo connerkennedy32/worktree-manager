@@ -3,6 +3,7 @@ import { join, basename, extname } from 'path'
 import { emptyLayout, type Layout, type RepoCommandEntry } from '@shared/ipc-types'
 import { repoRoot } from './git/repo-root'
 import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
+import type { PrStatus } from '@shared/pr-status'
 
 export function configDir(): string {
   if (process.env.WTM_CONFIG_DIR) return process.env.WTM_CONFIG_DIR
@@ -14,6 +15,7 @@ function file(): string { return join(configDir(), 'repos.json') }
 function namesFile(): string { return join(configDir(), 'names.json') }
 function commandsFile(): string { return join(configDir(), 'commands.json') }
 function layoutFile(): string { return join(configDir(), 'layout.json') }
+function prStatusFile(): string { return join(configDir(), 'pr-status.json') }
 
 export async function listRepos(): Promise<string[]> {
   const f = file()
@@ -101,6 +103,30 @@ export async function writeLayout(layout: Layout): Promise<Layout> {
   const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   writeFileSync(layoutFile(), `${JSON.stringify(layout, null, 2)}\n`)
   return layout
+}
+
+// Last-known PR state per worktree path, so dots are on screen at launch
+// instead of after the user remembers to hit refresh. Cosmetic and rebuildable,
+// so a corrupt file degrades to "no dots" rather than throwing.
+export async function readPrStatuses(): Promise<Record<string, PrStatus>> {
+  const f = prStatusFile()
+  if (!existsSync(f)) return {}
+  try {
+    const parsed = JSON.parse(readFileSync(f, 'utf8'))?.statuses
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
+    return parsed as Record<string, PrStatus>
+  } catch { return {} }
+}
+
+// Entries for worktrees that no longer exist are dropped here rather than on
+// read, so the file doesn't accumulate every branch the user has ever had.
+export async function writePrStatuses(
+  statuses: Record<string, PrStatus>
+): Promise<Record<string, PrStatus>> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const live = Object.fromEntries(Object.entries(statuses).filter(([p]) => existsSync(p)))
+  writeFileSync(prStatusFile(), `${JSON.stringify({ statuses: live }, null, 2)}\n`)
+  return live
 }
 
 // --- Backgrounds -----------------------------------------------------------
