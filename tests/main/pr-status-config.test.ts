@@ -39,6 +39,15 @@ describe('pr status cache', () => {
     expect(await readPrStatuses()).toEqual({ [live]: { state: 'draft' } })
   })
 
+  it('drops entries whose worktree vanished since the file was written', async () => {
+    const { readPrStatuses, writePrStatuses } = await import('../../src/main/config')
+    const gone = join(dir, 'wt-gone')
+    mkdirSync(gone)
+    await writePrStatuses({ [gone]: { state: 'approved' } })
+    rmSync(gone, { recursive: true, force: true })
+    expect(await readPrStatuses()).toEqual({})
+  })
+
   it('degrades to {} on a corrupt file', async () => {
     const { readPrStatuses } = await import('../../src/main/config')
     writeFileSync(join(dir, 'pr-status.json'), '{ not json')

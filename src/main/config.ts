@@ -114,12 +114,15 @@ export async function readPrStatuses(): Promise<Record<string, PrStatus>> {
   try {
     const parsed = JSON.parse(readFileSync(f, 'utf8'))?.statuses
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
-    return parsed as Record<string, PrStatus>
+    // Also filter on read: a worktree removed while the app was closed would
+    // otherwise show a stale dot until the next write.
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, PrStatus>).filter(([p]) => existsSync(p)))
   } catch { return {} }
 }
 
-// Entries for worktrees that no longer exist are dropped here rather than on
-// read, so the file doesn't accumulate every branch the user has ever had.
+// Entries for worktrees that no longer exist are dropped here too, so the file
+// doesn't accumulate every branch the user has ever had.
 export async function writePrStatuses(
   statuses: Record<string, PrStatus>
 ): Promise<Record<string, PrStatus>> {

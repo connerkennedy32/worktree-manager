@@ -36,7 +36,8 @@ async function pool<T>(items: T[], n: number, work: (item: T) => Promise<void>):
 }
 
 // A missing or unauthenticated gh is one problem with the machine, not one per
-// worktree, so it's reported once and no statuses come back at all.
+// worktree, so it's reported once. Whatever did succeed still comes back — a
+// per-repo auth failure (SAML SSO, a private repo) must not blank the rest.
 export async function refreshAll(
   paths: string[], run: GhRunner = runGh
 ): Promise<PrRefreshResult> {
@@ -57,5 +58,5 @@ export async function refreshAll(
     if (s) statuses[p] = s
   })
 
-  return error ? { statuses: {}, error } : { statuses }
+  return error ? { statuses, error } : { statuses }
 }

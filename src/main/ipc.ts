@@ -134,9 +134,11 @@ export async function registerIpc(w: BrowserWindow) {
   // failed keeps its previous dot instead of going blank.
   ipcMain.handle(IPC.refreshPrStatuses, async (_e, paths: string[]) => {
     const res = await refreshAll(paths)
-    if (res.error) return res
+    // A refresh can carry both: some worktrees answered while another hit an
+    // auth failure. Persist what came back and still surface the message.
     const merged = { ...(await config.readPrStatuses()), ...res.statuses }
-    return { statuses: await config.writePrStatuses(merged) }
+    const statuses = await config.writePrStatuses(merged)
+    return res.error ? { statuses, error: res.error } : { statuses }
   })
   // https only: a malformed cached value must not become an arbitrary-scheme
   // launch, and every URL this sends comes from `gh pr view`.

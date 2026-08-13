@@ -32,7 +32,7 @@ function PrDot({ path }: { path: string }) {
   if (!pr || pr.state === 'none') return null
   const label = pr.number ? `PR #${pr.number} · ${PR_STATE_LABEL[pr.state]}` : PR_STATE_LABEL[pr.state]
   return (
-    <span className={`wt-pr-dot wt-pr-${pr.state}`}
+    <span className={`wt-pr-dot wt-pr-${pr.state}${pr.url ? ' wt-pr-link' : ''}`}
           title={label}
           onClick={e => { e.stopPropagation(); if (pr.url) window.api.openUrl(pr.url) }} />
   )

@@ -223,7 +223,7 @@ export function Sidebar() {
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
         <button className="wt-btn wt-btn-ghost"
-                onClick={refreshPrStatuses}
+                onClick={() => refreshPrStatuses()}
                 disabled={prRefreshing}
                 title={prError ?? 'Refresh PR status'}>
           <span className={prRefreshing ? 'wt-pr-spin' : undefined}>↻</span>

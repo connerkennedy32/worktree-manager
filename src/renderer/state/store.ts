@@ -94,7 +94,9 @@ export const useStore = create<State>((set, get) => ({
     // connects to the daemon a single time (ipc.ts:37), so a window reload does
     // not re-trigger the daemon's connect-time snapshot.
     set({ agentStatuses: await window.api.getAgentStatuses() })
-    set({ prStatuses: await window.api.getPrStatuses() })
+    // A refresh the user triggered during this await must win over the cache.
+    const cachedPr = await window.api.getPrStatuses()
+    set(st => ({ prStatuses: { ...cachedPr, ...st.prStatuses } }))
     window.api.onAgentStatus((p, r) => set(st => ({ agentStatuses: { ...st.agentStatuses, [p]: r } })))
     // Safety net: periodically re-list worktrees (branch names) and refresh the
     // selected worktree's status, so the sidebar stays current even if a file
@@ -129,9 +131,10 @@ export const useStore = create<State>((set, get) => ({
     try {
       const paths = get().worktrees.map(w => w.path)
       const res = await window.api.refreshPrStatuses(paths)
-      // On error the main process returns no statuses at all, so keep the ones
-      // already on screen and just surface the message on the button.
-      set(res.error ? { prError: res.error } : { prStatuses: res.statuses, prError: undefined })
+      // A response can carry both: statuses that succeeded plus a message about
+      // the ones that didn't. An empty result keeps whatever is on screen.
+      if (Object.keys(res.statuses).length) set({ prStatuses: res.statuses })
+      set({ prError: res.error })
     } catch (e: any) {
       set({ prError: e?.message ?? String(e) })
     } finally {
