@@ -1,0 +1,19 @@
+src/renderer/components/sidebar-theme.css
+  s_301ee782d70406::t_87f72a9cb45384 170-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "a9affaf7cf811815d323af555fb44918058a0f01",
+  "prompts": {},
+  "sessions": {
+    "s_301ee782d70406": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e9158b4-df13-47ac-ae3c-6565819bbc0d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
