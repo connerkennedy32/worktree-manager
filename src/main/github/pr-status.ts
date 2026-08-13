@@ -1,10 +1,6 @@
 import { derivePrState, type PrStatus, type RawPr } from '@shared/pr-status'
 import { ghMissing, ghUnauthenticated, runGh, type GhRunner } from './gh'
-
-export interface PrRefreshResult {
-  statuses: Record<string, PrStatus>
-  error?: string
-}
+import type { PrRefreshResult } from '@shared/ipc-types'
 
 const FIELDS = 'number,url,isDraft,state,reviewDecision'
 

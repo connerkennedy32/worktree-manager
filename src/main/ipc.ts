@@ -11,6 +11,7 @@ import { getStatus } from './git/status'
 import { getCommittedFiles } from './git/committed'
 import { getPushState, push } from './git/push'
 import { syncWithTrunk } from './git/sync'
+import { refreshAll } from './github/pr-status'
 import { gtCreate } from './stack'
 import { runRepoCommand } from './repo-commands'
 import * as diff from './git/diff'
@@ -128,6 +129,20 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.push, (_e, p: string) => push(p))
   ipcMain.handle(IPC.syncWithTrunk, (_e, p: string) =>
     syncWithTrunk(p, chunk => send(IPC.gitOutput, p, chunk)))
+  ipcMain.handle(IPC.getPrStatuses, () => config.readPrStatuses())
+  // Merged into the cache rather than replacing it: a worktree whose gh call
+  // failed keeps its previous dot instead of going blank.
+  ipcMain.handle(IPC.refreshPrStatuses, async (_e, paths: string[]) => {
+    const res = await refreshAll(paths)
+    if (res.error) return res
+    const merged = { ...(await config.readPrStatuses()), ...res.statuses }
+    return { statuses: await config.writePrStatuses(merged) }
+  })
+  // https only: a malformed cached value must not become an arbitrary-scheme
+  // launch, and every URL this sends comes from `gh pr view`.
+  ipcMain.on(IPC.openUrl, (_e, url: string) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url)
+  })
   ipcMain.handle(IPC.gtCreate, (_e, req: GtCreateRequest) =>
     gtCreate(req, chunk => send(IPC.gitOutput, req.worktreePath, chunk)))
   ipcMain.handle(IPC.listRepoCommands, (_e, p: string) => config.listRepoCommands(p))

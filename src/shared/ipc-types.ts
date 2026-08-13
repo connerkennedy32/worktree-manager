@@ -1,4 +1,5 @@
 import type { AgentReport } from './agent-status'
+import type { PrStatus } from './pr-status'
 
 export interface Worktree {
   path: string
@@ -75,6 +76,14 @@ export type PushOutcome = { ok: true } | { ok: false; message: string }
 // Unlike a push, a successful sync still has something to say — whether it
 // merged anything, and how much — so success carries a summary too.
 export type SyncOutcome = { ok: boolean; message: string }
+
+// A refresh reports both what it learned and, if the machine's gh is missing or
+// logged out, one message explaining why nothing came back — the button needs
+// something to say, and that failure is not per worktree.
+export interface PrRefreshResult {
+  statuses: Record<string, PrStatus>
+  error?: string
+}
 
 export type CommandOutcome = {
   ok: boolean
@@ -203,6 +212,14 @@ export interface Api {
   push(worktreePath: string): Promise<PushOutcome>
   // Fetch trunk and merge it into this worktree's branch.
   syncWithTrunk(worktreePath: string): Promise<SyncOutcome>
+  // GitHub PR state per worktree. getPrStatuses returns the disk cache without
+  // touching the network; refreshPrStatuses shells out to `gh` once per path and
+  // is only ever called from the sidebar's refresh button.
+  getPrStatuses(): Promise<Record<string, PrStatus>>
+  refreshPrStatuses(worktreePaths: string[]): Promise<PrRefreshResult>
+  // Open an absolute https URL in the OS browser. Distinct from openInBrowser,
+  // which takes a worktree-relative file and builds a file:// URL from it.
+  openUrl(url: string): void
   gtCreate(req: GtCreateRequest): Promise<CommandOutcome>
   listRepoCommands(worktreePath: string): Promise<RepoCommandEntry[]>
   runRepoCommand(req: RunRepoCommandRequest): Promise<CommandOutcome>
@@ -279,6 +296,7 @@ export const IPC = {
   discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run', syncWithTrunk: 'sync:trunk',
   gtCreate: 'stack:gtCreate',
+  getPrStatuses: 'pr:get', refreshPrStatuses: 'pr:refresh', openUrl: 'browser:openUrl',
   listRepoCommands: 'cmd:list', runRepoCommand: 'cmd:run',
   openRepoCommandsFile: 'cmd:openFile',
   readAllRepoCommands: 'cmd:readAll', saveRepoCommands: 'cmd:save',
