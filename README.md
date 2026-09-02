@@ -12,6 +12,9 @@ commit changes without leaving the app.
 - **Worktree launchpad** — sidebar listing every worktree across your tracked repos,
   each with a live change-count badge. Create and remove worktrees inline. New
   worktrees are created in a sibling convention: `<repoParent>/.worktrees/<repo>/<branch>`.
+  A repo command can add `"select"` and `"terminal"` to jump to the worktree it
+  just created and type into its terminal — e.g. creating a worktree from a
+  Linear branch name and landing in tmux with Claude Code already on the ticket.
 - **Embedded terminals** — one persistent shell per worktree (xterm.js + node-pty).
   Switching worktrees preserves each terminal's running processes and scrollback.
 - **Diff panel** — side-by-side syntax-highlighted diffs, per-file staging, and a

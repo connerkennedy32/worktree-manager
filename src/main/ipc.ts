@@ -1,21 +1,25 @@
 import { ipcMain, BrowserWindow, dialog, app, shell } from 'electron'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
-import { IPC, type GtCreateRequest, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
+import { IPC, type GtCreateRequest, type Layout, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
 import { getCommittedFiles } from './git/committed'
 import { getPushState, push } from './git/push'
 import { syncWithTrunk } from './git/sync'
+import { refreshAll } from './github/pr-status'
 import { gtCreate } from './stack'
 import { runRepoCommand } from './repo-commands'
 import * as diff from './git/diff'
 import * as files from './files'
 import * as config from './config'
 import { PtyDaemonClient } from './pty-daemon/client'
+import { sendLines, type LineSink } from './term-lines'
+import { stalePtyPaths } from './stale-ptys'
 import { WatcherManager } from './watcher'
 import { previewUrl } from './preview'
 import { setAgentStatus, seedAgentStatuses, flashDone } from './dock'
@@ -30,6 +34,26 @@ let win: BrowserWindow
 let ptys: PtyDaemonClient
 let watchers: WatcherManager
 let registered = false
+
+// The daemon client delivers output through one callback, so anything else that
+// needs to observe a worktree's output registers here instead.
+const dataTaps = new Map<string, Set<() => void>>()
+
+// Lines asked for before the renderer has started that path's pty, flushed by
+// term:start. One entry per path: a newer request is the one the user meant.
+const pendingLines = new Map<string, string[]>()
+
+function ptySink(path: string): LineSink {
+  return {
+    write: data => ptys.write(path, data),
+    onData: cb => {
+      const set = dataTaps.get(path) ?? new Set()
+      dataTaps.set(path, set)
+      set.add(cb)
+      return () => { set.delete(cb); if (!set.size) dataTaps.delete(path) }
+    }
+  }
+}
 
 // node-pty and chokidar callbacks are async and can still fire after the
 // window that owns them has been closed (e.g. buffered pty output draining
@@ -64,7 +88,7 @@ export async function registerIpc(w: BrowserWindow) {
   registered = true
 
   ptys = await PtyDaemonClient.connect(
-    (p, d) => send(IPC.termData, p, d),
+    (p, d) => { send(IPC.termData, p, d); dataTaps.get(p)?.forEach(cb => cb()) },
     (p, r) => { send(IPC.agentStatus, p, r); signalDone(r); setAgentStatus(p, r) }
   )
   // Sessions outlive the app, so agents can already be mid-turn on connect.
@@ -82,8 +106,15 @@ export async function registerIpc(w: BrowserWindow) {
   })
   ipcMain.handle(IPC.listNames, () => config.listNames())
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
+  ipcMain.handle(IPC.getLayout, () => config.readLayout())
+  ipcMain.handle(IPC.setLayout, (_e, layout: Layout) => config.writeLayout(layout))
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
-  ipcMain.handle(IPC.listWorktrees, (_e, r: string) => wt.listWorktrees(r))
+  ipcMain.handle(IPC.listWorktrees, (_e, r: string) => {
+    // Piggy-backed on the renderer's 3s re-list rather than given its own timer:
+    // it is the moment the app already looks at what worktrees still exist.
+    for (const p of stalePtyPaths(ptys.list(), existsSync)) ptys.kill(p)
+    return wt.listWorktrees(r)
+  })
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {
     const result = await wt.removeWorktree(p, f)
     // The worktree dir is gone; free its terminal and stop watching it.
@@ -98,6 +129,22 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.push, (_e, p: string) => push(p))
   ipcMain.handle(IPC.syncWithTrunk, (_e, p: string) =>
     syncWithTrunk(p, chunk => send(IPC.gitOutput, p, chunk)))
+  ipcMain.handle(IPC.getPrStatuses, () => config.readPrStatuses())
+  // Merged into the cache rather than replacing it: a worktree whose gh call
+  // failed keeps its previous dot instead of going blank.
+  ipcMain.handle(IPC.refreshPrStatuses, async (_e, paths: string[]) => {
+    const res = await refreshAll(paths)
+    // A refresh can carry both: some worktrees answered while another hit an
+    // auth failure. Persist what came back and still surface the message.
+    const merged = { ...(await config.readPrStatuses()), ...res.statuses }
+    const statuses = await config.writePrStatuses(merged)
+    return res.error ? { statuses, error: res.error } : { statuses }
+  })
+  // https only: a malformed cached value must not become an arbitrary-scheme
+  // launch, and every URL this sends comes from `gh pr view`.
+  ipcMain.on(IPC.openUrl, (_e, url: string) => {
+    if (/^https:\/\//.test(url)) shell.openExternal(url)
+  })
   ipcMain.handle(IPC.gtCreate, (_e, req: GtCreateRequest) =>
     gtCreate(req, chunk => send(IPC.gitOutput, req.worktreePath, chunk)))
   ipcMain.handle(IPC.listRepoCommands, (_e, p: string) => config.listRepoCommands(p))
@@ -122,6 +169,16 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.on(IPC.openLazygit, (_e, p: string) => {
     ptys.start(p)
     ptys.write(p, 'lazygit\n')
+  })
+
+  ipcMain.on(IPC.termRunLines, (_e, p: string, lines: string[]) => {
+    // Starting the pty here would spawn the shell before TerminalView exists, so
+    // its first output lands in nothing and the shell gets the daemon's default
+    // size. For a path the client doesn't know yet, wait for term:start — the
+    // renderer owns that first start. A path that never starts never flushes.
+    if (!ptys.has(p)) { pendingLines.set(p, lines); return }
+    // Best-effort: a failed write must not take down the command that asked for it.
+    void sendLines(lines, ptySink(p)).catch(() => {})
   })
 
   ipcMain.on(IPC.openInEditor, (_e, p: string, file?: string) => {
@@ -159,6 +216,11 @@ export async function registerIpc(w: BrowserWindow) {
       send(IPC.termData, p, ptys.getBuffer(p))
     } else {
       ptys.start(p)
+    }
+    const queued = pendingLines.get(p)
+    if (queued) {
+      pendingLines.delete(p)
+      void sendLines(queued, ptySink(p)).catch(() => {})
     }
     const head = await wt.headPath(p).catch(() => undefined)
     watchers.watch(p, () => send(IPC.statusChanged, p), head)

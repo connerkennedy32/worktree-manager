@@ -1,4 +1,5 @@
 import type { AgentReport } from './agent-status'
+import type { PrStatus } from './pr-status'
 
 export interface Worktree {
   path: string
@@ -8,6 +9,30 @@ export interface Worktree {
   repoName: string
   locked?: boolean      // worktree marked locked via `git worktree lock`
 }
+
+// Sidebar organization: user-made groups, plus the paths tucked into the Hidden
+// section. Persisted in userData/layout.json (like names.json) so it survives a
+// renderer storage clear. A path appears in at most one group or in `hidden`;
+// anything absent from both renders in the flat ungrouped list.
+export interface WorktreeGroup {
+  id: string
+  name: string
+  collapsed: boolean
+  paths: string[]
+}
+
+export interface Layout {
+  groups: WorktreeGroup[]
+  hidden: string[]
+  hiddenCollapsed: boolean
+  // Ordering hint for ungrouped worktrees across every connected repo — one
+  // flat list, since the sidebar no longer sections them by repo. Not a
+  // membership list — a path here that's actually grouped or hidden is
+  // simply unused by deriveSections.
+  ungroupedOrder: string[]
+}
+
+export const emptyLayout = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
 
 export interface FileChange {
   path: string          // repo-relative
@@ -52,7 +77,23 @@ export type PushOutcome = { ok: true } | { ok: false; message: string }
 // merged anything, and how much — so success carries a summary too.
 export type SyncOutcome = { ok: boolean; message: string }
 
-export type CommandOutcome = { ok: boolean; message: string }
+// A refresh reports both what it learned and, if the machine's gh is missing or
+// logged out, one message explaining why nothing came back — the button needs
+// something to say, and that failure is not per worktree.
+export interface PrRefreshResult {
+  statuses: Record<string, PrStatus>
+  error?: string
+}
+
+export type CommandOutcome = {
+  ok: boolean
+  message: string
+  // Follow-ups the command asked for, resolved by main: an absolute worktree
+  // path to select, and terminal lines with placeholders already substituted.
+  // Only present on a successful run.
+  select?: string
+  terminal?: string[]
+}
 
 export interface RepoCommand {
   label: string
@@ -69,6 +110,13 @@ export interface RepoCommand {
   // instead of being tokenized, so `&&`, pipes, redirects and `&` work. Opt-in
   // because it also means a {{placeholder}} value is interpreted by the shell.
   shell?: boolean
+  // After the command succeeds, select this worktree in the sidebar. Resolved
+  // against the command's effective cwd, so `../.worktrees/{{name}}` works from
+  // a `cwd: "repo"` command. A path that matches no worktree is a no-op.
+  select?: string
+  // Lines typed into the selected worktree's terminal, each followed by Enter.
+  // Without `select`, they go to whatever worktree is already selected.
+  terminal?: string[]
 }
 
 // A named, collapsible set of buttons. Groups don't nest: one level keeps the
@@ -135,6 +183,10 @@ export interface Api {
   // clears the override.
   listNames(): Promise<Record<string, string>>
   setName(worktreePath: string, name: string): Promise<Record<string, string>>
+  // Sidebar groups / hidden worktrees. setLayout replaces the whole document and
+  // echoes back what was stored, matching setName's shape.
+  getLayout(): Promise<Layout>
+  setLayout(layout: Layout): Promise<Layout>
   // Background backdrop. Files live in userData/backgrounds and are managed from
   // the Background app menu; the renderer only reads the current selection (a
   // bare filename, or '' for the built-in default) and re-reads it when the menu
@@ -160,6 +212,14 @@ export interface Api {
   push(worktreePath: string): Promise<PushOutcome>
   // Fetch trunk and merge it into this worktree's branch.
   syncWithTrunk(worktreePath: string): Promise<SyncOutcome>
+  // GitHub PR state per worktree. getPrStatuses returns the disk cache without
+  // touching the network; refreshPrStatuses shells out to `gh` once per path and
+  // is only ever called from the sidebar's refresh button.
+  getPrStatuses(): Promise<Record<string, PrStatus>>
+  refreshPrStatuses(worktreePaths: string[]): Promise<PrRefreshResult>
+  // Open an absolute https URL in the OS browser. Distinct from openInBrowser,
+  // which takes a worktree-relative file and builds a file:// URL from it.
+  openUrl(url: string): void
   gtCreate(req: GtCreateRequest): Promise<CommandOutcome>
   listRepoCommands(worktreePath: string): Promise<RepoCommandEntry[]>
   runRepoCommand(req: RunRepoCommandRequest): Promise<CommandOutcome>
@@ -199,6 +259,9 @@ export interface Api {
   termStart(worktreePath: string): void
   termReset(worktreePath: string): Promise<void>
   termInput(worktreePath: string, data: string): void
+  // Types lines into a worktree's terminal, starting it if needed. Fire-and-
+  // forget: pacing between lines happens in main.
+  termRunLines(worktreePath: string, lines: string[]): void
   termResize(worktreePath: string, cols: number, rows: number): void
   // Brings the app window to the foreground (e.g. when a file drag enters it),
   // so drops land without first clicking the app to focus it.
@@ -223,7 +286,7 @@ export type BuiltinBackgroundId = typeof BUILTIN_BACKGROUNDS[number]['id']
 
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
-  listNames: 'names:list', setName: 'names:set',
+  listNames: 'names:list', setName: 'names:set', getLayout: 'layout:get', setLayout: 'layout:set',
   getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
   listWorktrees: 'wt:list', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
@@ -233,6 +296,7 @@ export const IPC = {
   discardPath: 'diff:discardPath', commit: 'diff:commit',
   pendingCount: 'push:pending', push: 'push:run', syncWithTrunk: 'sync:trunk',
   gtCreate: 'stack:gtCreate',
+  getPrStatuses: 'pr:get', refreshPrStatuses: 'pr:refresh', openUrl: 'browser:openUrl',
   listRepoCommands: 'cmd:list', runRepoCommand: 'cmd:run',
   openRepoCommandsFile: 'cmd:openFile',
   readAllRepoCommands: 'cmd:readAll', saveRepoCommands: 'cmd:save',
@@ -244,6 +308,7 @@ export const IPC = {
   previewUrl: 'preview:url',
   listTerminals: 'term:list',
   termStart: 'term:start', termReset: 'term:reset', termInput: 'term:input', termResize: 'term:resize',
+  termRunLines: 'term:runLines',
   termData: 'term:data', statusChanged: 'wt:statusChanged',
   focusWindow: 'win:focus',
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',

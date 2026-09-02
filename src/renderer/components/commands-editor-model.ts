@@ -37,7 +37,12 @@ export function clean(entries: RepoCommandEntry[]): RepoCommandEntry[] {
     run: c.run.trim(),
     ...(c.cwd === 'repo' && { cwd: 'repo' as const }),
     ...(c.width === 'full' && { width: 'full' as const }),
-    ...(c.shell && { shell: true })
+    ...(c.shell && { shell: true }),
+    // The editor has no fields for these, so they only ever arrive from a
+    // hand-written file; rebuilding the command without them would delete
+    // someone's follow-ups on an unrelated save.
+    ...(c.select && { select: c.select }),
+    ...(c.terminal?.length && { terminal: c.terminal })
   })
   return entries.map(e => (isCommandGroup(e)
     ? { label: e.label.trim(), commands: e.commands.map(cleanCommand), ...(e.open && { open: true }) }

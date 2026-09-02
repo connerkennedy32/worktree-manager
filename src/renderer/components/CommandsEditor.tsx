@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../state/store'
 import { isCommandGroup, type RepoCommand, type RepoCommandEntry } from '@shared/ipc-types'
-import { placeholders } from '@shared/repo-commands'
+import { commandPlaceholders } from '@shared/repo-commands'
 import { clean, duplicateLabels, move, problems } from './commands-editor-model'
 import './commands-editor.css'
 
@@ -254,7 +254,7 @@ function CommandFields({ cmd, nested, first, last, onChange, onMove, onDelete }:
   onMove: (delta: number) => void
   onDelete: () => void
 }) {
-  const { auto, ask } = placeholders(cmd.run)
+  const { auto, ask } = commandPlaceholders(cmd)
   return (
     <>
       <div className="ce-card-head" style={nested ? { paddingLeft: 0, paddingRight: 0 } : undefined}>

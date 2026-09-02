@@ -20,7 +20,10 @@ describe('PtyManager', () => {
       const t0 = Date.now()
       const iv = setInterval(() => {
         if (got.includes('wtm_marker_123')) { clearInterval(iv); resolve() }
-        else if (Date.now() - t0 > 4000) { clearInterval(iv); reject(new Error('timeout')) }
+        // Generous because this waits on a real login shell starting up while
+        // the git suites run alongside it: at 4s it failed whenever the rest of
+        // the run had enough subprocesses in flight to slow the spawn.
+        else if (Date.now() - t0 > 20000) { clearInterval(iv); reject(new Error('timeout')) }
       }, 50)
     })
     // the buffer used for replay must contain what was streamed
@@ -62,7 +65,10 @@ describe('PtyManager', () => {
       const t0 = Date.now()
       const iv = setInterval(() => {
         if (got.includes('[wtm_env_ok]')) { clearInterval(iv); resolve() }
-        else if (Date.now() - t0 > 4000) { clearInterval(iv); reject(new Error('timeout')) }
+        // Generous because this waits on a real login shell starting up while
+        // the git suites run alongside it: at 4s it failed whenever the rest of
+        // the run had enough subprocesses in flight to slow the spawn.
+        else if (Date.now() - t0 > 20000) { clearInterval(iv); reject(new Error('timeout')) }
       }, 50)
     })
     expect(got).toContain('[wtm_env_ok]')

@@ -3,35 +3,50 @@ import { useStore } from '../state/store'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
-import { deriveDot } from '@shared/agent-status'
+import { deriveDot, type DotState } from '@shared/agent-status'
+import { WorktreeRow } from './WorktreeRow'
+import {
+  addGroup, deleteGroup, deriveSections, mainRepoPath, moveTo, newGroupId, purgePaths, renameGroup,
+  reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
+} from './sidebar-layout'
 import './sidebar-theme.css'
 
-function MainDotIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="5" cy="5" r="4" fill="currentColor" />
-    </svg>
-  )
+// What a collapsed group shows in place of its rows: one dot per state that
+// any member is in, with a count. Ordered by how much it wants the user —
+// permission first, then failures, work in flight, and finished-unseen turns.
+const SUMMARY_ORDER: DotState[] = ['permission', 'failed', 'working', 'done']
+const SUMMARY_LABEL: Record<DotState, string> = {
+  permission: 'needs input',
+  failed: 'failed',
+  working: 'working',
+  done: 'done'
 }
 
-function BranchIcon() {
+function GroupStatusSummary({ worktrees }: { worktrees: Worktree[] }) {
+  const agentStatuses = useStore(st => st.agentStatuses)
+  const seenAt = useStore(st => st.seenAt)
+  const counts = new Map<DotState, number>()
+  for (const w of worktrees) {
+    const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
+    if (dot) counts.set(dot, (counts.get(dot) ?? 0) + 1)
+  }
+  if (counts.size === 0) return null
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" style={{ flexShrink: 0 }}>
-      <circle cx="2.5" cy="2.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="2.5" cy="7.5" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 V7.5" stroke="currentColor" strokeWidth="1.2" />
-      <path d="M2.5 4.1 C2.5 6 4 6 5.5 6" stroke="currentColor" strokeWidth="1.2" fill="none" />
-      <circle cx="7" cy="6" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    </svg>
+    <span className="wt-group-summary">
+      {SUMMARY_ORDER.filter(s => counts.has(s)).map(state => (
+        <span key={state} className={`wt-group-stat wt-group-stat-${state}`}
+              title={`${counts.get(state)} ${SUMMARY_LABEL[state]}`}>
+          <span className="wt-group-stat-dot" />
+          {counts.get(state)}
+        </span>
+      ))}
+    </span>
   )
-}
-
-function WorkingSpinner() {
-  return <span className="wt-row-spinner" title="Agent working" />
 }
 
 export function Sidebar() {
-  const { worktrees, statuses, agentStatuses, seenAt, names, rename, selected, select, refreshWorktrees, repos } = useStore()
+  const { worktrees, statuses, names, rename, selected, select, refreshWorktrees, repos,
+          prRefreshing, prError, refreshPrStatuses } = useStore()
   const [pending, setPending] = useState<Worktree | null>(null)
   const [pendingRepo, setPendingRepo] = useState<string | null>(null)
   const [pickError, setPickError] = useState<string>()
@@ -74,8 +89,19 @@ export function Sidebar() {
     if (!pendingRepo) return
     setBusy(true); setError(undefined)
     try {
+      // Ask git directly for this repo's own worktrees rather than matching
+      // the global worktree list by repoName (a bare basename) — two connected
+      // repos with the same directory name would otherwise both match and get
+      // their layout entries purged together. listWorktrees(pendingRepo) is
+      // scoped to exactly this path, so it's correct regardless of naming.
+      // Captured before removeRepo/refresh, since afterward these worktrees
+      // are gone from state and there'd be nothing left to match against.
+      const gone = (await window.api.listWorktrees(pendingRepo)).map(w => w.path)
       const repos = await window.api.removeRepo(pendingRepo)
       useStore.setState({ repos })
+      // These worktrees are gone from the app for good, so really forget them —
+      // unlike a missing worktree, which render-time filtering handles.
+      applyLayout(purgePaths(useStore.getState().layout, gone))
       await refreshWorktrees()
       // Clear selection if the active worktree belonged to the disconnected repo.
       const stillThere = useStore.getState().worktrees.some(w => w.path === selected)
@@ -104,14 +130,125 @@ export function Sidebar() {
     }
   }
 
-  // Worktrees are already produced repo-by-repo (see refreshWorktreeList), so
-  // grouping here just visually separates what's already in repo order.
-  const groups = useMemo(() => {
-    return repos.map(repo => ({
-      repo,
-      worktrees: worktrees.filter(w => w.repoName === repo.split('/').filter(Boolean).pop()),
-    }))
-  }, [repos, worktrees])
+  const { layout, applyLayout } = useStore()
+  const sections = useMemo(
+    () => deriveSections(layout, worktrees), [layout, worktrees]
+  )
+  // Maps a main checkout back to the repo path it came from, so its row can
+  // open the disconnect flow. Returns undefined (never renders a disconnect
+  // ✕) if nothing resolves, rather than guessing.
+  const repoPathFor = (w: Worktree): string | undefined => mainRepoPath(w, repos)
+  // Which group header is being renamed, and its draft. Kept separate from the
+  // row rename state above so editing a group can't cancel a row edit.
+  const [editingGroup, setEditingGroup] = useState<string | null>(null)
+  const [groupDraft, setGroupDraft] = useState('')
+
+  const createGroup = () => {
+    const id = newGroupId(layout)
+    applyLayout(addGroup(layout, id))
+    setEditingGroup(id)
+    setGroupDraft('New group')
+  }
+  const commitGroupEdit = () => {
+    if (editingGroup) applyLayout(renameGroup(layout, editingGroup, groupDraft))
+    setEditingGroup(null)
+  }
+
+  // Native HTML5 DnD. `drag` is what's being dragged; `over` is where the
+  // insertion indicator currently draws. Both are cleared on drop or dragend.
+  const [drag, setDrag] = useState<{ kind: 'path'; path: string } | { kind: 'group'; id: string } | null>(null)
+  const [over, setOver] = useState<
+    { kind: 'row'; path: string; edge: 'top' | 'bottom' } |
+    { kind: 'section'; key: string } |
+    { kind: 'groupHeader'; id: string } | null
+  >(null)
+
+  const clearDrag = () => { setDrag(null); setOver(null) }
+
+  const PATH_MIME = 'application/x-wtm-path'
+  const GROUP_MIME = 'application/x-wtm-group'
+
+  // Where a row would land: the target section, plus an anchor within it.
+  const dropRow = (path: string, target: DropTarget, anchor?: Anchor) => {
+    applyLayout(moveTo(layout, path, target, anchor))
+    clearDrag()
+  }
+
+  const sectionDropProps = (key: string, target: DropTarget) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(PATH_MIME)) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setOver({ kind: 'section', key })
+    },
+    onDrop: (e: React.DragEvent) => {
+      const path = e.dataTransfer.getData(PATH_MIME)
+      if (!path) return
+      e.preventDefault()
+      // No anchor: a drop on the section itself appends.
+      dropRow(path, target)
+    }
+  })
+
+  const renderRows = (list: Worktree[], isHidden: boolean, target: DropTarget) =>
+    list.map(w => (
+    <WorktreeRow
+      key={w.path}
+      worktree={w}
+      editing={editingPath === w.path}
+      draft={draft}
+      onDraftChange={setDraft}
+      onStartEdit={() => startEdit(w)}
+      onCommitEdit={commitEdit}
+      onCancelEdit={() => setEditingPath(null)}
+      onRemove={() => { setError(undefined); setPending(w) }}
+      onDisconnect={
+        repoPathFor(w) ? () => { setError(undefined); setPendingRepo(repoPathFor(w)!) } : undefined
+      }
+      onShowTip={e => showTip(e, w.path)}
+      onHideTip={hideTip}
+      hidden={isHidden}
+      onToggleHidden={() => applyLayout(
+        isHidden ? ungroup(layout, w.path) : moveTo(layout, w.path, { kind: 'hidden' }))}
+      dragging={drag?.kind === 'path' && drag.path === w.path}
+      dropEdge={over?.kind === 'row' && over.path === w.path ? over.edge : null}
+      onDragStart={e => {
+        e.dataTransfer.setData(PATH_MIME, w.path)
+        e.dataTransfer.effectAllowed = 'move'
+        setDrag({ kind: 'path', path: w.path })
+      }}
+      onDragEnd={clearDrag}
+      onDragOver={e => {
+        if (!e.dataTransfer.types.includes(PATH_MIME)) return
+        e.preventDefault()
+        // Stop the section wrapper's onDragOver from also firing and
+        // clobbering this row's indicator with its own drop-into highlight.
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        // Halfway down the row flips the indicator to the bottom edge, so the
+        // line always sits at the boundary the drop will actually use.
+        const r = e.currentTarget.getBoundingClientRect()
+        const edge = e.clientY - r.top > r.height / 2 ? 'bottom' : 'top'
+        setOver({ kind: 'row', path: w.path, edge })
+      }}
+      onDrop={e => {
+        const path = e.dataTransfer.getData(PATH_MIME)
+        e.preventDefault(); e.stopPropagation()
+        // HTML5 DnD fires drop on the source element too. Without this guard,
+        // anchoring on w.path would resolve against an array that no longer
+        // contains it (detach already removed it), fall back to "end", and
+        // bump the row to the bottom of its section instead of leaving it put.
+        if (!path || path === w.path) return clearDrag()
+        const r = e.currentTarget.getBoundingClientRect()
+        const after = e.clientY - r.top > r.height / 2
+        // Anchor on this row's own path — a real entry in the target's raw
+        // paths array — rather than a rendered-list index, so the drop lands
+        // exactly where the insertion line is drawn even with a ghost path
+        // elsewhere in the section.
+        dropRow(path, target, { kind: after ? 'after' : 'before', path: w.path })
+      }}
+    />
+  ))
 
   return (
     <div style={{ width: 260, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column',
@@ -119,6 +256,13 @@ export function Sidebar() {
       <div style={{ padding: 8, fontWeight: 600, borderBottom: '1px solid #333',
                     display: 'flex', alignItems: 'center' }}>
         <span style={{ flex: 1 }}>WORKTREES</span>
+        <button className="wt-btn wt-btn-ghost"
+                onClick={() => refreshPrStatuses()}
+                disabled={prRefreshing}
+                title={prError ?? 'Refresh PR status'}>
+          <span className={prRefreshing ? 'wt-pr-spin' : undefined}>↻</span>
+        </button>
+        <button className="wt-btn wt-btn-ghost" onClick={createGroup}>+ Group</button>
         <button className="wt-btn wt-btn-ghost" onClick={addRepo}>+ Repo</button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -127,64 +271,97 @@ export function Sidebar() {
             No repos yet. Click "+ Repo" to add a git repository.
           </div>
         )}
-        {groups.map(({ repo, worktrees: repoWorktrees }) => {
-          const name = repo.split('/').filter(Boolean).pop() ?? repo
-          return (
-            <div key={repo}>
-              <div className="wt-repo-header" title={repo}>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {name}
-                </span>
-                <span className="wt-repo-disconnect" title="Disconnect repo"
-                      onClick={() => setPendingRepo(repo)}>✕</span>
-              </div>
-              {repoWorktrees.map(w => {
-                const count = statuses[w.path]?.changeCount ?? 0
-                const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
-                return (
-                  <div key={w.path} className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}`}
-                       onClick={() => select(w.path)}
-                       onMouseEnter={e => showTip(e, w.path)} onMouseLeave={hideTip}>
-                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6,
-                                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                            onDoubleClick={(e) => { e.stopPropagation(); startEdit(w) }}
-                            title="Double-click to rename">
-                        {dot === 'working' ? <WorkingSpinner /> : (w.isMain ? <MainDotIcon /> : <BranchIcon />)}
-                        {editingPath === w.path ? (
-                          <input
-                            className="wt-input"
-                            autoFocus
-                            value={draft}
-                            onChange={e => setDraft(e.target.value)}
-                            onClick={e => e.stopPropagation()}
-                            onBlur={commitEdit}
-                            onKeyDown={e => {
-                              e.stopPropagation()
-                              if (e.key === 'Enter') commitEdit()
-                              else if (e.key === 'Escape') setEditingPath(null)
-                            }}
-                            style={{ flex: 1, minWidth: 0 }}
-                          />
-                        ) : (
-                          names[w.path] ?? w.path.split('/').filter(Boolean).pop()
-                        )}
-                      </span>
-                      <span style={{ fontSize: 11, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis',
-                                     whiteSpace: 'nowrap', paddingLeft: 29 }}>
-                        {w.branch}
-                      </span>
-                    </div>
-                    <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
-                      {count > 0 && <span className="wt-badge">{count}</span>}
-                      {!w.isMain && <span className="wt-row-remove" title="Remove worktree" onClick={(e) => {
-                        e.stopPropagation()
-                        setError(undefined); setPending(w)
-                      }}>✕</span>}
+        {sections.map(section => {
+          if (section.kind === 'group') {
+            return (
+              <div key={`g:${section.id}`} {...sectionDropProps(`g:${section.id}`, { kind: 'group', id: section.id })}>
+                <div onClick={() => applyLayout(toggleGroupCollapsed(layout, section.id))}
+                     draggable={editingGroup !== section.id}
+                     onDragStart={e => {
+                       e.dataTransfer.setData(GROUP_MIME, section.id)
+                       e.dataTransfer.effectAllowed = 'move'
+                       setDrag({ kind: 'group', id: section.id })
+                     }}
+                     onDragEnd={clearDrag}
+                     onDragOver={e => {
+                       if (!e.dataTransfer.types.includes(GROUP_MIME)) return
+                       e.preventDefault()
+                       setOver({ kind: 'groupHeader', id: section.id })
+                     }}
+                     onDrop={e => {
+                       const id = e.dataTransfer.getData(GROUP_MIME)
+                       e.preventDefault(); e.stopPropagation()
+                       if (!id || id === section.id) return clearDrag()
+                       // Drop lands the dragged group immediately above this one,
+                       // regardless of which direction it was dragged from.
+                       applyLayout(reorderGroup(layout, id, section.id))
+                       clearDrag()
+                     }}
+                     className={`wt-group-header${
+                       over?.kind === 'groupHeader' && over.id === section.id ? ' drop-above' : ''}${
+                       over?.kind === 'section' && over.key === `g:${section.id}` ? ' drop-into' : ''}`}>
+                  <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
+                  {editingGroup === section.id ? (
+                    <input className="wt-input" autoFocus value={groupDraft}
+                           onChange={e => setGroupDraft(e.target.value)}
+                           onClick={e => e.stopPropagation()}
+                           onBlur={commitGroupEdit}
+                           onKeyDown={e => {
+                             e.stopPropagation()
+                             if (e.key === 'Enter') commitGroupEdit()
+                             else if (e.key === 'Escape') setEditingGroup(null)
+                           }}
+                           style={{ flex: 1, minWidth: 0 }} />
+                  ) : (
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis',
+                                   whiteSpace: 'nowrap' }}
+                          onDoubleClick={e => {
+                            e.stopPropagation()
+                            setEditingGroup(section.id); setGroupDraft(section.name)
+                          }}
+                          title="Double-click to rename">
+                      {section.name}
                     </span>
+                  )}
+                  {section.collapsed && <GroupStatusSummary worktrees={section.worktrees} />}
+                  <span className="wt-group-count">{section.worktrees.length}</span>
+                  <span className="wt-group-delete" title="Delete group"
+                        onClick={e => { e.stopPropagation(); applyLayout(deleteGroup(layout, section.id)) }}>
+                    ✕
+                  </span>
+                </div>
+                {!section.collapsed && renderRows(section.worktrees, false, { kind: 'group', id: section.id })}
+                {!section.collapsed && section.worktrees.length === 0 && (
+                  <div style={{ padding: '6px 10px 8px 24px', color: '#777', fontSize: 11 }}>
+                    Drag worktrees here
                   </div>
-                )
-              })}
+                )}
+              </div>
+            )
+          }
+          if (section.kind === 'ungrouped') {
+            // No header at all: every connected repo's ungrouped worktrees
+            // share this one flat, freely-reorderable list.
+            const target: DropTarget = { kind: 'ungrouped', members: section.worktrees.map(w => w.path) }
+            return (
+              <div key="ungrouped" {...sectionDropProps('ungrouped', target)}>
+                {renderRows(section.worktrees, false, target)}
+              </div>
+            )
+          }
+          // Hidden always renders its header, even when empty, so it's a stable
+          // drop target — and collapsed by default so it stays out of the way.
+          return (
+            <div key="hidden" {...sectionDropProps('hidden', { kind: 'hidden' })}>
+              <div className={`wt-group-header${
+                     over?.kind === 'section' && over.key === 'hidden' ? ' drop-into' : ''}`}
+                   onClick={() => applyLayout(toggleHiddenCollapsed(layout))}>
+                <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
+                <span style={{ flex: 1 }}>Hidden</span>
+                {section.collapsed && <GroupStatusSummary worktrees={section.worktrees} />}
+                <span className="wt-group-count">{section.worktrees.length}</span>
+              </div>
+              {!section.collapsed && renderRows(section.worktrees, true, { kind: 'hidden' })}
             </div>
           )
         })}

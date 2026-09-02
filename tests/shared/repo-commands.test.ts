@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  tokenize, promptVars, placeholders, substitute, substituteShell, parseCommandsFile,
-  exampleCommandsFile
+  tokenize, promptVars, placeholders, commandPromptVars, commandPlaceholders, substitute,
+  substituteShell, parseCommandsFile, exampleCommandsFile
 } from '../../src/shared/repo-commands'
 import { isCommandGroup } from '../../src/shared/ipc-types'
 
@@ -219,5 +219,75 @@ describe('parseCommandsFile', () => {
   // editing the commands under it yields no buttons and no error.
   it('never seeds a fake user path when real repos are known', () => {
     expect(exampleCommandsFile(['/Users/me/Code/thing'])).not.toContain('/Users/you')
+  })
+})
+
+describe('select and terminal follow-ups', () => {
+  const wrap = (cmd: unknown) => parseCommandsFile({ '/repo': [cmd] })['/repo']
+
+  it('keeps valid select and terminal fields', () => {
+    const entries = wrap({
+      label: 'New worktree', run: 'git worktree add ../wt/{{name}}',
+      select: '../wt/{{name}}', terminal: ['tmux new -s {{name}}']
+    })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ select: '../wt/{{name}}', terminal: ['tmux new -s {{name}}'] })
+  })
+
+  it('drops an entry whose select is not a non-empty string', () => {
+    expect(wrap({ label: 'a', run: 'b', select: '   ' })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', select: 3 })).toHaveLength(0)
+  })
+
+  it('drops an entry whose terminal is not an array of non-empty strings', () => {
+    expect(wrap({ label: 'a', run: 'b', terminal: 'tmux' })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', terminal: ['ok', ''] })).toHaveLength(0)
+    expect(wrap({ label: 'a', run: 'b', terminal: [1] })).toHaveLength(0)
+  })
+
+  it('keeps sibling entries when one has a bad follow-up', () => {
+    const entries = parseCommandsFile({ '/repo': [
+      { label: 'bad', run: 'x', terminal: 'nope' },
+      { label: 'good', run: 'y' }
+    ] })['/repo']
+    expect(entries.map(e => (e as { label: string }).label)).toEqual(['good'])
+  })
+})
+
+describe('commandPromptVars', () => {
+  const base = { label: 'Create worktree', run: 'git worktree add ../wt/x' }
+
+  it('asks for a placeholder that appears only in select', () => {
+    expect(commandPromptVars({ ...base, select: '../wt/{{name}}' })).toEqual(['name'])
+  })
+
+  it('asks for a placeholder that appears only in a terminal line', () => {
+    expect(commandPromptVars({ ...base, terminal: ['echo {{ticket}}'] })).toEqual(['ticket'])
+  })
+
+  it('lists each name once across run, select and terminal, in first-appearance order', () => {
+    expect(commandPromptVars({
+      label: 'x', run: 'git worktree add -b {{name}} {{worktree}}',
+      select: '../wt/{{name}}', terminal: ['cc {{name}}', 'echo {{ticket}}', 'echo {{name}}']
+    })).toEqual(['name', 'ticket'])
+  })
+
+  it('still excludes implicit vars wherever they appear', () => {
+    expect(commandPromptVars({ label: 'x', run: 'echo hi', select: '{{worktree}}', terminal: ['cc {{branch}}'] }))
+      .toEqual([])
+  })
+})
+
+describe('commandPlaceholders', () => {
+  it('reports auto and ask names from every substituted field', () => {
+    expect(commandPlaceholders({
+      label: 'x', run: 'deploy {{repo}}', select: '../wt/{{name}}',
+      terminal: ['echo {{branch}} {{ticket}}']
+    })).toEqual({ auto: ['repo', 'branch'], ask: ['name', 'ticket'] })
+  })
+
+  it('matches the run-only reading when there are no follow-ups', () => {
+    expect(commandPlaceholders({ label: 'x', run: 'deploy {{name}} --on {{branch}}' }))
+      .toEqual({ auto: ['branch'], ask: ['name'] })
   })
 })

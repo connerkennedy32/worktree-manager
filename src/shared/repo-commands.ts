@@ -52,10 +52,41 @@ export function placeholders(run: string): { auto: string[]; ask: string[] } {
   return { auto, ask: promptVars(run) }
 }
 
+// `select` and `terminal` are substituted with the same vars as `run`, so a
+// placeholder that appears only there has to be prompted for too — otherwise it
+// resolves to '' and `select` silently collapses onto the command's cwd.
+function commandText(command: RepoCommand): string[] {
+  return [command.run, ...(command.select ? [command.select] : []), ...(command.terminal ?? [])]
+}
+
+// Across every substituted field, in first-appearance order and deduped, so one
+// prompt covers a name used in both `run` and `terminal`.
+export function commandPromptVars(command: RepoCommand): string[] {
+  const found: string[] = []
+  for (const text of commandText(command)) {
+    for (const name of promptVars(text)) if (!found.includes(name)) found.push(name)
+  }
+  return found
+}
+
+export function commandPlaceholders(command: RepoCommand): { auto: string[]; ask: string[] } {
+  const auto: string[] = []
+  for (const text of commandText(command)) {
+    for (const name of placeholders(text).auto) if (!auto.includes(name)) auto.push(name)
+  }
+  return { auto, ask: commandPromptVars(command) }
+}
+
 // Unknown placeholders resolve to empty rather than being left as literal
 // `{{x}}` text, so a mistyped variable can't be passed to git as an argument.
 export function substitute(tokens: string[], vars: Record<string, string>): string[] {
   return tokens.map(t => t.replace(PLACEHOLDER, (_m, name: string) => vars[name] ?? ''))
+}
+
+// Non-shell substitution for a value that is not a command line — a path, or a
+// line of terminal input — so it is not tokenized and not shell-quoted.
+export function substituteText(text: string, vars: Record<string, string>): string {
+  return text.replace(PLACEHOLDER, (_m, name: string) => vars[name] ?? '')
 }
 
 // Single quotes with '\'' for embedded ones: inside single quotes sh treats
@@ -80,6 +111,11 @@ function isRepoCommand(value: unknown): value is RepoCommand {
   if (v.cwd !== undefined && v.cwd !== 'worktree' && v.cwd !== 'repo') return false
   if (v.width !== undefined && v.width !== 'half' && v.width !== 'full') return false
   if (v.shell !== undefined && typeof v.shell !== 'boolean') return false
+  if (v.select !== undefined && (typeof v.select !== 'string' || !v.select.trim())) return false
+  if (v.terminal !== undefined) {
+    if (!Array.isArray(v.terminal)) return false
+    if (!v.terminal.every(l => typeof l === 'string' && l.trim())) return false
+  }
   return true
 }
 
@@ -128,9 +164,16 @@ export function exampleCommandsFile(repoPaths: string[]): string {
       'Set "shell": true to run it through sh -c instead, where && | > & all work.',
       '{{branch}} {{worktree}} {{worktreeName}} {{repo}} {{message}} are filled in;',
       '{{worktreeName}} is just the worktree folder name, {{worktree}} its full path.',
-      'any other {{placeholder}} is prompted for before the command runs.',
+      'any other {{placeholder}} is prompted for before the command runs, in run,',
+      'select and terminal alike.',
       'In shell mode placeholders are quoted for you - do not quote them yourself.',
       'cwd is "worktree" (default) or "repo".',
+      'select: a path to select in the sidebar once the command succeeds -',
+      'resolved against cwd, e.g. "../.worktrees/{{name}}" for a cwd:"repo" command.',
+      'terminal: lines typed into that worktree\'s terminal, each with Enter.',
+      'Each next line waits for the terminal to fall quiet, which is only a guess',
+      'at "ready" - so prefer one line that does the whole thing, e.g.',
+      'tmux new -s {{name}} \\; send-keys \'cc\' Enter.',
       'width is "half" (default) or "full" - full spans both button columns.',
       'To group buttons, use { "label": ..., "commands": [ ... ] } instead of a',
       'command: it renders as a collapsible section. Add "open": true to start',
@@ -145,7 +188,9 @@ export function exampleCommandsFile(repoPaths: string[]): string {
       {
         label: 'Create worktree',
         run: 'git worktree add --no-track -b {{name}} ../.worktrees/{{name}} main',
-        cwd: 'repo'
+        cwd: 'repo',
+        select: '../.worktrees/{{name}}',
+        terminal: ['tmux new -s {{name}} \\; send-keys \'cc\' Enter']
       },
       {
         label: 'Worktree admin',

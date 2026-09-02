@@ -89,6 +89,14 @@ export function TerminalView() {
           window.api.termInput(selected, '\x0a')
           return false
         }
+        // Ctrl+E → type "/dumb" and submit it. This shadows readline's
+        // end-of-line (0x05), an accepted tradeoff: the terminal here is
+        // almost always running Claude Code rather than a bare shell.
+        if (e.type === 'keydown' && e.key === 'e' && e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
+          e.preventDefault()
+          window.api.termInput(selected, '/dumb\r')
+          return false
+        }
         return true
       })
       term.open(container)
