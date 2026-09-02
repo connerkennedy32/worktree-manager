@@ -3,12 +3,46 @@ import { useStore } from '../state/store'
 import { ConfirmModal } from './ConfirmModal'
 import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
+import { deriveDot, type DotState } from '@shared/agent-status'
 import { WorktreeRow } from './WorktreeRow'
 import {
   addGroup, deleteGroup, deriveSections, mainRepoPath, moveTo, newGroupId, purgePaths, renameGroup,
   reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
 } from './sidebar-layout'
 import './sidebar-theme.css'
+
+// What a collapsed group shows in place of its rows: one dot per state that
+// any member is in, with a count. Ordered by how much it wants the user —
+// permission first, then failures, work in flight, and finished-unseen turns.
+const SUMMARY_ORDER: DotState[] = ['permission', 'failed', 'working', 'done']
+const SUMMARY_LABEL: Record<DotState, string> = {
+  permission: 'needs input',
+  failed: 'failed',
+  working: 'working',
+  done: 'done'
+}
+
+function GroupStatusSummary({ worktrees }: { worktrees: Worktree[] }) {
+  const agentStatuses = useStore(st => st.agentStatuses)
+  const seenAt = useStore(st => st.seenAt)
+  const counts = new Map<DotState, number>()
+  for (const w of worktrees) {
+    const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
+    if (dot) counts.set(dot, (counts.get(dot) ?? 0) + 1)
+  }
+  if (counts.size === 0) return null
+  return (
+    <span className="wt-group-summary">
+      {SUMMARY_ORDER.filter(s => counts.has(s)).map(state => (
+        <span key={state} className={`wt-group-stat wt-group-stat-${state}`}
+              title={`${counts.get(state)} ${SUMMARY_LABEL[state]}`}>
+          <span className="wt-group-stat-dot" />
+          {counts.get(state)}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 export function Sidebar() {
   const { worktrees, statuses, names, rename, selected, select, refreshWorktrees, repos,
@@ -289,6 +323,7 @@ export function Sidebar() {
                       {section.name}
                     </span>
                   )}
+                  {section.collapsed && <GroupStatusSummary worktrees={section.worktrees} />}
                   <span className="wt-group-count">{section.worktrees.length}</span>
                   <span className="wt-group-delete" title="Delete group"
                         onClick={e => { e.stopPropagation(); applyLayout(deleteGroup(layout, section.id)) }}>
@@ -323,6 +358,7 @@ export function Sidebar() {
                    onClick={() => applyLayout(toggleHiddenCollapsed(layout))}>
                 <span className={`wt-group-caret${section.collapsed ? '' : ' open'}`}>▸</span>
                 <span style={{ flex: 1 }}>Hidden</span>
+                {section.collapsed && <GroupStatusSummary worktrees={section.worktrees} />}
                 <span className="wt-group-count">{section.worktrees.length}</span>
               </div>
               {!section.collapsed && renderRows(section.worktrees, true, { kind: 'hidden' })}

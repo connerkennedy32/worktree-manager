@@ -181,3 +181,38 @@
 @media (prefers-reduced-motion: reduce) {
   .wt-pr-spin { animation: none; }
 }
+
+/* Collapsed-group status summary: the dots a group's rows would have shown,
+   rolled up so a folded group still says whether anything wants attention. */
+.wt-group-summary { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.wt-group-stat {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.wt-group-stat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.wt-group-stat-working { color: #e0e03d; }
+.wt-group-stat-working .wt-group-stat-dot {
+  background: #e0e03d;
+  animation: wt-group-stat-pulse 1.2s ease-in-out infinite;
+}
+.wt-group-stat-permission { color: #e67e4a; }
+.wt-group-stat-permission .wt-group-stat-dot {
+  background: #e67e4a;
+  animation: wt-group-stat-pulse 1.2s ease-in-out infinite;
+}
+.wt-group-stat-failed { color: #f28b82; }
+.wt-group-stat-failed .wt-group-stat-dot { background: #f28b82; }
+.wt-group-stat-done { color: #3fb950; }
+.wt-group-stat-done .wt-group-stat-dot { background: #3fb950; }
+
+@keyframes wt-group-stat-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wt-group-stat-dot { animation: none !important; }
+}
