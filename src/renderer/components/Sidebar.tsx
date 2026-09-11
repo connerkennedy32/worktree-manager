@@ -5,6 +5,7 @@ import { disposeTerminal } from './TerminalView'
 import type { Worktree } from '@shared/ipc-types'
 import { deriveDot, type DotState } from '@shared/agent-status'
 import { WorktreeRow } from './WorktreeRow'
+import { TasksPanel } from './TasksPanel'
 import {
   addGroup, deleteGroup, deriveSections, mainRepoPath, moveTo, newGroupId, purgePaths, renameGroup,
   reorderGroup, toggleGroupCollapsed, toggleHiddenCollapsed, ungroup, type Anchor, type DropTarget
@@ -25,9 +26,10 @@ const SUMMARY_LABEL: Record<DotState, string> = {
 function GroupStatusSummary({ worktrees }: { worktrees: Worktree[] }) {
   const agentStatuses = useStore(st => st.agentStatuses)
   const seenAt = useStore(st => st.seenAt)
+  const unread = useStore(st => st.unread)
   const counts = new Map<DotState, number>()
   for (const w of worktrees) {
-    const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
+    const dot = deriveDot(agentStatuses[w.path], seenAt[w.path], unread[w.path])
     if (dot) counts.set(dot, (counts.get(dot) ?? 0) + 1)
   }
   if (counts.size === 0) return null
@@ -366,6 +368,10 @@ export function Sidebar() {
           )
         })}
       </div>
+
+      {/* Global, and deliberately outside the worktree list: tasks are not
+          scoped to a worktree and outlive the ones they mention. */}
+      <TasksPanel />
 
       {pending && (
         <ConfirmModal

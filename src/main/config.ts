@@ -4,6 +4,7 @@ import { emptyLayout, type Layout, type RepoCommandEntry } from '@shared/ipc-typ
 import { repoRoot } from './git/repo-root'
 import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
 import type { PrStatus } from '@shared/pr-status'
+import { emptyTasks, parseTasksDoc, type TasksDoc } from '@shared/tasks'
 
 export function configDir(): string {
   if (process.env.WTM_CONFIG_DIR) return process.env.WTM_CONFIG_DIR
@@ -16,6 +17,7 @@ function namesFile(): string { return join(configDir(), 'names.json') }
 function commandsFile(): string { return join(configDir(), 'commands.json') }
 function layoutFile(): string { return join(configDir(), 'layout.json') }
 function prStatusFile(): string { return join(configDir(), 'pr-status.json') }
+function tasksFile(): string { return join(configDir(), 'tasks.json') }
 
 export async function listRepos(): Promise<string[]> {
   const f = file()
@@ -103,6 +105,22 @@ export async function writeLayout(layout: Layout): Promise<Layout> {
   const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   writeFileSync(layoutFile(), `${JSON.stringify(layout, null, 2)}\n`)
   return layout
+}
+
+// The global task list. Not keyed by anything — tasks outlive the worktree
+// they happened to be about. Fail-soft like layout.json: a corrupt file
+// degrades to an empty list rather than throwing on startup.
+export async function readTasks(): Promise<TasksDoc> {
+  const f = tasksFile()
+  if (!existsSync(f)) return emptyTasks()
+  try { return parseTasksDoc(JSON.parse(readFileSync(f, 'utf8'))) } catch { return emptyTasks() }
+}
+
+export async function writeTasks(doc: TasksDoc): Promise<TasksDoc> {
+  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  const clean = parseTasksDoc(doc)
+  writeFileSync(tasksFile(), `${JSON.stringify(clean, null, 2)}\n`)
+  return clean
 }
 
 // Last-known PR state per worktree path, so dots are on screen at launch

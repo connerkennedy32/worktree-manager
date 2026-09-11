@@ -76,6 +76,13 @@ export function App() {
     return () => { prev(); next() }
   }, [])
 
+  // Worktree › Mark Unread (Ctrl+S U). Acts on the selected worktree, so it's a
+  // no-op with nothing selected rather than marking something arbitrary.
+  useEffect(() => window.api.onMenuMarkUnread(() => {
+    const { selected, toggleUnread } = useStore.getState()
+    if (selected) toggleUnread(selected)
+  }), [])
+
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!dragging.current) return

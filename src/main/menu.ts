@@ -107,6 +107,16 @@ export async function buildAppMenu(win: BrowserWindow) {
           accelerator: 'Ctrl+J',
           registerAccelerator: false,
           click: () => win.webContents.send(IPC.menuSelectNext)
+        },
+        { type: 'separator' },
+        {
+          // Handled in shortcuts.ts like the items above, so the accelerator is
+          // only declared for display. Ctrl+U on every platform (not CmdOrCtrl),
+          // matching the Ctrl+J/Ctrl+K it sits beside.
+          label: 'Mark Unread',
+          accelerator: 'Ctrl+U',
+          registerAccelerator: false,
+          click: () => win.webContents.send(IPC.menuMarkUnread)
         }
       ]
     },

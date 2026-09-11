@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
 import { IPC, type GtCreateRequest, type Layout, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
+import type { TasksDoc } from '@shared/tasks'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
 import { getStatus } from './git/status'
@@ -108,6 +109,8 @@ export async function registerIpc(w: BrowserWindow) {
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
   ipcMain.handle(IPC.getLayout, () => config.readLayout())
   ipcMain.handle(IPC.setLayout, (_e, layout: Layout) => config.writeLayout(layout))
+  ipcMain.handle(IPC.getTasks, () => config.readTasks())
+  ipcMain.handle(IPC.setTasks, (_e, doc: TasksDoc) => config.writeTasks(doc))
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => {
     // Piggy-backed on the renderer's 3s re-list rather than given its own timer:

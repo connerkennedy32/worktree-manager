@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { emptyLayout, type Layout, type Worktree, type WorktreeStatus } from '@shared/ipc-types'
 import type { AgentReport } from '@shared/agent-status'
 import type { PrStatus } from '@shared/pr-status'
-import { loadSeenAt, saveSeenAt } from './seen'
+import { emptyTasks, type TasksDoc } from '@shared/tasks'
+import { loadSeenAt, loadUnread, saveSeenAt, saveUnread } from './seen'
 import { deriveSections, navOrder } from '../components/sidebar-layout'
 
 // A file the diff modal can show. Renderer-only view state, so it stays out of
@@ -21,6 +22,10 @@ interface State {
   statuses: Record<string, WorktreeStatus>
   agentStatuses: Record<string, AgentReport>
   seenAt: Record<string, number>
+  // Worktrees the user marked unread by hand (Ctrl+S U). Draws the same green dot a
+  // finished agent turn does; cleared by selecting the worktree.
+  unread: Record<string, boolean>
+  toggleUnread: (p: string) => void
   // GitHub PR state per worktree path. Refreshed only when the user asks — the
   // sidebar header button — and seeded from the main-process disk cache at init.
   prStatuses: Record<string, PrStatus>
@@ -33,6 +38,10 @@ interface State {
   // nav (selectRelative) has to walk the same order the sidebar renders.
   layout: Layout
   applyLayout: (next: Layout) => void
+  // The global task list, plus its sidebar section state. Global on purpose:
+  // tasks are not scoped to a worktree and outlive the ones they mention.
+  tasks: TasksDoc
+  applyTasks: (next: TasksDoc) => void
   // Current backdrop selection ('' = built-in default). Managed from the
   // Background app menu; the renderer just mirrors it to paint the backdrop.
   selectedBackground: string
@@ -53,11 +62,22 @@ interface State {
   selectRelative: (delta: 1 | -1) => void
 }
 
+// How long a worktree must stay selected before it counts as read. Long enough
+// to survive a burst of Ctrl+J/K, short enough that actually landing on a
+// worktree clears its dot before you look away.
+export const READ_DWELL_MS = 2000
+
+// The pending "mark read" for the current selection. Module-level rather than
+// store state: nothing renders from it, and keeping it out of the store means
+// selecting doesn't churn subscribers twice.
+let readTimer: ReturnType<typeof setTimeout> | undefined
+
 export const useStore = create<State>((set, get) => ({
-  repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(),
+  repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(), unread: loadUnread(),
   names: {},
   prStatuses: {}, prRefreshing: false,
   layout: emptyLayout(),
+  tasks: emptyTasks(),
   selectedBackground: '',
   openDiff: null, modalOpen: 0,
   // Names are persisted in the main process (userData/names.json), so an empty
@@ -73,6 +93,13 @@ export const useStore = create<State>((set, get) => ({
     set({ layout: next })
     window.api.setLayout(next).catch(e => console.error('layout write failed', e))
   },
+  // Same optimistic contract as applyLayout: state now, disk after. A failed
+  // write is logged rather than reverted — yanking a task back out from under
+  // the user is worse than a list that repairs itself on the next write.
+  applyTasks: (next) => {
+    set({ tasks: next })
+    window.api.setTasks(next).catch(e => console.error('tasks write failed', e))
+  },
   refreshBackground: async () => {
     set({ selectedBackground: await window.api.getSelectedBackground() })
   },
@@ -81,7 +108,8 @@ export const useStore = create<State>((set, get) => ({
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
-    set({ repos, names: await window.api.listNames(), layout: await window.api.getLayout() })
+    set({ repos, names: await window.api.listNames(), layout: await window.api.getLayout(),
+          tasks: await window.api.getTasks() })
     await get().refreshBackground()
     // The Background app menu changes the selection in the main process; re-read
     // it when notified so the backdrop updates live.
@@ -145,10 +173,34 @@ export const useStore = create<State>((set, get) => ({
   // once its xterm instance exists and the onTermData handler is bound, so the
   // shell's initial prompt output can never arrive before the renderer is ready.
   select: (p) => {
-    const seenAt = { ...get().seenAt, [p]: Date.now() }
-    saveSeenAt(seenAt)
-    set({ selected: p, seenAt })
+    set({ selected: p })
     localStorage.setItem('wtm.selected', p)
+    // Marking read is deliberately *not* immediate. Stepping through worktrees
+    // with Ctrl+J/K passes through every one in between, and stamping on arrival
+    // would clear their dots without the user having read a thing. A worktree
+    // counts as read once it has been the selected one for DWELL_MS.
+    clearTimeout(readTimer)
+    readTimer = setTimeout(() => {
+      // Re-check rather than trusting the closure: a switch away and back
+      // restarts the clock, and this timer may be the stale one.
+      if (get().selected !== p) return
+      const seenAt = { ...get().seenAt, [p]: Date.now() }
+      saveSeenAt(seenAt)
+      // Visiting a worktree is what "read" means, so it clears a manual mark too.
+      const unread = { ...get().unread }
+      delete unread[p]
+      saveUnread(unread)
+      set({ seenAt, unread })
+    }, READ_DWELL_MS)
+  },
+  // A toggle, not a one-way set: pressing the shortcut twice undoes a mistake
+  // without having to navigate away and back to clear it.
+  toggleUnread: (p) => {
+    const unread = { ...get().unread }
+    if (unread[p]) delete unread[p]
+    else unread[p] = true
+    saveUnread(unread)
+    set({ unread })
   },
   // Walk the sidebar exactly as rendered: groups first in layout order, then the
   // ungrouped section, then Hidden — with collapsed sections skipped, so

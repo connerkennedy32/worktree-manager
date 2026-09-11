@@ -1,5 +1,6 @@
 import type { AgentReport } from './agent-status'
 import type { PrStatus } from './pr-status'
+import type { TasksDoc } from './tasks'
 
 export interface Worktree {
   path: string
@@ -187,6 +188,10 @@ export interface Api {
   // echoes back what was stored, matching setName's shape.
   getLayout(): Promise<Layout>
   setLayout(layout: Layout): Promise<Layout>
+  // The global task list. Whole-document read/write, same shape as layout:
+  // setTasks replaces it and echoes back what was stored.
+  getTasks(): Promise<TasksDoc>
+  setTasks(doc: TasksDoc): Promise<TasksDoc>
   // Background backdrop. Files live in userData/backgrounds and are managed from
   // the Background app menu; the renderer only reads the current selection (a
   // bare filename, or '' for the built-in default) and re-reads it when the menu
@@ -273,6 +278,9 @@ export interface Api {
   onMenuResetTerminal(cb: () => void): () => void
   onMenuSelectPrev(cb: () => void): () => void
   onMenuSelectNext(cb: () => void): () => void
+  // Worktree › Mark Unread (Ctrl+S U): flags the selected worktree so it draws the
+  // same green "unhandled" dot a finished agent turn does.
+  onMenuMarkUnread(cb: () => void): () => void
 }
 
 // Backdrops bundled with the app, offered in the Background menu alongside any
@@ -287,6 +295,7 @@ export type BuiltinBackgroundId = typeof BUILTIN_BACKGROUNDS[number]['id']
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
   listNames: 'names:list', setName: 'names:set', getLayout: 'layout:get', setLayout: 'layout:set',
+  getTasks: 'tasks:get', setTasks: 'tasks:set',
   getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
   listWorktrees: 'wt:list', removeWorktree: 'wt:remove',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
@@ -313,5 +322,6 @@ export const IPC = {
   focusWindow: 'win:focus',
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',
   menuResetTerminal: 'menu:resetTerminal',
-  menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext'
+  menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext',
+  menuMarkUnread: 'menu:markUnread'
 } as const

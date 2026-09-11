@@ -51,9 +51,9 @@ export function WorktreeRow({
   onCancelEdit, onRemove, onDisconnect, onShowTip, onHideTip, hidden, onToggleHidden,
   dragging, dropEdge, onDragStart, onDragEnd, onDragOver, onDrop
 }: WorktreeRowProps) {
-  const { statuses, agentStatuses, seenAt, names, selected, select } = useStore()
+  const { statuses, agentStatuses, seenAt, unread, names, selected, select } = useStore()
   const count = statuses[w.path]?.changeCount ?? 0
-  const dot = deriveDot(agentStatuses[w.path], seenAt[w.path])
+  const dot = deriveDot(agentStatuses[w.path], seenAt[w.path], unread[w.path])
   return (
     <div className={`wt-row${selected === w.path ? ' selected' : ''}${dot ? ` ${dot}` : ''}` +
                      `${dragging ? ' dragging' : ''}${dropEdge ? ` drop-${dropEdge}` : ''}`}

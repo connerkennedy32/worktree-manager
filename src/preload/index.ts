@@ -11,6 +11,8 @@ const api: Api = {
   setName: (p, name) => ipcRenderer.invoke(IPC.setName, p, name),
   getLayout: () => ipcRenderer.invoke(IPC.getLayout),
   setLayout: (layout) => ipcRenderer.invoke(IPC.setLayout, layout),
+  getTasks: () => ipcRenderer.invoke(IPC.getTasks),
+  setTasks: (doc) => ipcRenderer.invoke(IPC.setTasks, doc),
   getSelectedBackground: () => ipcRenderer.invoke(IPC.getSelectedBackground),
   onBackgroundChanged: (cb) => {
     const h = () => cb()
@@ -100,6 +102,11 @@ const api: Api = {
     const h = () => cb()
     ipcRenderer.on(IPC.menuSelectNext, h as any)
     return () => ipcRenderer.removeListener(IPC.menuSelectNext, h as any)
+  },
+  onMenuMarkUnread: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuMarkUnread, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuMarkUnread, h as any)
   }
 }
 contextBridge.exposeInMainWorld('api', api)

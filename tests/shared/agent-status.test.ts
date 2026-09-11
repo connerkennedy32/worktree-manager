@@ -90,3 +90,26 @@ describe('deriveDot', () => {
     expect(deriveDot({ status: 'working', at: 100 }, 999)).toBe('working')
   })
 })
+
+describe('deriveDot with a manual unread mark', () => {
+  it('draws green on a worktree no agent has ever touched', () => {
+    expect(deriveDot(undefined, undefined, true)).toBe('done')
+    expect(deriveDot(undefined, undefined, false)).toBeNull()
+  })
+
+  it('draws green on an idle worktree whose agent has gone away', () => {
+    expect(deriveDot({ status: 'none', at: 1 }, 5, true)).toBe('done')
+  })
+
+  it('re-raises a finished turn the user had already seen', () => {
+    const report = { status: 'done' as const, at: 1 }
+    expect(deriveDot(report, 5)).toBeNull()
+    expect(deriveDot(report, 5, true)).toBe('done')
+  })
+
+  it('loses to the live states, which have something more urgent to say', () => {
+    expect(deriveDot({ status: 'permission', at: 1 }, 5, true)).toBe('permission')
+    expect(deriveDot({ status: 'working', at: 1 }, 5, true)).toBe('working')
+    expect(deriveDot({ status: 'failed', at: 1 }, 5, true)).toBe('failed')
+  })
+})

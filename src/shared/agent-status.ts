@@ -39,14 +39,21 @@ export function mapHookEvent(event: string): RawStatus | null {
  * mean "unhandled". `permission` and `failed` are live states — visiting the
  * tab neither answers a permission prompt nor fixes an error — so they are not
  * gated and persist until the agent itself moves on.
+ *
+ * `unread` is the user marking a worktree "come back to this" by hand. It draws
+ * the same green dot as a finished turn — same meaning, "unhandled, mine to
+ * look at" — and works on a worktree no agent has ever touched. It loses to the
+ * live states rather than overriding them: a worktree waiting on a permission
+ * prompt has something more urgent to say than a note-to-self.
  */
-export function deriveDot(report: AgentReport | undefined, seenAt: number | undefined): DotState | null {
-  if (!report) return null
-  switch (report.status) {
+export function deriveDot(
+  report: AgentReport | undefined, seenAt: number | undefined, unread = false
+): DotState | null {
+  switch (report?.status) {
     case 'working': return 'working'
     case 'permission': return 'permission'
     case 'failed': return 'failed'
-    case 'done': return report.at > (seenAt ?? 0) ? 'done' : null
-    case 'none': return null
+    case 'done': return report.at > (seenAt ?? 0) ? 'done' : unread ? 'done' : null
+    default: return unread ? 'done' : null
   }
 }
