@@ -72,3 +72,30 @@ describe('resolveFollowUps', () => {
     expect(out.terminal).toEqual(['cc '])
   })
 })
+
+describe('the kickoff prompt', () => {
+  it('reaches a terminal line quoted, so a sentence stays one argument', () => {
+    const command = {
+      label: 'Create worktree (task)',
+      run: 'pnpm use-worktree {{branch}}',
+      shell: true,
+      terminal: ['tmux new -c ~/Code/wt-{{branch}} \; send-keys \'cc -- "{{prompt}}"\' Enter']
+    }
+    const out = resolveFollowUps(command, '/repo', {
+      branch: 'ck/retry', prompt: "look at the retry limits; don't change the API"
+    })
+    // Adjacent quoted strings concatenate in sh, so the template's own quotes
+    // and the quoting applied to the value compose rather than nest.
+    expect(out.terminal?.[0]).toBe(
+      String.raw`tmux new -c ~/Code/wt-'ck/retry' ; send-keys 'cc -- "'look at the retry limits; don'\''t change the API'"' Enter`
+    )
+  })
+
+  it('leaves empty quotes when no kickoff was typed', () => {
+    const out = resolveFollowUps(
+      { label: 'x', run: 'y', shell: true, terminal: ['send-keys \'cc -- "{{prompt}}"\' Enter'] },
+      '/repo', { prompt: '' })
+    // Nothing between the quotes, which is what `cc -- ""` amounts to.
+    expect(out.terminal?.[0]).toBe(String.raw`send-keys 'cc -- "''"' Enter`)
+  })
+})

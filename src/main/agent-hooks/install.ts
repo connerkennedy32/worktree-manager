@@ -39,9 +39,24 @@ EVENT=$(printf '%s' "$INPUT" | grep -oE '"hook_event_name"[[:space:]]*:[[:space:
 CWD=$(printf '%s' "$INPUT" | grep -oE '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"')
 [ -z "$CWD" ] && exit 0
 
-curl -sS --unix-socket "$SOCKET" \\
+# The payload rides along under "payload", so the daemon — which is Node and
+# can parse JSON properly — can say what the agent is doing. bash can just about
+# find a flat field like cwd, and has no business digging tool_input.file_path
+# out of nested JSON.
+#
+# cwd and event stay at the top level on purpose: a daemon older than this
+# script reads exactly those two and ignores the rest, so a stale daemon keeps
+# working (it just can't describe anything). That is not hypothetical — the
+# daemon outlives the app and is shared by every build on the machine.
+#
+# A huge payload (a big file's tool_response) is dropped rather than forwarded,
+# so the status never depends on the size of what the agent just read.
+BODY="{\\"cwd\\":\\"$CWD\\",\\"event\\":\\"$EVENT\\",\\"payload\\":$INPUT}"
+[ "\${#INPUT}" -gt 131072 ] && BODY="{\\"cwd\\":\\"$CWD\\",\\"event\\":\\"$EVENT\\"}"
+
+printf '%s' "$BODY" | curl -sS --unix-socket "$SOCKET" \\
   -X POST -H 'Content-Type: application/json' \\
-  -d "{\\"cwd\\":\\"$CWD\\",\\"event\\":\\"$EVENT\\"}" \\
+  --data-binary @- \\
   --connect-timeout 1 --max-time 2 \\
   http://localhost/hook >/dev/null 2>&1
 exit 0

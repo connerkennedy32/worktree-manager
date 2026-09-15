@@ -26,6 +26,15 @@ function isProcessAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true } catch { return false }
 }
 
+// Polls rather than waits on a signal: the daemon is not our child (it was
+// detached by a previous app run), so there is no exit event to listen for.
+async function waitForExit(pid: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (isProcessAlive(pid) && Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 50))
+  }
+}
+
 function tryConnect(path: string, timeoutMs: number): Promise<net.Socket | undefined> {
   return new Promise(resolve => {
     const sock = net.createConnection({ path })
@@ -133,8 +142,20 @@ export class PtyDaemonClient {
     const manifest = readManifest()
 
     let socket: net.Socket | undefined
+    // A daemon of our own version is reused — that reuse is the point, since
+    // it is what keeps terminals alive across an app restart. An older one is
+    // replaced instead: it answers fine but lacks whatever the bump was for,
+    // and reusing it would mean the missing feature never comes back, however
+    // many times the user restarts the app.
     if (manifest && isProcessAlive(manifest.pid)) {
-      socket = await tryConnect(manifest.socketPath, 500)
+      if (manifest.version === PROTOCOL_VERSION) {
+        socket = await tryConnect(manifest.socketPath, 500)
+      } else {
+        try { process.kill(manifest.pid) } catch { /* already gone */ }
+        // Wait for it to actually exit: the successor unlinks and rebinds the
+        // same socket path, and racing it produces a daemon nobody can reach.
+        await waitForExit(manifest.pid, 2_000)
+      }
     }
 
     if (!socket) {

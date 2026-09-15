@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import type { AgentReport } from '@shared/agent-status'
-import { IPC, type GtCreateRequest, type Layout, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
+import { IPC, type CreateWorktreeRequest, type GtCreateRequest, type RepoCommandEntry, type RunRepoCommandRequest } from '@shared/ipc-types'
 import type { TasksDoc } from '@shared/tasks'
 import * as wt from './git/worktrees'
 import { validateRepoSelection } from './git/repo'
@@ -18,6 +18,7 @@ import { runRepoCommand } from './repo-commands'
 import * as diff from './git/diff'
 import * as files from './files'
 import * as config from './config'
+import { buildAppMenu } from './menu'
 import { PtyDaemonClient } from './pty-daemon/client'
 import { sendLines, type LineSink } from './term-lines'
 import { stalePtyPaths } from './stale-ptys'
@@ -107,10 +108,17 @@ export async function registerIpc(w: BrowserWindow) {
   })
   ipcMain.handle(IPC.listNames, () => config.listNames())
   ipcMain.handle(IPC.setName, (_e, p: string, name: string) => config.setName(p, name))
-  ipcMain.handle(IPC.getLayout, () => config.readLayout())
-  ipcMain.handle(IPC.setLayout, (_e, layout: Layout) => config.writeLayout(layout))
   ipcMain.handle(IPC.getTasks, () => config.readTasks())
-  ipcMain.handle(IPC.setTasks, (_e, doc: TasksDoc) => config.writeTasks(doc))
+  ipcMain.handle(IPC.setTasks, async (_e, doc: TasksDoc) => {
+    // The Layout menu draws a checkmark from this document, so it has to be
+    // rebuilt when the layout flips. Gated on an actual change: setTasks runs
+    // on every keystroke in a task title, and rebuilding the menu bar that
+    // often would be both wasteful and visibly twitchy.
+    const before = (await config.readTasks()).layout
+    const saved = await config.writeTasks(doc)
+    if (saved.layout !== before) await buildAppMenu(win)
+    return saved
+  })
   ipcMain.handle(IPC.getSelectedBackground, () => config.getSelectedBackground())
   ipcMain.handle(IPC.listWorktrees, (_e, r: string) => {
     // Piggy-backed on the renderer's 3s re-list rather than given its own timer:
@@ -124,6 +132,15 @@ export async function registerIpc(w: BrowserWindow) {
     ptys.kill(p)
     watchers.unwatch(p)
     return result
+  })
+  ipcMain.handle(IPC.createWorktree, async (_e, req: CreateWorktreeRequest) => {
+    try {
+      return { ok: true as const, path: await wt.createWorktree(req.repoPath, req.branch) }
+    } catch (e: any) {
+      // git's own message is the useful part ("branch 'x' already exists"), so
+      // it goes back verbatim for the start pane to show.
+      return { ok: false as const, message: (e?.message ?? String(e)).trim() }
+    }
   })
   ipcMain.handle(IPC.getStatus, (_e, p: string) => getStatus(p))
   ipcMain.handle(IPC.getDiff, (_e, p: string) => diff.getDiff(p))

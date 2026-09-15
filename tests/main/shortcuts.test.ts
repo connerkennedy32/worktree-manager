@@ -79,6 +79,25 @@ describe('shortcutFor Ctrl+J/Ctrl+K, on both platforms', () => {
     expect(shortcutFor(key({ key: 'j', control: true, meta: true }), true)).toBeNull()
   })
 
+  it('maps Ctrl+H and Ctrl+L to the columns either side, on both platforms', () => {
+    for (const isMac of [true, false]) {
+      expect(shortcutFor(key({ key: 'h', control: true }), isMac)).toBe('prevLane')
+      expect(shortcutFor(key({ key: 'l', control: true }), isMac)).toBe('nextLane')
+    }
+  })
+
+  it('maps Cmd+Left/Right to the columns either side on macOS', () => {
+    expect(shortcutFor(key({ key: 'ArrowLeft', meta: true }), true)).toBe('prevLane')
+    expect(shortcutFor(key({ key: 'ArrowRight', meta: true }), true)).toBe('nextLane')
+  })
+
+  it('leaves bare H/L and Cmd+H alone', () => {
+    expect(shortcutFor(key({ key: 'h' }), true)).toBeNull()
+    expect(shortcutFor(key({ key: 'l' }), true)).toBeNull()
+    // Cmd+H hides the app on macOS, and Ctrl+Meta is someone else's binding.
+    expect(shortcutFor(key({ key: 'h', control: true, meta: true }), true)).toBeNull()
+  })
+
   it('ignores bare J/K without Ctrl', () => {
     expect(shortcutFor(key({ key: 'j' }), true)).toBeNull()
     expect(shortcutFor(key({ key: 'k' }), true)).toBeNull()

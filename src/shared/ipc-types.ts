@@ -11,30 +11,6 @@ export interface Worktree {
   locked?: boolean      // worktree marked locked via `git worktree lock`
 }
 
-// Sidebar organization: user-made groups, plus the paths tucked into the Hidden
-// section. Persisted in userData/layout.json (like names.json) so it survives a
-// renderer storage clear. A path appears in at most one group or in `hidden`;
-// anything absent from both renders in the flat ungrouped list.
-export interface WorktreeGroup {
-  id: string
-  name: string
-  collapsed: boolean
-  paths: string[]
-}
-
-export interface Layout {
-  groups: WorktreeGroup[]
-  hidden: string[]
-  hiddenCollapsed: boolean
-  // Ordering hint for ungrouped worktrees across every connected repo — one
-  // flat list, since the sidebar no longer sections them by repo. Not a
-  // membership list — a path here that's actually grouped or hidden is
-  // simply unused by deriveSections.
-  ungroupedOrder: string[]
-}
-
-export const emptyLayout = (): Layout => ({ groups: [], hidden: [], hiddenCollapsed: true, ungroupedOrder: [] })
-
 export interface FileChange {
   path: string          // repo-relative
   index: string         // porcelain XY: staged status char
@@ -98,6 +74,13 @@ export type CommandOutcome = {
 
 export interface RepoCommand {
   label: string
+  // Marks this as the command a task runs instead of the built-in git for that
+  // side of a worktree's life: 'createWorktree' replaces `git worktree add`, so
+  // the repo's own flow — tmux, an agent, a kickoff message — is what a task
+  // starts with; 'removeWorktree' replaces `git worktree remove`, for repos
+  // whose teardown does more than git does (dropping databases, trashing
+  // node_modules out of band). One of each per repo; the first found wins.
+  role?: 'createWorktree' | 'removeWorktree'
   // Tokenized on quotes and spawned directly, never through a shell: no `&&`,
   // no pipes, no $VAR. {{branch}}, {{worktree}}, {{worktreeName}}, {{repo}} and
   // {{message}} (the commit box) are substituted; any other {{placeholder}} is
@@ -146,6 +129,9 @@ export interface RunRepoCommandRequest {
   inputs?: Record<string, string>
   message?: string
   branch?: string
+  // {{prompt}}: what a task's start pane was told to kick the agent off with.
+  // Implicit like branch and message, so it is passed rather than prompted for.
+  prompt?: string
 }
 
 export interface GtCreateRequest {
@@ -159,6 +145,15 @@ export interface CommittedChanges {
   baseBranch: string    // branch of the repo's main worktree; '' when unresolvable
   files: CommittedFile[]
 }
+
+export interface CreateWorktreeRequest { repoPath: string; branch: string }
+
+// Creating can fail for reasons the user can fix (branch already exists, dirty
+// index), so it reports an outcome rather than throwing — same contract as
+// push, and for the same reason: a thrown main-process error arrives wrapped.
+export type CreateWorktreeOutcome =
+  | { ok: true; path: string }
+  | { ok: false; message: string }
 
 export interface StageRequest { worktreePath: string; patch: string; reverse?: boolean }
 export interface FileDiffRequest {
@@ -184,10 +179,6 @@ export interface Api {
   // clears the override.
   listNames(): Promise<Record<string, string>>
   setName(worktreePath: string, name: string): Promise<Record<string, string>>
-  // Sidebar groups / hidden worktrees. setLayout replaces the whole document and
-  // echoes back what was stored, matching setName's shape.
-  getLayout(): Promise<Layout>
-  setLayout(layout: Layout): Promise<Layout>
   // The global task list. Whole-document read/write, same shape as layout:
   // setTasks replaces it and echoes back what was stored.
   getTasks(): Promise<TasksDoc>
@@ -200,6 +191,9 @@ export interface Api {
   onBackgroundChanged(cb: () => void): () => void
   listWorktrees(repoPath: string): Promise<Worktree[]>
   removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]>
+  // Create a worktree for a new branch, in the app's sibling convention. Used by
+  // a task that needs a terminal and doesn't have one yet.
+  createWorktree(req: CreateWorktreeRequest): Promise<CreateWorktreeOutcome>
   getStatus(worktreePath: string): Promise<WorktreeStatus>
   getDiff(worktreePath: string): Promise<DiffFile[]>
   getCommittedFiles(worktreePath: string): Promise<CommittedChanges>
@@ -236,6 +230,9 @@ export interface Api {
   // editor shows what was actually stored rather than what it sent.
   saveRepoCommands(repoPath: string, entries: RepoCommandEntry[]): Promise<RepoCommandEntry[]>
   onMenuEditCommands(cb: () => void): () => void
+  // Repos are added and disconnected from the Repos menu now that there is no
+  // sidebar. Main does the work and then tells the renderer to re-read.
+  onReposChanged(cb: () => void): () => void
   // Fires after the editor writes commands.json, so open panels re-read it.
   onCommandsChanged(cb: () => void): () => void
   // Live output of the git commands a branch action runs, so the panel can show
@@ -278,9 +275,14 @@ export interface Api {
   onMenuResetTerminal(cb: () => void): () => void
   onMenuSelectPrev(cb: () => void): () => void
   onMenuSelectNext(cb: () => void): () => void
+  onMenuSelectPrevLane(cb: () => void): () => void
+  onMenuSelectNextLane(cb: () => void): () => void
   // Worktree › Mark Unread (Ctrl+S U): flags the selected worktree so it draws the
   // same green "unhandled" dot a finished agent turn does.
   onMenuMarkUnread(cb: () => void): () => void
+  // View › Toggle List Layout: swaps the board for the single-column list down
+  // the left edge, which is what makes the app usable on a short screen.
+  onMenuToggleLayout(cb: () => void): () => void
 }
 
 // Backdrops bundled with the app, offered in the Background menu alongside any
@@ -294,10 +296,10 @@ export type BuiltinBackgroundId = typeof BUILTIN_BACKGROUNDS[number]['id']
 
 export const IPC = {
   listRepos: 'repos:list', addRepo: 'repos:add', removeRepo: 'repos:remove', pickRepo: 'repos:pick',
-  listNames: 'names:list', setName: 'names:set', getLayout: 'layout:get', setLayout: 'layout:set',
+  listNames: 'names:list', setName: 'names:set',
   getTasks: 'tasks:get', setTasks: 'tasks:set',
   getSelectedBackground: 'bg:get', backgroundChanged: 'bg:changed',
-  listWorktrees: 'wt:list', removeWorktree: 'wt:remove',
+  listWorktrees: 'wt:list', removeWorktree: 'wt:remove', createWorktree: 'wt:create',
   getStatus: 'wt:status', getDiff: 'diff:get', getFileDiff: 'diff:file',
   readFile: 'file:read', writeFile: 'file:write',
   getCommittedFiles: 'diff:committed',
@@ -310,6 +312,7 @@ export const IPC = {
   openRepoCommandsFile: 'cmd:openFile',
   readAllRepoCommands: 'cmd:readAll', saveRepoCommands: 'cmd:save',
   menuEditCommands: 'menu:editCommands', commandsChanged: 'cmd:changed',
+  reposChanged: 'repos:changed',
   gitOutput: 'git:output',
   openLazygit: 'term:lazygit',
   openInEditor: 'editor:open',
@@ -323,5 +326,7 @@ export const IPC = {
   getAgentStatuses: 'agent:list', agentStatus: 'agent:status',
   menuResetTerminal: 'menu:resetTerminal',
   menuSelectPrev: 'menu:selectPrev', menuSelectNext: 'menu:selectNext',
-  menuMarkUnread: 'menu:markUnread'
+  menuSelectPrevLane: 'menu:selectPrevLane', menuSelectNextLane: 'menu:selectNextLane',
+  menuMarkUnread: 'menu:markUnread',
+  menuToggleLayout: 'menu:toggleLayout'
 } as const

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   tokenize, promptVars, placeholders, commandPromptVars, commandPlaceholders, substitute,
-  substituteShell, parseCommandsFile, exampleCommandsFile
+  substituteShell, parseCommandsFile, exampleCommandsFile, createWorktreeCommand,
+  removeWorktreeCommand
 } from '../../src/shared/repo-commands'
 import { isCommandGroup } from '../../src/shared/ipc-types'
 
@@ -289,5 +290,57 @@ describe('commandPlaceholders', () => {
   it('matches the run-only reading when there are no follow-ups', () => {
     expect(commandPlaceholders({ label: 'x', run: 'deploy {{name}} --on {{branch}}' }))
       .toEqual({ auto: ['branch'], ask: ['name'] })
+  })
+})
+
+describe('the create-worktree command', () => {
+  it('finds a role command at the top level or inside a group', () => {
+    const plain = { label: 'Make one', run: 'x', role: 'createWorktree' as const }
+    expect(createWorktreeCommand([{ label: 'Other', run: 'y' }, plain])).toBe(plain)
+    const grouped = { label: 'Create worktree', run: 'x', role: 'createWorktree' as const }
+    expect(createWorktreeCommand([{ label: 'Graphite', commands: [{ label: 'gt', run: 'g' }, grouped] }]))
+      .toBe(grouped)
+  })
+
+  it('is undefined when no command claims the role', () => {
+    expect(createWorktreeCommand([{ label: 'Build', run: 'npm run build' }])).toBeUndefined()
+    expect(createWorktreeCommand([])).toBeUndefined()
+  })
+
+  it('finds each role independently', () => {
+    const entries = parseCommandsFile({
+      '/repo': [
+        { label: 'Create', run: 'mk {{branch}}', role: 'createWorktree' },
+        { label: 'Delete', run: 'rm {{worktree}}', role: 'removeWorktree' }
+      ]
+    })['/repo']
+    expect(createWorktreeCommand(entries)?.label).toBe('Create')
+    expect(removeWorktreeCommand(entries)?.label).toBe('Delete')
+    expect(removeWorktreeCommand([{ label: 'Create', run: 'x', role: 'createWorktree' }]))
+      .toBeUndefined()
+  })
+
+  it('keeps a valid role through parsing and drops an invalid one', () => {
+    const parsed = parseCommandsFile({
+      '/repo': [
+        { label: 'Create', run: 'mk {{branch}}', role: 'createWorktree' },
+        { label: 'Bogus', run: 'x', role: 'somethingElse' }
+      ]
+    })
+    expect(parsed['/repo'].map(e => (e as any).label)).toEqual(['Create'])
+    expect(createWorktreeCommand(parsed['/repo'])?.label).toBe('Create')
+  })
+
+  it('never asks for branch or prompt — the start pane fills those in', () => {
+    const command = {
+      label: 'Create worktree',
+      run: 'pnpm use-worktree {{branch}}',
+      shell: true,
+      select: '../wt-{{branch}}',
+      terminal: ['tmux new -c ~/Code/wt-{{branch}} \; send-keys \'cc -- "{{prompt}}"\' Enter']
+    }
+    expect(commandPromptVars(command)).toEqual([])
+    // Anything else the author uses is still asked for.
+    expect(commandPromptVars({ ...command, run: 'mk {{branch}} {{ticket}}' })).toEqual(['ticket'])
   })
 })

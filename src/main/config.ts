@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs'
 import { join, basename, extname } from 'path'
-import { emptyLayout, type Layout, type RepoCommandEntry } from '@shared/ipc-types'
+import type { RepoCommandEntry } from '@shared/ipc-types'
 import { repoRoot } from './git/repo-root'
 import { parseCommandsFile, exampleCommandsFile } from '@shared/repo-commands'
 import type { PrStatus } from '@shared/pr-status'
@@ -15,7 +15,6 @@ export function configDir(): string {
 function file(): string { return join(configDir(), 'repos.json') }
 function namesFile(): string { return join(configDir(), 'names.json') }
 function commandsFile(): string { return join(configDir(), 'commands.json') }
-function layoutFile(): string { return join(configDir(), 'layout.json') }
 function prStatusFile(): string { return join(configDir(), 'pr-status.json') }
 function tasksFile(): string { return join(configDir(), 'tasks.json') }
 
@@ -50,61 +49,6 @@ export async function setName(path: string, name: string): Promise<Record<string
   else delete names[path]
   writeFileSync(namesFile(), JSON.stringify({ names }, null, 2))
   return names
-}
-
-// A well-formed group entry. Anything else (missing paths, wrong field types,
-// not even an object) is dropped below rather than passed through: deriveSections
-// does `take(g.paths)`, which throws on undefined, and that would take the
-// whole sidebar down with no in-app recovery.
-function isWellFormedGroup(g: unknown): g is Layout['groups'][number] {
-  const group = g as Record<string, unknown>
-  return typeof group?.id === 'string' && typeof group?.name === 'string' &&
-    typeof group?.collapsed === 'boolean' &&
-    Array.isArray(group?.paths) && group.paths.every(p => typeof p === 'string')
-}
-
-// Same fail-soft contract as groups: a malformed entry is dropped rather than
-// passed through. Reads either the current `ungroupedOrder` shape, or the
-// pre-flatten `repoOrder` shape (a file written by an older version) and
-// flattens its per-repo arrays into one list, in repos.json order — so an
-// existing user's manual ordering survives the upgrade instead of resetting.
-function readUngroupedOrder(parsed: unknown, repos: string[]): string[] {
-  const doc = parsed as Record<string, unknown>
-  if (Array.isArray(doc?.ungroupedOrder) && doc.ungroupedOrder.every(p => typeof p === 'string')) {
-    return doc.ungroupedOrder
-  }
-  const raw = doc?.repoOrder
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return []
-  const byRepo = raw as Record<string, unknown>
-  const out: string[] = []
-  for (const repo of repos) {
-    const paths = byRepo[repo]
-    if (Array.isArray(paths) && paths.every(p => typeof p === 'string')) out.push(...paths)
-  }
-  return out
-}
-
-// Sidebar groups / hidden worktrees. Cosmetic, so a missing or corrupt file
-// degrades to "no groups" rather than throwing — the sidebar then just renders
-// its ungrouped section, which is exactly the pre-groups behavior.
-export async function readLayout(): Promise<Layout> {
-  const f = layoutFile()
-  if (!existsSync(f)) return emptyLayout()
-  try {
-    const parsed = JSON.parse(readFileSync(f, 'utf8'))
-    return {
-      groups: Array.isArray(parsed?.groups) ? parsed.groups.filter(isWellFormedGroup) : [],
-      hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
-      hiddenCollapsed: parsed?.hiddenCollapsed !== false,
-      ungroupedOrder: readUngroupedOrder(parsed, await listRepos())
-    }
-  } catch { return emptyLayout() }
-}
-
-export async function writeLayout(layout: Layout): Promise<Layout> {
-  const dir = configDir(); if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(layoutFile(), `${JSON.stringify(layout, null, 2)}\n`)
-  return layout
 }
 
 // The global task list. Not keyed by anything — tasks outlive the worktree

@@ -1,8 +1,11 @@
-import type { RepoCommand, RepoCommandEntry, RepoCommandGroup } from './ipc-types'
+import { isCommandGroup, type RepoCommand, type RepoCommandEntry, type RepoCommandGroup } from './ipc-types'
 
 // Not `name`: that is the placeholder the example create-worktree command
 // prompts for, and making it implicit would silently stop it asking.
-export const IMPLICIT_VARS = ['branch', 'worktree', 'worktreeName', 'repo', 'message'] as const
+// `prompt` is what the user typed into the start pane — the thing the agent
+// should begin on. Implicit like the rest: the create-worktree command gets it
+// filled in rather than being asked for it.
+export const IMPLICIT_VARS = ['branch', 'worktree', 'worktreeName', 'repo', 'message', 'prompt'] as const
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][\w-]*)\s*\}\}/g
 
@@ -111,6 +114,7 @@ function isRepoCommand(value: unknown): value is RepoCommand {
   if (v.cwd !== undefined && v.cwd !== 'worktree' && v.cwd !== 'repo') return false
   if (v.width !== undefined && v.width !== 'half' && v.width !== 'full') return false
   if (v.shell !== undefined && typeof v.shell !== 'boolean') return false
+  if (v.role !== undefined && v.role !== 'createWorktree' && v.role !== 'removeWorktree') return false
   if (v.select !== undefined && (typeof v.select !== 'string' || !v.select.trim())) return false
   if (v.terminal !== undefined) {
     if (!Array.isArray(v.terminal)) return false
@@ -141,6 +145,26 @@ function parseEntry(value: unknown): RepoCommandEntry | undefined {
 
 // Bad entries are dropped individually rather than failing the whole file, so one
 // typo doesn't silently remove every button for every repo.
+// The command this repo declares for a role, if any. Groups are flattened:
+// where the author filed it is a layout choice, not a meaning.
+export function commandWithRole(
+  entries: RepoCommandEntry[], role: NonNullable<RepoCommand['role']>
+): RepoCommand | undefined {
+  for (const entry of entries) {
+    if (isCommandGroup(entry)) {
+      const found = entry.commands.find(c => c.role === role)
+      if (found) return found
+    } else if (entry.role === role) return entry
+  }
+  return undefined
+}
+
+export const createWorktreeCommand = (entries: RepoCommandEntry[]): RepoCommand | undefined =>
+  commandWithRole(entries, 'createWorktree')
+
+export const removeWorktreeCommand = (entries: RepoCommandEntry[]): RepoCommand | undefined =>
+  commandWithRole(entries, 'removeWorktree')
+
 export function parseCommandsFile(raw: unknown): Record<string, RepoCommandEntry[]> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {}
   const out: Record<string, RepoCommandEntry[]> = {}
@@ -163,6 +187,12 @@ export function exampleCommandsFile(repoPaths: string[]): string {
       'run is tokenized on quotes and spawned directly: no shell, so no && or pipes.',
       'Set "shell": true to run it through sh -c instead, where && | > & all work.',
       '{{branch}} {{worktree}} {{worktreeName}} {{repo}} {{message}} are filled in;',
+      'Set "role": "createWorktree" on one command per repo and a task with no',
+      'worktree runs it instead of git worktree add: {{branch}} is the branch the',
+      'start pane offers, {{prompt}} is the kickoff message typed there (may be',
+      'empty), and select/terminal are what attach the worktree and start the agent.',
+      '"role": "removeWorktree" is the other half — deleting a task runs it instead',
+      'of git worktree remove, with {{worktree}} set to the one being deleted.',
       '{{worktreeName}} is just the worktree folder name, {{worktree}} its full path.',
       'any other {{placeholder}} is prompted for before the command runs, in run,',
       'select and terminal alike.',

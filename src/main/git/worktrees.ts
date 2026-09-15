@@ -36,6 +36,23 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
   return out
 }
 
+// Create a worktree for a new branch, in the sibling convention the app uses
+// everywhere else: <repoParent>/.worktrees/<repo>/<branch>. Branched from the
+// repo's current HEAD, which is what `git worktree add -b` does by default.
+//
+// Returns the new worktree's path rather than the list: the caller wants to
+// select it, and re-listing is the renderer's job anyway.
+export async function createWorktree(repoPath: string, branch: string): Promise<string> {
+  const dir = worktreeDir(repoPath, branch)
+  await simpleGit(repoPath).raw(['worktree', 'add', '-b', branch, dir])
+  // Return the path as `git worktree list` reports it, not the one we passed:
+  // git resolves symlinks (/var -> /private/var on macOS), and a task attached
+  // to the unresolved spelling would never match a row in the sidebar — the
+  // card would render its brand-new worktree as already gone.
+  const created = (await listWorktrees(repoPath)).find(w => w.branch === branch)
+  return created?.path ?? dir
+}
+
 export async function removeWorktree(worktreePath: string, force: boolean): Promise<Worktree[]> {
   const git = simpleGit(worktreePath)
   const commonDir = (await git.raw(['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim()

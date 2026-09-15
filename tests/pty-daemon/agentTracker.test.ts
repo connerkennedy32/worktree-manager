@@ -139,3 +139,44 @@ describe('sweep', () => {
     expect(seen[1][1].status).toBe('none')
   })
 })
+
+describe('activity on a report', () => {
+  const sessions = {
+    list: () => ['/wt/a'],
+    pid: () => 123,
+    pathForCwd: (cwd: string) => (cwd === '/wt/a' ? '/wt/a' : undefined)
+  }
+  const hook = (event: string, rest: Record<string, unknown> = {}) =>
+    ({ hook_event_name: event, cwd: '/wt/a', ...rest })
+
+  it('carries what the agent is doing, and keeps the prompt between tool calls', () => {
+    const seen: AgentReport[] = []
+    const tracker = new AgentTracker(sessions, (_p, r) => seen.push(r), async () => '', () => 1)
+    tracker.handleHook('/wt/a', 'UserPromptSubmit', hook('UserPromptSubmit', { prompt: 'Fix the retry' }))
+    expect(seen.at(-1)?.activity).toBe('Fix the retry')
+    tracker.handleHook('/wt/a', 'PostToolUse',
+      hook('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'pnpm test' } }))
+    expect(seen.at(-1)?.activity).toBe('Running pnpm test')
+    // An event that describes nothing leaves the last line standing rather than
+    // blanking the card mid-turn.
+    tracker.handleHook('/wt/a', 'PostToolUse', hook('PostToolUse'))
+    expect(seen.at(-1)?.activity).toBe('Running pnpm test')
+  })
+
+  it('drops the line when the turn ends', () => {
+    const seen: AgentReport[] = []
+    const tracker = new AgentTracker(sessions, (_p, r) => seen.push(r), async () => '', () => 1)
+    tracker.handleHook('/wt/a', 'UserPromptSubmit', hook('UserPromptSubmit', { prompt: 'Fix it' }))
+    tracker.handleHook('/wt/a', 'Stop', hook('Stop'))
+    expect(seen.at(-1)).toMatchObject({ status: 'done' })
+    expect(seen.at(-1)?.activity).toBeUndefined()
+  })
+
+  it('works with no payload at all, as the oversized fallback sends', () => {
+    const seen: AgentReport[] = []
+    const tracker = new AgentTracker(sessions, (_p, r) => seen.push(r), async () => '', () => 1)
+    tracker.handleHook('/wt/a', 'PostToolUse')
+    expect(seen.at(-1)).toMatchObject({ status: 'working' })
+    expect(seen.at(-1)?.activity).toBeUndefined()
+  })
+})

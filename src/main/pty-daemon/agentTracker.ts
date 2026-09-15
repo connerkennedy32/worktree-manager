@@ -5,7 +5,7 @@
 // without firing SessionEnd, which would otherwise leave a row stuck forever.
 // It may only clear a status, never set one.
 
-import { mapHookEvent, type AgentReport } from '@shared/agent-status'
+import { describeActivity, mapHookEvent, type AgentReport } from '@shared/agent-status'
 import { hasAgentDescendantThroughTmux, parseProcessTable, readProcessTable } from './agentProcess'
 
 const SWEEP_MS = 2000
@@ -27,23 +27,35 @@ export class AgentTracker {
     private now: () => number = Date.now
   ) {}
 
-  /** Called for each hook POST. `cwd` is the agent's working directory. */
-  handleHook(cwd: string, event: string): void {
+  /**
+   * Called for each hook POST. `cwd` is the agent's working directory, and
+   * `payload` is Claude Code's own hook JSON when it was small enough to
+   * forward — the source of the one-line activity shown on a card.
+   */
+  handleHook(cwd: string, event: string, payload?: unknown): void {
     const path = this.sessions.pathForCwd(cwd)
     if (!path) return // a cwd outside any live worktree session
     const status = mapHookEvent(event)
     if (!status) return // an event we do not model; never guess
 
     const at = this.now()
+    // A tool event describes itself; a prompt describes the whole turn, and
+    // nothing after it says what the turn is about — so a described event
+    // replaces the line, and one that describes nothing keeps what stands.
+    // Ending the turn drops it: there is no longer anything in flight.
+    const described = payload === undefined ? undefined : describeActivity(payload)
+    const ends = status === 'done' || status === 'failed' || status === 'none'
+    const activity = ends ? undefined : described ?? this.reports.get(path)?.activity
+
     if (status === 'none') {
       this.reports.delete(path)
     } else {
-      this.reports.set(path, { status, at })
+      this.reports.set(path, { status, at, activity })
     }
     // Always emit, even when the status is unchanged: `at` advancing is itself
     // meaningful, since the renderer gates `done` against when the user last
     // looked at that worktree.
-    this.emit(path, { status, at })
+    this.emit(path, { status, at, activity })
   }
 
   /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapHookEvent, deriveDot } from '../../src/shared/agent-status'
+import { mapHookEvent, deriveDot, describeActivity, MAX_ACTIVITY } from '../../src/shared/agent-status'
 
 describe('mapHookEvent', () => {
   it('maps a submitted prompt to working', () => {
@@ -111,5 +111,60 @@ describe('deriveDot with a manual unread mark', () => {
     expect(deriveDot({ status: 'permission', at: 1 }, 5, true)).toBe('permission')
     expect(deriveDot({ status: 'working', at: 1 }, 5, true)).toBe('working')
     expect(deriveDot({ status: 'failed', at: 1 }, 5, true)).toBe('failed')
+  })
+})
+
+describe('describeActivity', () => {
+  const hook = (event: string, rest: Record<string, unknown> = {}) =>
+    ({ hook_event_name: event, cwd: '/wt/a', ...rest })
+
+  it('names the file being edited or read, without its directory', () => {
+    expect(describeActivity(hook('PostToolUse', {
+      tool_name: 'Edit', tool_input: { file_path: '/wt/a/partner-integrations/openly/retry.ts' }
+    }))).toBe('Editing retry.ts')
+    expect(describeActivity(hook('PostToolUse', {
+      tool_name: 'Read', tool_input: { file_path: '/wt/a/README.md' }
+    }))).toBe('Reading README.md')
+  })
+
+  it('shows the command being run and the pattern being searched for', () => {
+    expect(describeActivity(hook('PostToolUse', {
+      tool_name: 'Bash', tool_input: { command: 'pnpm test --filter openly' }
+    }))).toBe('Running pnpm test --filter openly')
+    expect(describeActivity(hook('PostToolUse', {
+      tool_name: 'Grep', tool_input: { pattern: 'retryLimit' }
+    }))).toBe('Searching for retryLimit')
+  })
+
+  it('uses the first line of a prompt as the turn\'s subject', () => {
+    expect(describeActivity(hook('UserPromptSubmit', {
+      prompt: '\n  Retry Openly PDFs when the partner times out\n\nSecond paragraph.'
+    }))).toBe('Retry Openly PDFs when the partner times out')
+  })
+
+  it('truncates anything too long for a card', () => {
+    const out = describeActivity(hook('UserPromptSubmit', { prompt: 'x'.repeat(400) }))!
+    expect(out).toHaveLength(MAX_ACTIVITY)
+    expect(out.endsWith('…')).toBe(true)
+  })
+
+  it('says nothing for the end of a turn, so a stale line never stands', () => {
+    expect(describeActivity(hook('Stop'))).toBeUndefined()
+    expect(describeActivity(hook('SessionEnd'))).toBeUndefined()
+    expect(describeActivity(hook('StopFailure'))).toBeUndefined()
+  })
+
+  it('still says something true for a tool it has never heard of', () => {
+    expect(describeActivity(hook('PostToolUse', { tool_name: 'Sparkle' }))).toBe('Running Sparkle')
+    expect(describeActivity(hook('PostToolUse', { tool_name: 'mcp__linear__get_issue' })))
+      .toBe('Running linear · get_issue')
+  })
+
+  it('survives a payload with the wrong shape entirely', () => {
+    expect(describeActivity(null)).toBeUndefined()
+    expect(describeActivity('nope')).toBeUndefined()
+    expect(describeActivity(hook('PostToolUse', { tool_name: 'Edit', tool_input: 'not an object' })))
+      .toBe('Editing a file')
+    expect(describeActivity(hook('UserPromptSubmit', { prompt: 42 }))).toBeUndefined()
   })
 })

@@ -34,7 +34,7 @@ function broadcast(message: ServerMessage) {
 // when an agent dies without firing SessionEnd.
 const agents = new AgentTracker(sessions, (p, report) => broadcast({ type: 'agentStatus', path: p, report }))
 agents.start()
-startHookServer(hookSocketPath, (cwd, event) => agents.handleHook(cwd, event))
+startHookServer(hookSocketPath, (cwd, event, payload) => agents.handleHook(cwd, event, payload))
 
 // The notify-hook identifies its worktree by the agent's cwd and falls back to
 // a baked-in socket path, so it works even under tmux. We still export

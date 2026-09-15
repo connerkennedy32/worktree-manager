@@ -1,0 +1,505 @@
+/* The board: three lanes of task cards, in the sidebar's visual language —
+   same 6px radius, same state colors as the agent dots (yellow = in flight,
+   orange = wants something, green = finished), same hover-revealed actions. */
+
+/* `min-width: 0` is load-bearing: without it the board's automatic minimum
+   size is its min-content width, and the nowrap activity line inside a card
+   makes that as wide as the agent's whole sentence. The board would then
+   refuse to shrink, overflowing its column — lanes drifting in width as the
+   sentence changed, and Done sliding under the changes panel. */
+.wt-board {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  gap: 1px;
+  background: #333;
+}
+
+/* The repo rail: repo roots, which are places rather than tasks, live down the
+   board's left edge instead of in a lane. Narrow on purpose — it is a door, not
+   a column — and it carries the same state colors the cards use. */
+.wt-rail {
+  flex-shrink: 0;
+  width: 38px;
+  background: rgba(30, 30, 30, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+.wt-rail-repo {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #3a3f47;
+  border-radius: 6px;
+  background: #262b33;
+  color: #b6bdc7;
+  font: 600 10px/1 inherit;
+  letter-spacing: 0.04em;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.wt-rail-repo:hover { background: #2f353e; color: #e2e6eb; }
+.wt-rail-repo:focus-visible { outline: 2px solid #2a9df4; outline-offset: 1px; }
+.wt-rail-repo.open { border-color: #2a9df4; background: rgba(42, 157, 244, 0.18); color: #dbe9fb; }
+/* Same vocabulary as a card: yellow pulse working, orange wants something,
+   green finished and unhandled, red failed. */
+.wt-rail-repo.working { animation: wt-card-pulse 1.2s ease-in-out infinite; }
+.wt-rail-repo.permission { background: rgba(230, 126, 74, 0.22); }
+.wt-rail-repo.ready { background: rgba(63, 185, 80, 0.22); }
+.wt-rail-repo.failed { background: rgba(242, 139, 130, 0.16); }
+@media (prefers-reduced-motion: reduce) {
+  .wt-rail-repo.working { animation: none; background: rgba(224, 224, 61, 0.22); }
+}
+.wt-rail-pip {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #1e1e1e;
+}
+.wt-rail-pip.working { background: #e0e03d; }
+.wt-rail-pip.permission { background: #e67e4a; }
+.wt-rail-pip.ready { background: #3fb950; }
+.wt-rail-pip.failed { background: #f28b82; }
+/* The uncommitted-changes count, tucked under the square rather than on it:
+   two digits will not fit inside 26px beside the initials. */
+.wt-rail-count {
+  position: absolute;
+  bottom: -5px;
+  right: -4px;
+  background: #1e1e1e;
+  border-radius: 999px;
+  padding: 0 3px;
+  font-size: 8px;
+  font-weight: 600;
+  color: #9aa0a6;
+  font-variant-numeric: tabular-nums;
+}
+
+.wt-lane {
+  flex: 1;
+  min-width: 0;
+  background: rgba(30, 30, 30, 0.55);
+  display: flex;
+  flex-direction: column;
+}
+/* A lane being dragged over lifts slightly, so the target is obvious even when
+   the cursor is over empty space below the last card. */
+.wt-lane.over { background: rgba(14, 99, 156, 0.1); }
+
+.wt-lane-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9aa0a6;
+  border-bottom: 1px solid #2c2f34;
+  flex-shrink: 0;
+}
+.wt-lane-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-lane-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.wt-lane-todo .wt-lane-dot { background: #6e737d; }
+.wt-lane-progress .wt-lane-dot { background: #e0e03d; }
+/* Purple, like the merged-PR dot's family — review is the state a PR lives in,
+   and it has to read as distinct from blocked orange and done green. */
+.wt-lane-review .wt-lane-dot { background: #a371f7; }
+.wt-lane-done .wt-lane-dot { background: #3fb950; }
+.wt-lane-count {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.wt-lane-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wt-lane-empty { color: #6e737d; font-size: 11px; padding: 4px 2px; }
+
+.wt-card {
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid #35383e;
+  /* The left edge carries state; the rest of the border stays neutral so a
+     selected card still reads as selected. */
+  border-left: 2px solid #35383e;
+  border-radius: 6px;
+  padding: 7px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+  /* A card the board has never drawn before arrives rather than blinking on.
+     Cards that move are handled by the FLIP pass in Board.tsx. */
+  animation: wt-card-in 180ms ease-out;
+}
+@keyframes wt-card-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wt-card { animation: none; }
+}
+.wt-card:hover { background: rgba(255, 255, 255, 0.075); }
+.wt-card.progress { background: rgba(224, 224, 61, 0.1); border-left-color: #e0e03d; }
+.wt-card.blocked { border-left-color: #e67e4a; }
+.wt-card.review { border-left-color: #a371f7; background: rgba(163, 113, 247, 0.09); }
+.wt-card.done { border-left-color: #3fb950; opacity: 0.72; }
+.wt-card.open { border-color: #2a9df4; }
+.wt-card.dragging { opacity: 0.4; }
+.wt-card.drop-top { box-shadow: inset 0 2px 0 0 #0e639c; }
+.wt-card.drop-bottom { box-shadow: inset 0 -2px 0 0 #0e639c; }
+/* Pulses on a card that an agent is working in, matching the sidebar row. */
+.wt-card.working { animation: wt-card-pulse 1.2s ease-in-out infinite; }
+@keyframes wt-card-pulse {
+  0%, 100% { background-color: rgba(224, 224, 61, 0.26); }
+  50% { background-color: rgba(224, 224, 61, 0.08); }
+}
+.wt-card.permission { background: rgba(230, 126, 74, 0.22); border-left-color: #e67e4a; }
+/* The agent finished a turn (or the card is hand-marked unread): the same
+   green "unhandled, yours to look at" the sidebar row used to show. `.ready`,
+   not `.done` — the card already uses `done` for its own lane state. */
+.wt-card.ready { background: rgba(63, 185, 80, 0.22); }
+.wt-card.failed { background: rgba(242, 139, 130, 0.16); }
+@media (prefers-reduced-motion: reduce) {
+  .wt-card.working { animation: none; background: rgba(224, 224, 61, 0.22); }
+}
+
+.wt-card-top { display: flex; align-items: flex-start; gap: 7px; }
+.wt-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: #ddd;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.wt-card.done .wt-card-title { color: #6e737d; text-decoration: line-through; }
+/* A title the reconciler wrote is a branch name, not something the user said. */
+.wt-card-title.placeholder { color: #a9b0b8; font-style: italic; }
+
+.wt-card-reason {
+  font-size: 10.5px;
+  color: #e67e4a;
+  overflow-wrap: anywhere;
+}
+.wt-card-reason::before {
+  content: "blocked";
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  margin-right: 5px;
+}
+
+/* A note the user keeps on the card. Quieter than the blocked reason — it is
+   standing context, not an alarm — but it wraps in full rather than clipping,
+   since the whole point is that you read it without hovering. */
+.wt-card-note {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: #9fb4c9;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border-left: 2px solid rgba(159, 180, 201, 0.35);
+  padding-left: 6px;
+}
+.wt-card.done .wt-card-note { opacity: 0.6; }
+
+/* What the agent is doing. One line, clipped — the card is a card, and the
+   full text is in the tooltip. Monospace for the file names and commands that
+   make up most of it. */
+.wt-card-activity {
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: #c8b98f;
+  font-family: ui-monospace, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wt-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #8a9096;
+  min-width: 0;
+}
+.wt-card-repo { color: #6e737d; }
+
+/* The attached branch. It is the door to the terminal, so it looks clickable. */
+.wt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  font-size: 10px;
+  color: #8fb8d8;
+  background: rgba(42, 157, 244, 0.14);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A worktree that is no longer on disk: kept, greyed, never silently dropped. */
+.wt-chip.stale { color: #7c8288; background: rgba(255, 255, 255, 0.06); }
+.wt-chip-none {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: #7c8288;
+  border: 1px dashed #4a4d52;
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.wt-card-actions {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.wt-card:hover .wt-card-actions { opacity: 1; }
+.wt-card-action { font-size: 11px; line-height: 1; color: #888; cursor: pointer; }
+.wt-card-action:hover { color: #ddd; }
+.wt-card-action.note:hover { color: #9fb4c9; }
+.wt-card-action.block:hover { color: #e67e4a; }
+.wt-card-action.remove:hover { color: #f28b82; }
+/* Shown, not hidden: the ✕ missing from one card would read as a rendering bug,
+   and the tooltip is where the explanation belongs. */
+.wt-card-action.disabled { opacity: 0.35; cursor: default; }
+.wt-card-action.disabled:hover { color: #888; }
+.wt-card.blocked .wt-card-action.block { opacity: 1; color: #e67e4a; }
+
+.wt-card-new { flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; }
+/* What the To do lane shows when the box is closed: a target the width of a
+   card, quiet until you are near it, so an empty lane reads as empty rather
+   than as a form waiting to be filled in. */
+.wt-card-add {
+  flex-shrink: 0;
+  height: 26px;
+  border: 1px dashed #3a3f47;
+  border-radius: 6px;
+  background: transparent;
+  color: #6e737d;
+  font: 400 15px/1 inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.wt-card-add:hover { border-color: #4c545f; background: rgba(255, 255, 255, 0.04); color: #c8ced6; }
+.wt-card-add:focus-visible { outline: 2px solid #2a9df4; outline-offset: 1px; }
+.wt-card-add-sign { line-height: 1; transform: translateY(-1px); }
+/* Sits under the new-task box rather than beside it: at a third of the window
+   a select and a growing textarea on one row leaves neither enough room. */
+.wt-card-repo-select { font-size: 11px; padding: 3px 6px; }
+
+/* --- The list layout ------------------------------------------------------ */
+
+/* The board's cards in one column down the left edge, with the terminal taking
+   the full height beside it. Same surfaces and same cards as the board — only
+   the axis changes — so everything below is layout, not a second theme. */
+.wt-list {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  gap: 1px;
+  background: #333;
+}
+.wt-list-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: rgba(30, 30, 30, 0.55);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wt-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border-radius: 6px;
+  padding: 2px;
+  /* Matches the lane's own drag-over lift, so a drop target reads the same in
+     both layouts. */
+  transition: background-color 0.12s ease;
+}
+.wt-list-group.over { background: rgba(14, 99, 156, 0.1); }
+/* The heading is the only thing separating one lane from the next here, so it
+   carries the gap the board got from its column edges. */
+.wt-list-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 2px 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #9aa0a6;
+}
+.wt-list-group:first-child .wt-list-head { padding-top: 2px; }
+
+/* --- The split ------------------------------------------------------------ */
+
+/* Taller than it looks so it is actually grabbable, and it lights up on hover
+   the way the diff panel's column grip does. */
+.wt-split-grip {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: #333;
+  transition: background-color 0.12s ease;
+}
+.wt-split-grip:hover, .wt-split-grip.dragging { background: rgba(42, 157, 244, 0.6); }
+/* The same grip, turned: the list layout splits on the other axis. */
+.wt-split-grip.vertical { height: auto; width: 6px; cursor: col-resize; }
+
+.wt-surface-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6e737d;
+  font-size: 12px;
+  font-family: system-ui, sans-serif;
+}
+
+/* --- The task surface: crumb + terminal, or the start pane ---------------- */
+
+.wt-crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #333;
+  font-size: 11px;
+  color: #9aa0a6;
+  flex-shrink: 0;
+}
+.wt-crumb-back {
+  border: 1px solid #4a4d52;
+  border-radius: 5px;
+  padding: 1px 7px;
+  color: #ccc;
+  cursor: pointer;
+}
+.wt-crumb-back:hover { background: rgba(255, 255, 255, 0.06); }
+.wt-crumb-title { color: #ddd; font-weight: 600; }
+
+.wt-start {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+.wt-start-big { font-size: 14px; color: #ddd; font-weight: 600; }
+.wt-start-row { display: flex; gap: 8px; align-items: center; }
+.wt-start-error { color: #f28b82; max-width: 460px; white-space: pre-wrap; text-align: left; }
+.wt-start-branch { width: 300px; font-family: ui-monospace, Menlo, monospace; }
+/* Labels sit left of their field at a fixed width, so branch, the command's own
+   placeholders and the kickoff box all line up down the pane. */
+.wt-start-label {
+  width: 130px;
+  text-align: right;
+  font-size: 11px;
+  color: #9aa0a6;
+  flex-shrink: 0;
+}
+.wt-start-kickoff { display: flex; gap: 8px; align-items: flex-start; }
+.wt-start-kickoff .wt-start-label { padding-top: 5px; }
+.wt-start-prompt {
+  width: 300px;
+  resize: vertical;
+  line-height: 1.4;
+  font-family: system-ui, sans-serif;
+  text-align: left;
+}
+
+/* The PR chip. Neutral on purpose: it's a link to Graphite, not a status
+   badge, so it reads the same whatever the review says. */
+.wt-pr-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  color: #8fb8d8;
+  background: rgba(42, 157, 244, 0.14);
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: pointer;
+}
+.wt-pr-chip:hover { background: rgba(42, 157, 244, 0.24); }
+
+/* The PR refresh button, pinned to the foot of the repo rail. Same square as a
+   repo tile so the rail stays one column, but quieter: it is a control, not a
+   place to stand. */
+.wt-rail-refresh {
+  position: relative;
+  margin-top: auto;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #8a9096;
+  font-size: 14px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.wt-rail-refresh:hover:not(:disabled) { background: #2f353e; color: #e2e6eb; }
+.wt-rail-refresh:focus-visible { outline: 2px solid #2a9df4; outline-offset: 1px; }
+.wt-rail-refresh:disabled { cursor: default; }
+.wt-rail-refresh.busy { animation: wt-rail-spin 0.9s linear infinite; color: #b6bdc7; }
+@keyframes wt-rail-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .wt-rail-refresh.busy { animation: none; }
+}

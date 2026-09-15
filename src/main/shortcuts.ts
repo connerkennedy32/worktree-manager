@@ -33,7 +33,8 @@ export function letterPressed(input: KeyInput, letter: string): boolean {
 
 // 'markUnread' is not a step — it acts on the worktree already selected — but
 // it rides the same before-input-event path for the same reason the steps do.
-export type WorktreeStep = 'prev' | 'next' | 'markUnread' | null
+export type WorktreeStep =
+  'prev' | 'next' | 'prevLane' | 'nextLane' | 'markUnread' | null
 
 // How long a chord prefix stays armed. Long enough to be a deliberate two-key
 // sequence, short enough that a stray Ctrl+S doesn't sit there swallowing a 'u'
@@ -58,6 +59,8 @@ export function shortcutFor(input: KeyInput, isMac: boolean): WorktreeStep {
   if (modifier) {
     if (input.key === 'ArrowUp') return 'prev'
     if (input.key === 'ArrowDown') return 'next'
+    if (input.key === 'ArrowLeft') return 'prevLane'
+    if (input.key === 'ArrowRight') return 'nextLane'
   }
   // Bare Ctrl+J/Ctrl+K/Ctrl+U (no Cmd/Meta) as a plain-terminal alternative to
   // the arrow/menu shortcuts above. This intentionally shadows readline's Ctrl+K
@@ -69,9 +72,15 @@ export function shortcutFor(input: KeyInput, isMac: boolean): WorktreeStep {
   // Ctrl+S when tapped alone", holding Caps Lock and tapping U *is* Ctrl+U —
   // the Ctrl+S half never fires, since the key was never tapped alone. One held
   // modifier, one letter, same motion as J and K.
+  // H and L are the other half of the vi motion J and K already speak: same
+  // hand position, same one-held-modifier shape, moving across the board's
+  // columns instead of down them. They shadow readline's Ctrl+L (clear) the way
+  // J and K shadow their own bindings — the same accepted tradeoff.
   if (input.control && !input.meta) {
     if (letterPressed(input, 'k')) return 'prev'
     if (letterPressed(input, 'j')) return 'next'
+    if (letterPressed(input, 'h')) return 'prevLane'
+    if (letterPressed(input, 'l')) return 'nextLane'
     if (letterPressed(input, 'u')) return 'markUnread'
   }
   return null
@@ -145,6 +154,16 @@ export function resolveKey(
   return { action: step, swallow: step !== null, prefixAt: ends || !armed ? null : prefixAt }
 }
 
+// Which channel each action rides. A table rather than a chain of ternaries:
+// the chain silently routed anything unrecognized to "next".
+const CHANNEL: Record<Exclude<WorktreeStep, null>, string> = {
+  prev: IPC.menuSelectPrev,
+  next: IPC.menuSelectNext,
+  prevLane: IPC.menuSelectPrevLane,
+  nextLane: IPC.menuSelectNextLane,
+  markUnread: IPC.menuMarkUnread
+}
+
 export function attachShortcuts(win: BrowserWindow, isMac = process.platform === 'darwin') {
   let prefixAt: number | null = null
   // WTM_DEBUG_KEYS=1 prints every key the window sees and what we decided, for
@@ -165,9 +184,6 @@ export function attachShortcuts(win: BrowserWindow, isMac = process.platform ===
     // Keep the key from reaching the renderer, so the terminal never sees it.
     if (r.swallow) event.preventDefault()
     if (!r.action) return
-    win.webContents.send(
-      r.action === 'markUnread' ? IPC.menuMarkUnread
-        : r.action === 'prev' ? IPC.menuSelectPrev
-          : IPC.menuSelectNext)
+    win.webContents.send(CHANNEL[r.action])
   })
 }

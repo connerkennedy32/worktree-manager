@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { makeTmpRepo, withOrigin, addWorktree } from '../helpers/tmpRepo'
-import { listWorktrees, removeWorktree, headPath, worktreeDir } from '../../src/main/git/worktrees'
+import { makeTmpRepo, withOrigin, addWorktree, removeDir, worktreesRoot } from '../helpers/tmpRepo'
+import { createWorktree, listWorktrees, removeWorktree, headPath, worktreeDir } from '../../src/main/git/worktrees'
 import { existsSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { basename, join } from 'path'
 import simpleGit from 'simple-git'
 
 let cleanups: (() => void)[] = []
@@ -15,6 +15,25 @@ describe('worktrees', () => {
     expect(wts).toHaveLength(1)
     expect(wts[0].isMain).toBe(true)
     expect(wts[0].branch).toBe('main')
+  })
+
+  it('creates a worktree for a new branch in the sibling convention', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    cleanups.push(() => removeDir(worktreesRoot(r.dir)))
+    const path = await createWorktree(r.dir, 'ck/retry-openly')
+    expect(existsSync(path)).toBe(true)
+    expect(path.endsWith(join('.worktrees', basename(r.dir), 'ck-retry-openly'))).toBe(true)
+    // The returned path must be the one listWorktrees reports, or a task
+    // attached to it would render as stale the moment it was created.
+    const wts = await listWorktrees(r.dir)
+    expect(wts.find(w => w.path === path)?.branch).toBe('ck/retry-openly')
+  })
+
+  it('refuses to create a worktree for a branch that already exists', async () => {
+    const r = await makeTmpRepo(); cleanups.push(r.cleanup)
+    cleanups.push(() => removeDir(worktreesRoot(r.dir)))
+    await createWorktree(r.dir, 'dupe')
+    await expect(createWorktree(r.dir, 'dupe')).rejects.toThrow(/already exists/)
   })
 
   it('removes a worktree', async () => {

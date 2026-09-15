@@ -1,10 +1,13 @@
 import { create } from 'zustand'
-import { emptyLayout, type Layout, type Worktree, type WorktreeStatus } from '@shared/ipc-types'
+import type { RepoCommand, Worktree, WorktreeStatus } from '@shared/ipc-types'
+import { removeWorktreeCommand } from '@shared/repo-commands'
 import type { AgentReport } from '@shared/agent-status'
 import type { PrStatus } from '@shared/pr-status'
-import { emptyTasks, type TasksDoc } from '@shared/tasks'
-import { loadSeenAt, loadUnread, saveSeenAt, saveUnread } from './seen'
-import { deriveSections, navOrder } from '../components/sidebar-layout'
+import {
+  attachWorktree, emptyTasks, LANES, noteAgentWorking, reconcileTasks, removeTask,
+  taskForWorktree, tasksInLane, type TasksDoc
+} from '@shared/tasks'
+import { loadNewTaskRepo, loadSeenAt, loadUnread, saveNewTaskRepo, saveSeenAt, saveUnread } from './seen'
 
 // A file the diff modal can show. Renderer-only view state, so it stays out of
 // @shared/ipc-types — it never crosses the IPC boundary.
@@ -34,14 +37,53 @@ interface State {
   refreshPrStatuses: () => Promise<void>
   names: Record<string, string>
   rename: (p: string, name: string) => Promise<void>
-  // Sidebar organization. Held here rather than in Sidebar.tsx because keyboard
-  // nav (selectRelative) has to walk the same order the sidebar renders.
-  layout: Layout
-  applyLayout: (next: Layout) => void
   // The global task list, plus its sidebar section state. Global on purpose:
   // tasks are not scoped to a worktree and outlive the ones they mention.
   tasks: TasksDoc
   applyTasks: (next: TasksDoc) => void
+  // Repo root per worktree path, built while listing. Not on Worktree itself:
+  // the renderer is the only thing that needs it, and it already knows which
+  // repo it asked for.
+  repoOf: Record<string, string>
+  // The task id currently being dragged across the board. In the store rather
+  // than a card's own state because the card being dragged and the card being
+  // dragged over are different components.
+  boardDrag?: string
+  // Which repo a new task is for. Defaults to the one the last task was created
+  // with, since a run of tasks is nearly always about the same repo.
+  newTaskRepo: string
+  setNewTaskRepo: (repo: string) => void
+  // Open a task: its worktree's terminal if it has one, else the start pane.
+  openTask: (id: string) => void
+  // Open a repo root's terminal from the rail. Roots have no task, so this is
+  // the one way into the lower pane that doesn't go through the board.
+  openRepoRoot: (path: string) => void
+  // The task the main area is currently about, or undefined on the board.
+  openTaskId?: string
+  // Create a worktree for a task and attach it. Returns an error message to
+  // show in place, rather than throwing — git's own words are the useful part.
+  startWorktree: (id: string, branch: string) => Promise<string | undefined>
+  // The same, through the repo's own create-worktree command: it decides where
+  // the worktree goes, and its follow-ups open tmux, start the agent and hand
+  // it the kickoff message.
+  startWorktreeWithCommand: (
+    id: string, command: RepoCommand, branch: string,
+    inputs: Record<string, string>, prompt: string
+  ) => Promise<string | undefined>
+  // Delete a task and, if it owns one, its worktree. The confirm lives in the
+  // board; this is the part that has to not half-apply.
+  deleteTask: (id: string, force: boolean) => Promise<string | undefined>
+  // Bumped to ask the sidebar's tasks panel to open and focus its input. A
+  // counter rather than a boolean: two requests in a row must both land, and
+  // there's no "handled" state to reset.
+  newTaskNonce: number
+  // Depth of "a task is creating a worktree right now". Creating one is two
+  // steps — make it on disk, then attach it to the task — and the reconciler
+  // runs on a 3s tick that can land in between, see a worktree no task claims
+  // yet, and mint a second card for work that already has one. While this is
+  // above zero the list still refreshes; only adoption is held off.
+  creating: number
+  requestNewTask: () => void
   // Current backdrop selection ('' = built-in default). Managed from the
   // Background app menu; the renderer just mirrors it to paint the backdrop.
   selectedBackground: string
@@ -60,12 +102,19 @@ interface State {
   refreshStatus: (p: string) => Promise<void>
   select: (p: string) => void
   selectRelative: (delta: 1 | -1) => void
+  // The sideways move: same row of the next lane along, which is what Ctrl+H
+  // and Ctrl+L do.
+  selectLaneRelative: (delta: 1 | -1) => void
 }
 
 // How long a worktree must stay selected before it counts as read. Long enough
 // to survive a burst of Ctrl+J/K, short enough that actually landing on a
 // worktree clears its dot before you look away.
 export const READ_DWELL_MS = 2000
+
+// The repo roots the rail draws, in rail order. Navigation treats them as a
+// column, so it needs the same list the rail itself renders from.
+const railPaths = (st: State) => st.worktrees.filter(w => w.isMain).map(w => w.path)
 
 // The pending "mark read" for the current selection. Module-level rather than
 // store state: nothing renders from it, and keeping it out of the store means
@@ -76,8 +125,11 @@ export const useStore = create<State>((set, get) => ({
   repos: [], worktrees: [], statuses: {}, agentStatuses: {}, seenAt: loadSeenAt(), unread: loadUnread(),
   names: {},
   prStatuses: {}, prRefreshing: false,
-  layout: emptyLayout(),
   tasks: emptyTasks(),
+  repoOf: {},
+  newTaskRepo: loadNewTaskRepo(),
+  newTaskNonce: 0,
+  creating: 0,
   selectedBackground: '',
   openDiff: null, modalOpen: 0,
   // Names are persisted in the main process (userData/names.json), so an empty
@@ -86,19 +138,127 @@ export const useStore = create<State>((set, get) => ({
     const names = await window.api.setName(p, name)
     set({ names })
   },
-  // Optimistic: state updates now, disk catches up. A failed write is logged and
-  // left alone rather than reverted — snapping a row back under the user's cursor
-  // is worse than a layout that repairs itself on the next successful write.
-  applyLayout: (next) => {
-    set({ layout: next })
-    window.api.setLayout(next).catch(e => console.error('layout write failed', e))
-  },
   // Same optimistic contract as applyLayout: state now, disk after. A failed
   // write is logged rather than reverted — yanking a task back out from under
   // the user is worse than a list that repairs itself on the next write.
   applyTasks: (next) => {
     set({ tasks: next })
     window.api.setTasks(next).catch(e => console.error('tasks write failed', e))
+  },
+  setNewTaskRepo: (repo) => {
+    saveNewTaskRepo(repo)
+    set({ newTaskRepo: repo })
+  },
+  openTask: (id) => {
+    const task = get().tasks.tasks.find(t => t.id === id)
+    if (!task) return
+    set({ openTaskId: id })
+    // Selecting is what starts/reattaches the terminal, so only a task that
+    // actually owns a worktree selects one; the rest get the start pane.
+    if (task.worktree && get().worktrees.some(w => w.path === task.worktree)) {
+      get().select(task.worktree)
+    }
+  },
+  openRepoRoot: (path) => {
+    // select() clears openTaskId on its own — a root owns no task — so the
+    // surface below falls through to the root's terminal.
+    get().select(path)
+  },
+  startWorktree: async (id, branch) => {
+    const task = get().tasks.tasks.find(t => t.id === id)
+    if (!task) return 'That task is gone.'
+    const repo = task.repo ?? get().repos[0]
+    if (!repo) return 'No repo connected. Add one from the sidebar first.'
+    set(st => ({ creating: st.creating + 1 }))
+    try {
+      const res = await window.api.createWorktree({ repoPath: repo, branch })
+      if (!res.ok) return res.message
+      // List first: attaching to a path the sidebar doesn't know about yet
+      // would render a card pointing at nothing for a frame.
+      await get().refreshWorktreeList()
+      get().applyTasks(attachWorktree(get().tasks, id, res.path, repo))
+      get().select(res.path)
+      set({ openTaskId: id })
+      return undefined
+    } finally {
+      set(st => ({ creating: st.creating - 1 }))
+    }
+  },
+  startWorktreeWithCommand: async (id, command, branch, inputs, prompt) => {
+    const task = get().tasks.tasks.find(t => t.id === id)
+    if (!task) return 'That task is gone.'
+    const repo = task.repo ?? get().repos[0]
+    if (!repo) return 'No repo connected. Add one from the Repos menu first.'
+    // The command runs against the repo itself: there is no worktree yet, which
+    // is the whole point of running it.
+    set(st => ({ creating: st.creating + 1 }))
+    try {
+      const outcome = await window.api.runRepoCommand({
+        worktreePath: repo, command, inputs, branch, prompt
+      })
+      if (!outcome.ok) return outcome.message
+      await get().refreshWorktreeList()
+      // `select` is where the command said it put the worktree. If nothing
+      // matches, the command ran but made no worktree we can see — say so rather
+      // than attaching the task to a path that isn't there.
+      const created = outcome.select
+        ? get().worktrees.find(w => w.path === outcome.select)
+        : undefined
+      if (!created) {
+        return outcome.select
+          ? `The command ran, but no worktree appeared at ${outcome.select}.`
+          : 'That command has no `select`, so there is no worktree to attach.'
+      }
+      get().applyTasks(attachWorktree(get().tasks, id, created.path, repo))
+      get().select(created.path)
+      // Typed after selecting, so the lines land in the terminal now on screen.
+      if (outcome.terminal?.length) window.api.termRunLines(created.path, outcome.terminal)
+      return undefined
+    } finally {
+      set(st => ({ creating: st.creating - 1 }))
+    }
+  },
+  deleteTask: async (id, force) => {
+    const task = get().tasks.tasks.find(t => t.id === id)
+    if (!task) return undefined
+    const path = task.worktree
+    const worktree = path ? get().worktrees.find(w => w.path === path) : undefined
+    if (path && worktree) {
+      // A repo whose teardown does more than git does — dropping databases,
+      // trashing node_modules out of band — says so with a removeWorktree
+      // command, and that runs instead.
+      const entries = await window.api.listRepoCommands(path).catch(() => [])
+      const command = removeWorktreeCommand(entries)
+      if (command) {
+        const outcome = await window.api.runRepoCommand({
+          worktreePath: path, command, branch: worktree.branch
+        })
+        if (!outcome.ok) return outcome.message
+      } else {
+        try {
+          await window.api.removeWorktree(path, force)
+        } catch (e: any) {
+          // The worktree survived, so the task must too — a task-less worktree
+          // is the one direction the invariant cannot repair.
+          return (e?.message ?? String(e)).trim()
+        }
+      }
+      await get().refreshWorktreeList()
+      // Whatever ran, the worktree has to actually be gone before the task is:
+      // deleting the task while its worktree stands would leave an orphan the
+      // reconciler then re-adopts under a branch-name title.
+      if (get().worktrees.some(w => w.path === path)) {
+        return `${command ? command.label : 'Removing the worktree'} ran, but ${path} is still there.`
+      }
+    }
+    get().applyTasks(removeTask(get().tasks, id))
+    if (get().openTaskId === id) set({ openTaskId: undefined })
+    return undefined
+  },
+  requestNewTask: () => {
+    // The box lives at the bottom of the To do lane, which is always on screen
+    // now; the lane only has to focus what it already renders.
+    set(st => ({ newTaskNonce: st.newTaskNonce + 1 }))
   },
   refreshBackground: async () => {
     set({ selectedBackground: await window.api.getSelectedBackground() })
@@ -108,12 +268,22 @@ export const useStore = create<State>((set, get) => ({
   popModal: () => set(st => ({ modalOpen: Math.max(0, st.modalOpen - 1) })),
   init: async () => {
     const repos = await window.api.listRepos()
-    set({ repos, names: await window.api.listNames(), layout: await window.api.getLayout(),
-          tasks: await window.api.getTasks() })
+    set({ repos, names: await window.api.listNames(), tasks: await window.api.getTasks() })
     await get().refreshBackground()
     // The Background app menu changes the selection in the main process; re-read
     // it when notified so the backdrop updates live.
     window.api.onBackgroundChanged(() => get().refreshBackground())
+    // Repos are added and disconnected from the Repos menu; main tells us when.
+    window.api.onReposChanged(async () => {
+      set({ repos: await window.api.listRepos() })
+      await get().refreshWorktrees()
+      // A disconnected repo takes its worktrees with it, so a selection or an
+      // open task pointing into one has to let go rather than render nothing.
+      const gone = !get().worktrees.some(w => w.path === get().selected)
+      if (gone) set({ selected: undefined, openTaskId: undefined })
+      if (!get().repos.includes(get().newTaskRepo)) get().setNewTaskRepo(get().repos[0] ?? '')
+    })
+    if (!repos.includes(get().newTaskRepo)) get().setNewTaskRepo(repos[0] ?? '')
     await get().refreshWorktrees()
     // On any change (files or branch HEAD), refresh that worktree's status and
     // re-list worktrees so branch renames/switches show in the sidebar.
@@ -125,7 +295,15 @@ export const useStore = create<State>((set, get) => ({
     // A refresh the user triggered during this await must win over the cache.
     const cachedPr = await window.api.getPrStatuses()
     set(st => ({ prStatuses: { ...cachedPr, ...st.prStatuses } }))
-    window.api.onAgentStatus((p, r) => set(st => ({ agentStatuses: { ...st.agentStatuses, [p]: r } })))
+    window.api.onAgentStatus((p, r) => {
+      set(st => ({ agentStatuses: { ...st.agentStatuses, [p]: r } }))
+      // An agent working is what "in progress" means, so the card says so and
+      // moves to the top of the lane. Identity-checked: this event repeats on
+      // every tool call, and only a real change is written.
+      if (r.status !== 'working') return
+      const next = noteAgentWorking(get().tasks, p)
+      if (next !== get().tasks) get().applyTasks(next)
+    })
     // Safety net: periodically re-list worktrees (branch names) and refresh the
     // selected worktree's status, so the sidebar stays current even if a file
     // event is missed. Cheap: `git worktree list` / `git status` per tick.
@@ -142,8 +320,22 @@ export const useStore = create<State>((set, get) => ({
   refreshWorktreeList: async () => {
     const { repos } = get()
     const all: Worktree[] = []
-    for (const r of repos) all.push(...await window.api.listWorktrees(r))
-    set({ worktrees: all })
+    const repoOf: Record<string, string> = {}
+    for (const r of repos) {
+      const list = await window.api.listWorktrees(r)
+      for (const w of list) repoOf[w.path] = r
+      all.push(...list)
+    }
+    set({ worktrees: all, repoOf })
+    // Every non-main worktree must have a task. This runs on every re-list, not
+    // just at launch: `git worktree add` in another terminal is the normal way
+    // an unclaimed one appears, and the 3s tick is when we notice.
+    // A create in flight owns its worktree already; adopting it here would put
+    // a second card on the board for the same work. The next tick picks up
+    // anything genuinely unclaimed.
+    if (get().creating > 0) return
+    const reconciled = reconcileTasks(get().tasks, all, get().names, repoOf)
+    if (reconciled !== get().tasks) get().applyTasks(reconciled)
   },
   refreshWorktrees: async () => {
     await get().refreshWorktreeList()
@@ -174,6 +366,11 @@ export const useStore = create<State>((set, get) => ({
   // shell's initial prompt output can never arrive before the renderer is ready.
   select: (p) => {
     set({ selected: p })
+    // Every non-main worktree has a task, so selecting one is just another way
+    // of opening that task — the crumb then names it. A repo root has no task
+    // and must clear the last one, or the surface would keep drawing the old
+    // task's crumb over the root's terminal.
+    set({ openTaskId: taskForWorktree(get().tasks, p)?.id })
     localStorage.setItem('wtm.selected', p)
     // Marking read is deliberately *not* immediate. Stepping through worktrees
     // with Ctrl+J/K passes through every one in between, and stamping on arrival
@@ -202,20 +399,73 @@ export const useStore = create<State>((set, get) => ({
     saveUnread(unread)
     set({ unread })
   },
-  // Walk the sidebar exactly as rendered: groups first in layout order, then the
-  // ungrouped section, then Hidden — with collapsed sections skipped, so
-  // Cmd+Up/Down never jumps to a row that isn't on screen.
+  // Walk the board exactly as drawn — To do, then In progress, then In review,
+  // then Done, in each lane's own order. Every card is a stop, including ones
+  // with no worktree: stepping onto one opens its start pane, which is how a
+  // task that needs a terminal gets one.
   selectRelative: (delta) => {
-    const { worktrees, layout, selected, modalOpen, openDiff, select } = get()
+    const { tasks, openTaskId, selected, modalOpen, openDiff, openTask } = get()
     if (modalOpen > 0 || openDiff) return
-    const order = navOrder(deriveSections(layout, worktrees))
+    // On the rail, up and down walk the repos — the rail is a column like any
+    // other, and stepping off it is what Ctrl+H/Ctrl+L are for.
+    const roots = railPaths(get())
+    const onRail = !openTaskId && selected ? roots.indexOf(selected) : -1
+    if (onRail !== -1) {
+      return get().openRepoRoot(roots[(onRail + delta + roots.length) % roots.length])
+    }
+    const order = LANES.flatMap(lane => tasksInLane(tasks, lane)).map(t => t.id)
     const n = order.length
     if (n === 0) return
-    const i = order.indexOf(selected ?? '')
-    // i === -1 covers nothing selected yet, a selection that has disappeared from
-    // the list (the 3s refresh can produce this), and a selection that is hidden
-    // inside a collapsed section.
-    if (i === -1) return select(order[delta === 1 ? 0 : n - 1])
-    select(order[(i + delta + n) % n])
+    // Where we are: the open task, else whatever the selected worktree belongs
+    // to — selecting from anywhere else still leaves the board a place to
+    // resume from.
+    const current = openTaskId ?? (selected ? taskForWorktree(tasks, selected)?.id : undefined)
+    const i = current ? order.indexOf(current) : -1
+    // i === -1 covers nothing open yet and a task that has since disappeared.
+    if (i === -1) return openTask(order[delta === 1 ? 0 : n - 1])
+    openTask(order[(i + delta + n) % n])
+  },
+  // Sideways across the columns, keeping your place in the one you left: the
+  // card at the same depth in the next column, or its last card when that one
+  // is shorter. The repo rail is the leftmost column — roots are navigable the
+  // same way cards are — empty columns are skipped rather than landed on, and
+  // the walk wraps like the vertical one does.
+  selectLaneRelative: (delta) => {
+    const { tasks, openTaskId, selected, modalOpen, openDiff, openTask } = get()
+    if (modalOpen > 0 || openDiff) return
+    const roots = railPaths(get())
+    // Every column as a list of things to open, rail first. Empties are kept in
+    // place so the columns keep their board positions; the walk skips them.
+    const columns: { rail: boolean; items: string[] }[] = [
+      { rail: true, items: roots },
+      ...LANES.map(lane => ({ rail: false, items: tasksInLane(tasks, lane).map(t => t.id) }))
+    ]
+    const open = (col: { rail: boolean; items: string[] }, row: number) => {
+      const target = col.items[Math.min(row, col.items.length - 1)]
+      return col.rail ? get().openRepoRoot(target) : openTask(target)
+    }
+
+    // Where we are. A root has no task, so the rail is checked first.
+    const at = roots.indexOf(!openTaskId && selected ? selected : '')
+    let col = at === -1 ? -1 : 0
+    let row = at === -1 ? 0 : at
+    if (col === -1) {
+      const current = openTaskId ?? (selected ? taskForWorktree(tasks, selected)?.id : undefined)
+      for (let c = 1; c < columns.length; c++) {
+        const i = current ? columns[c].items.indexOf(current) : -1
+        if (i !== -1) { col = c; row = i; break }
+      }
+    }
+    // Nothing open: start at the first thing there is, the way Ctrl+J does.
+    if (col === -1) {
+      const first = columns.find(c => c.items.length > 0)
+      return first && open(first, 0)
+    }
+    // At most one lap: every other column empty means there is nowhere to go.
+    for (let step = 0; step < columns.length - 1; step++) {
+      col = (col + delta + columns.length) % columns.length
+      if (columns[col].items.length === 0) continue
+      return open(columns[col], row)
+    }
   }
 }))

@@ -121,6 +121,11 @@
   background: linear-gradient(90deg, #e0e03d 50%, transparent 50%);
 }
 .wt-task-mark.blocked { border-color: #e67e4a; background: #e67e4a; }
+/* Three quarters filled: review is past in-progress's half, short of done. */
+.wt-task-mark.review {
+  border-color: #a371f7;
+  background: linear-gradient(90deg, #a371f7 75%, transparent 75%);
+}
 .wt-task-mark.done { border-color: #3fb950; background: #3fb950; }
 
 .wt-task-body { flex: 1; min-width: 0; }
@@ -186,6 +191,7 @@
   vertical-align: top;
 }
 .wt-task-text::placeholder { color: #6e737d; }
+
 
 /* The row's own padding is on .wt-task, which this box sits outside of. */
 .wt-task-new { padding: 4px 8px 0; }

@@ -9,8 +9,6 @@ const api: Api = {
   pickRepo: () => ipcRenderer.invoke(IPC.pickRepo),
   listNames: () => ipcRenderer.invoke(IPC.listNames),
   setName: (p, name) => ipcRenderer.invoke(IPC.setName, p, name),
-  getLayout: () => ipcRenderer.invoke(IPC.getLayout),
-  setLayout: (layout) => ipcRenderer.invoke(IPC.setLayout, layout),
   getTasks: () => ipcRenderer.invoke(IPC.getTasks),
   setTasks: (doc) => ipcRenderer.invoke(IPC.setTasks, doc),
   getSelectedBackground: () => ipcRenderer.invoke(IPC.getSelectedBackground),
@@ -19,8 +17,14 @@ const api: Api = {
     ipcRenderer.on(IPC.backgroundChanged, h as any)
     return () => ipcRenderer.removeListener(IPC.backgroundChanged, h as any)
   },
+  onReposChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.reposChanged, h as any)
+    return () => ipcRenderer.removeListener(IPC.reposChanged, h as any)
+  },
   listWorktrees: (r) => ipcRenderer.invoke(IPC.listWorktrees, r),
   removeWorktree: (p, f) => ipcRenderer.invoke(IPC.removeWorktree, p, f),
+  createWorktree: (req) => ipcRenderer.invoke(IPC.createWorktree, req),
   getStatus: (p) => ipcRenderer.invoke(IPC.getStatus, p),
   getDiff: (p) => ipcRenderer.invoke(IPC.getDiff, p),
   getCommittedFiles: (p) => ipcRenderer.invoke(IPC.getCommittedFiles, p),
@@ -103,10 +107,25 @@ const api: Api = {
     ipcRenderer.on(IPC.menuSelectNext, h as any)
     return () => ipcRenderer.removeListener(IPC.menuSelectNext, h as any)
   },
+  onMenuSelectPrevLane: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuSelectPrevLane, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuSelectPrevLane, h as any)
+  },
+  onMenuSelectNextLane: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuSelectNextLane, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuSelectNextLane, h as any)
+  },
   onMenuMarkUnread: (cb) => {
     const h = () => cb()
     ipcRenderer.on(IPC.menuMarkUnread, h as any)
     return () => ipcRenderer.removeListener(IPC.menuMarkUnread, h as any)
+  },
+  onMenuToggleLayout: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on(IPC.menuToggleLayout, h as any)
+    return () => ipcRenderer.removeListener(IPC.menuToggleLayout, h as any)
   }
 }
 contextBridge.exposeInMainWorld('api', api)

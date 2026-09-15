@@ -4,7 +4,13 @@
 
 import type { AgentReport } from '@shared/agent-status'
 
-export const PROTOCOL_VERSION = 1
+// Bumped whenever the daemon gains behaviour the app depends on, not only when
+// the message shapes change. The daemon is detached and outlives every app it
+// serves — a build from months ago keeps answering on the same socket — so a
+// version that stood still let a stale daemon silently withhold a feature
+// (agentStatus reports carrying `activity` were the case that showed it).
+// See PtyDaemonClient.connect, which replaces a daemon that does not match.
+export const PROTOCOL_VERSION = 2
 
 export type ClientMessage =
   | { type: 'hello'; clientVersion: number }

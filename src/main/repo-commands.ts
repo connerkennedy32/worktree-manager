@@ -20,7 +20,8 @@ export async function runRepoCommand(
     worktreeName: basename(req.worktreePath),
     repo: root,
     branch: req.branch ?? '',
-    message: req.message ?? ''
+    message: req.message ?? '',
+    prompt: req.prompt ?? ''
   }
   for (const name of commandPromptVars(command)) {
     const value = req.inputs?.[name]?.trim()

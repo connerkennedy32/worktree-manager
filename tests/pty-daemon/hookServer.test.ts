@@ -5,7 +5,7 @@ import { mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { Server } from 'http'
-import { startHookServer } from '../../src/main/pty-daemon/hookServer'
+import { startHookServer, readHook } from '../../src/main/pty-daemon/hookServer'
 
 const execFileAsync = promisify(execFile)
 
@@ -63,5 +63,31 @@ describe('startHookServer', () => {
     await new Promise(r => server!.on('listening', r))
     await post(sock, JSON.stringify({ cwd: '/wt/a', event: 'Stop' }))
     expect(got).toEqual([['/wt/a', 'Stop']])
+  })
+})
+
+describe('readHook', () => {
+  it('reads the envelope, keeping the payload underneath', () => {
+    const payload = { cwd: '/wt/a', hook_event_name: 'PostToolUse', tool_name: 'Edit' }
+    expect(readHook({ cwd: '/wt/a', event: 'PostToolUse', payload }))
+      .toEqual({ cwd: '/wt/a', event: 'PostToolUse', payload })
+  })
+
+  it('reads a bare Claude Code payload, as an older script posts it', () => {
+    const payload = { cwd: '/wt/a', hook_event_name: 'PostToolUse', tool_name: 'Edit' }
+    expect(readHook(payload)).toEqual({ cwd: '/wt/a', event: 'PostToolUse', payload })
+  })
+
+  it('reads the small fallback the script sends for an oversized payload', () => {
+    expect(readHook({ cwd: '/wt/a', event: 'Stop' }))
+      .toEqual({ cwd: '/wt/a', event: 'Stop', payload: undefined })
+  })
+
+  it('rejects anything missing a cwd or an event', () => {
+    expect(readHook({ cwd: '/wt/a' })).toBeUndefined()
+    expect(readHook({ hook_event_name: 'Stop' })).toBeUndefined()
+    expect(readHook({ cwd: '', event: 'Stop' })).toBeUndefined()
+    expect(readHook(null)).toBeUndefined()
+    expect(readHook('nope')).toBeUndefined()
   })
 })
