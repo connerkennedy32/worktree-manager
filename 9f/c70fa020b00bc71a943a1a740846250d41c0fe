@@ -1,0 +1,311 @@
+src/renderer/components/TaskList.tsx
+  s_c231f86aeb182b::t_1eabce7c0a16c5 9,11-17,19-20,22-23,26-28,32-33
+  s_982eaad38113db::t_0475b88abc17c0 4,21,30,41,78
+  s_c231f86aeb182b::t_e87ac266b2fc6f 1,3,5-8,18,29,31,37-40,42-50,53-76,79-80
+tests/shared/tasks.test.ts
+  s_a746c22719c3e0::t_a7d8cb7201f21b 156-184,186,188,191,193-194,219-225,244-250,259,280-287,289-295
+  s_a746c22719c3e0::t_c5c4528d99cff9 187,214-215
+  s_3fdb0ed11258eb::t_da275519ba2bab 5,185,189-190,192,195-202,211,216-218
+  s_4d29696583f35d::t_1fb5b8ee490ed1 438-440
+  s_a746c22719c3e0::t_22cc06780b4a2e 316-337,340-372
+  s_3fdb0ed11258eb::t_9fdd815bd6540a 203-210,212-213
+  s_a746c22719c3e0::t_a9d330c703a8aa 69-71,73-74,288,311-312
+  s_c231f86aeb182b::t_deeede7d5cda61 95-125,412-422
+  s_a746c22719c3e0::t_bb736e4d7b2243 31,82-84,296-310,313-315
+  s_3fdb0ed11258eb::t_fb6c1468c06f09 423-424
+  s_d26dc5ef9179d1::t_6e77daa499d881 28,34,36-37,251-258,260-279,338-339
+  s_4d29696583f35d::t_52f7bdad36c946 4,85,93,430-437,441-446
+  s_c231f86aeb182b::t_09b0f25211e62b 7-9
+  s_d76e666807bd5c::t_df1b45d95c66b0 226-243
+  s_a746c22719c3e0::t_c04f48132ac773 87-92,128-136,150,155
+  s_a746c22719c3e0::t_f687135941002f 6,373-411,425-429
+  s_6c88d19c8e8d4f::t_241acbc7d1db8a 72,75
+  s_4d29696583f35d::t_b64eac4526f67b 86,94
+tests/main/shortcuts.test.ts
+  s_3fdb0ed11258eb::t_22534b5004ac9b 82-100
+tests/main/command-followups.test.ts
+  s_a746c22719c3e0::t_5ddcf9a0b2800e 75-89,91-97,100-101
+  s_a746c22719c3e0::t_db3fede149de06 90,98-99
+tests/pty-daemon/agentTracker.test.ts
+  s_a746c22719c3e0::t_92d04d3ff7f9fc 142-182
+src/shared/tasks.ts
+  s_d26dc5ef9179d1::t_9eeff846975f81 504-506
+  s_a746c22719c3e0::t_64320e324484a9 404-413,419-422,427-429
+  s_3fdb0ed11258eb::t_e4cf9143e6d2d7 345-346,354-356,360-361,367,378-388
+  s_3fdb0ed11258eb::t_9aea33bd20a335 416
+  s_a746c22719c3e0::t_b53de16293d5a7 11,82,87,123,170,183-185,191-192,194,237,273,275,278,281,285-288,290-291,462-464,467,473
+  s_a746c22719c3e0::t_b6fcd55ded1f4d 125-145,153-154,312,321-322,452-454
+  s_4d29696583f35d::t_31cb8598fc37c9 27-31,172-176,500
+  s_6c88d19c8e8d4f::t_241acbc7d1db8a 198-200,261-264
+  s_c231f86aeb182b::t_2263b2e24e98ef 47-53,61-66,73-76,79,216-236,486-490
+  s_3fdb0ed11258eb::t_cc811cea46a01c 338-341,343-344,357,390,392-393
+  s_a746c22719c3e0::t_1fa35bb2d62b23 101-105,108
+  s_a746c22719c3e0::t_69961e1d8dc8a5 1-9,34-44,121-122,266,272,274,276-277,279-280,284,292-311,313-315,319-320,323-331,337,342,347-353,389,394-401,432-434,439-445,458-459,501-503
+  s_a746c22719c3e0::t_c5c4528d99cff9 334-336,391
+  s_d76e666807bd5c::t_5d3452082841f9 358-359,362-366,368-377
+  s_d26dc5ef9179d1::t_4396e1423e169f 21-26,157-159,161-169,193,267-271,282-283,289,316-318,435-438,446-451,455-457
+  s_a746c22719c3e0::t_a6c1a3646f66b8 56-59,69-72,214-215,239-260
+  s_abe8dfb8a1af47::t_3367a96b96dfff 414-415,417-418,423-426
+  s_4d29696583f35d::t_08a471e31b200a 124,171,238,265
+tests/renderer/store-select-relative.test.ts
+  s_3fdb0ed11258eb::t_37108c0a87da07 159,161,264-295,297-322
+  s_a746c22719c3e0::t_05ce3d36b29ddd 168,170-175
+  s_a746c22719c3e0::t_0f50ed92d255f8 195-204
+  s_3fdb0ed11258eb::t_22534b5004ac9b 193,205-226,229-263
+  s_a746c22719c3e0::t_15584e93cfb6db 37-38,42-47,49,52-55,157-158,167,169,178-179,182,186,188-191
+  s_a746c22719c3e0::t_1085b32956d303 2-3,19-21,36,149-156,162,176,183-185
+  s_a746c22719c3e0::t_1bde2014edac97 22-35
+  s_abe8dfb8a1af47::t_d13faae4ed6c5d 160
+src/renderer/state/task-keys.ts
+  s_6c88d19c8e8d4f::t_40442cfb68cfd0 1-59
+src/shared/repo-commands.ts
+  s_a746c22719c3e0::t_6b62f9d4bd62e2 5-8,153-154,156,158-161
+  s_a746c22719c3e0::t_a36fc29252baee 190-193
+  s_a746c22719c3e0::t_c539dab8745992 117,148-152,155,157,162-167,194-195
+  s_a746c22719c3e0::t_c43290c2059f0d 1
+tests/renderer/board.test.ts
+  s_a746c22719c3e0::t_e35a1765c416f5 1,3-24,40-41
+  s_3fdb0ed11258eb::t_baf6fd74200d29 2,25-39
+src/renderer/state/store.ts
+  s_a746c22719c3e0::t_a99aad2c077477 10
+  s_a746c22719c3e0::t_f22f23c077a711 130,149
+  s_a746c22719c3e0::t_5a5d8f38fe8aa6 155,255,259-261,283
+  s_3fdb0ed11258eb::t_85b21d3e77af0f 7,449
+  s_a746c22719c3e0::t_64320e324484a9 6,8-9,298-306
+  s_6c88d19c8e8d4f::t_ca92f485cf2605 76-79,86,131,258
+  s_d76e666807bd5c::t_c5eb0b4b21d227 81
+  s_3fdb0ed11258eb::t_0b92c4020c05e0 58-60,162-166,369-373
+  s_a746c22719c3e0::t_dea8ce194f6e70 271
+  s_a746c22719c3e0::t_345ef315e7da4f 402-405,407,416,419-426
+  s_3fdb0ed11258eb::t_7452dbe4b246fd 428-432,436-448,450-457,459-468
+  s_a746c22719c3e0::t_1fa35bb2d62b23 52-55,148,150-151,276-282,284-286
+  s_3fdb0ed11258eb::t_39b77a3c3edab6 115-118,409-415
+  s_3fdb0ed11258eb::t_ce91b1f1168e8b 105-107,262,427,433-435,458,469
+  s_a746c22719c3e0::t_c43290c2059f0d 2,66-69,72,186,188-193,219
+  s_a746c22719c3e0::t_79d060587f7f8f 44-47,56-57,61-65,73-75,129,152-154,156-161,167-171,220-224,245-246,253-254,256-257,323-332,338
+  s_a746c22719c3e0::t_c539dab8745992 3,70-71,187,225-244,247-252
+  s_d76e666807bd5c::t_f682734c555d78 194-218
+  s_d76e666807bd5c::t_8f4ce6d5700047 80,82-85,132,172-185,333-337
+  s_a746c22719c3e0::t_c2d60b56eb2813 48-51
+src/main/ipc.ts
+  s_a746c22719c3e0::t_fa1807199dad53 136-144
+  s_a746c22719c3e0::t_dea8ce194f6e70 7
+  s_c231f86aeb182b::t_b510bcaa95cea6 21,112-121
+src/renderer/App.tsx
+  s_a746c22719c3e0::t_98f3a45da8394e 52-55,78,86-89,91,94-100,154-156,158-206
+  s_a746c22719c3e0::t_8eb4ae75d7c00e 8,10,56-59,61,90,92-93,207-211,258-261,269,306
+  s_6c88d19c8e8d4f::t_40442cfb68cfd0 7
+  s_c231f86aeb182b::t_a9558d99c00cf9 60,79-85,262-268
+  s_3fdb0ed11258eb::t_2547dfb8cca307 62-77
+  s_3fdb0ed11258eb::t_ce91b1f1168e8b 243-246
+  s_6c88d19c8e8d4f::t_a7cf42f912f23a 249-257
+  s_c231f86aeb182b::t_2a82907cb8f44b 2-5,9,101-153,157
+tests/shared/agent-status.test.ts
+  s_3fdb0ed11258eb::t_f87a444b8b0d8e 2,116-159,161-169
+  s_3fdb0ed11258eb::t_2c0f102a3f2613 160
+  s_abe8dfb8a1af47::t_df835dbe8dccbc 170
+tests/shared/repo-commands.test.ts
+  s_a746c22719c3e0::t_5ddcf9a0b2800e 4-5,308-320
+  s_a746c22719c3e0::t_91a9aafbda0a6e 295-307,321-346
+src/preload/index.ts
+  s_a746c22719c3e0::t_1401c9ad831c50 20-24
+  s_c231f86aeb182b::t_5a5f34266b570d 124-128
+  s_3fdb0ed11258eb::t_bf6c2364c2ed7f 110-119
+  s_a746c22719c3e0::t_fa1807199dad53 27
+src/main/git/worktrees.ts
+  s_a746c22719c3e0::t_fa1807199dad53 39-47,54-55
+  s_a746c22719c3e0::t_b7bddf6c94f4d9 48-53
+src/main/menu.ts
+  s_3fdb0ed11258eb::t_ce91b1f1168e8b 157-180
+  s_a746c22719c3e0::t_1401c9ad831c50 4,70-108,114,205,234
+  s_c231f86aeb182b::t_b510bcaa95cea6 116-118,156,192-204
+  s_abe8dfb8a1af47::t_6fe28e1482977b 206-207
+src/renderer/state/seen.ts
+  s_a746c22719c3e0::t_f22f23c077a711 20-33
+src/main/pty-daemon/client.ts
+  s_d76e666807bd5c::t_70fcf2976238de 29-37,145-149,151-158
+tests/renderer/task-keys.test.ts
+  s_6c88d19c8e8d4f::t_40442cfb68cfd0 1-3,5-108
+  s_982eaad38113db::t_c71a9357ed92de 4
+src/main/pty-daemon/daemon.ts
+  s_a746c22719c3e0::t_cb2bf32ce392ca 37
+tests/git/worktrees.test.ts
+  s_a746c22719c3e0::t_75c797fc80e7fe 2-3,19-24,28,30-37
+  s_a746c22719c3e0::t_b7bddf6c94f4d9 5,25-27,29
+src/main/pty-daemon/protocol.ts
+  s_d76e666807bd5c::t_70fcf2976238de 7-13
+src/renderer/components/board-theme.css
+  s_a746c22719c3e0::t_5a5d8f38fe8aa6 382-393,396-406
+  s_c231f86aeb182b::t_171f79a8c615f7 394-395
+  s_a746c22719c3e0::t_c5c4528d99cff9 300-303
+  s_4d29696583f35d::t_436b43ad00387b 220-233
+  s_f58dbd340e7f42::t_8687c6a995c960 464-477
+  s_3fdb0ed11258eb::t_0f079d24ff6e2b 20-89
+  s_a746c22719c3e0::t_42a742cc0f6ca1 1-4,19,90-113,115-117,121-132,134-143,145-156,167-170,172-183,189-219,247-296,298-299,304-305,329,407-445
+  s_a746c22719c3e0::t_feb6b30ccda446 118-120,171
+  s_c231f86aeb182b::t_22001dabe92ca9 330-381
+  s_4d29696583f35d::t_a9c7a08de86f2a 297
+  s_a746c22719c3e0::t_10c7a95f17296d 446-463
+  s_3fdb0ed11258eb::t_ca43772a2a8020 184-188
+  s_a746c22719c3e0::t_620302ed4cf2ff 157-166
+  s_3fdb0ed11258eb::t_101816e129afbd 307-325
+  s_f58dbd340e7f42::t_debcb33e70c778 478-505
+  s_c231f86aeb182b::t_c1c325a19d57ff 5-18,114,133,144
+  s_3fdb0ed11258eb::t_32e4acdeb91fa6 234-246
+  s_a746c22719c3e0::t_6a5a31acb3ab21 306,326-328
+src/main/pty-daemon/agentTracker.ts
+  s_a746c22719c3e0::t_cb2bf32ce392ca 8,30-35,42-49,53,58
+src/renderer/components/Board.tsx
+  s_a746c22719c3e0::t_07afaad4e51d55 453-457,461,465,536,538,540
+  s_f58dbd340e7f42::t_4f32d6b4ec565c 486-488,514-526
+  s_3fdb0ed11258eb::t_60df4b58e0d8e8 12,111
+  s_a746c22719c3e0::t_e29c687b76a776 247,253,291
+  s_4d29696583f35d::t_a16685b55be74b 13,49,69,71-73,79-81,183-185,205-221
+  s_c231f86aeb182b::t_b3d0b26f326d0f 297,424,477
+  s_a746c22719c3e0::t_c5c4528d99cff9 201
+  s_a746c22719c3e0::t_7e9a3c0e51b909 533
+  s_3fdb0ed11258eb::t_a85115f2259426 3,471-476,478-485,489-513,527-530,537
+  s_a746c22719c3e0::t_96f6c9cf4ef163 1,15,20,182,303-304,316-322,337,368,408-418,420-423,425
+  s_a746c22719c3e0::t_4a0a9db2489a57 8-9,53-55,116,272-276
+  s_3fdb0ed11258eb::t_32e4acdeb91fa6 62-66,241-242
+  s_3fdb0ed11258eb::t_4063e501bb2e76 124-127
+  s_a746c22719c3e0::t_6a5a31acb3ab21 16-18,294-296,300-302,349,355-363
+  s_3fdb0ed11258eb::t_1647410dedf242 200,248,263
+  s_c231f86aeb182b::t_09cb79c4a68524 23
+  s_f58dbd340e7f42::t_22e1666e5eb0e4 254-257,259-261
+  s_a746c22719c3e0::t_620302ed4cf2ff 121-122,369-375,377-403,534
+  s_3fdb0ed11258eb::t_5bcf71fcf3368f 306-315,324,326-334,340-343,350-351,353
+  s_982eaad38113db::t_0475b88abc17c0 4,36,181,404-407,419,428,464,532,539
+  s_a746c22719c3e0::t_d32761c9b7ff19 102-108
+  s_d26dc5ef9179d1::t_9eeff846975f81 190-195
+  s_c231f86aeb182b::t_86aa26f9cdd897 376
+  s_a746c22719c3e0::t_18f272ded07c6c 7,10,14,21,24-33,37-41,45-47,50-52,59-61,67-68,70,76-78,82,84-88,90,93,95-99,112-115,119-120,123,128-180,186-189,196-199,202-203,223-237,243-246,249-252,258,262,264-265,267,269,271,277-278,281,285-286,289-290,293,298-299,305,335-336,338-339,344-348,352,354,426-427,429-452,458-460,462-463,466-470,531,535,541-543
+tests/main/tasks-config.test.ts
+  s_a746c22719c3e0::t_c04f48132ac773 5,46
+  s_c231f86aeb182b::t_925571c017aa08 11,40
+src/main/repo-commands.ts
+  s_a746c22719c3e0::t_c539dab8745992 23-24
+src/shared/agent-status.ts
+  s_a746c22719c3e0::t_5726767e6aa71f 9-13,39-121
+  s_abe8dfb8a1af47::t_d88a853b8c6df6 122
+src/renderer/components/tasks-theme.css
+  s_6c88d19c8e8d4f::t_1369178b8d2926 195
+  s_a746c22719c3e0::t_6279d6ad235f85 124-128
+tests/pty-daemon/hookServer.test.ts
+  s_a746c22719c3e0::t_2a38070b5a0f24 70-73,76-80,82-83
+  s_3fdb0ed11258eb::t_2c0f102a3f2613 8,68-69,74-75,81,84-92
+  s_abe8dfb8a1af47::t_36e26b4958e7a7 93
+src/shared/ipc-types.ts
+  s_c231f86aeb182b::t_5a5f34266b570d 283-285,330-331
+  s_3fdb0ed11258eb::t_bf6c2364c2ed7f 278-279,329
+  s_a746c22719c3e0::t_fa1807199dad53 149-157,194-196,302
+  s_a746c22719c3e0::t_c539dab8745992 77-83,132-134
+  s_a746c22719c3e0::t_1401c9ad831c50 233-235,315
+  s_a746c22719c3e0::t_dea8ce194f6e70 299
+src/main/shortcuts.ts
+  s_3fdb0ed11258eb::t_284c6bd349bebb 36-37,62-63,75-78,82-83,157-166,187
+src/renderer/state/board.ts
+  s_a746c22719c3e0::t_e35a1765c416f5 1-24
+  s_3fdb0ed11258eb::t_baf6fd74200d29 25-36
+src/main/pty-daemon/hookServer.ts
+  s_a746c22719c3e0::t_2a38070b5a0f24 16-28,31-33,57-58
+  s_a746c22719c3e0::t_cb2bf32ce392ca 11-14,29-30,34,38
+  s_abe8dfb8a1af47::t_f46dafc8c21189 15
+src/main/config.ts
+  s_a746c22719c3e0::t_dea8ce194f6e70 3
+src/renderer/components/StartPane.tsx
+  s_a746c22719c3e0::t_10c7a95f17296d 1,4-5,9-14,19-24,28-29,31-37,39-43,46,48-50,52,65-70,72,74-76,78,81-105,108-110,112
+  s_a746c22719c3e0::t_c539dab8745992 51
+  s_a746c22719c3e0::t_c2d60b56eb2813 3,6,8,15-18,25-26,45,47,53-54,58-61,63-64,71,73,77,111,113-118
+src/main/agent-hooks/install.ts
+  s_a746c22719c3e0::t_cb2bf32ce392ca 55-57,59
+  s_a746c22719c3e0::t_2a38070b5a0f24 42-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "9fc70fa020b00bc71a943a1a740846250d41c0fe",
+  "prompts": {},
+  "sessions": {
+    "s_3fdb0ed11258eb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "645fdf5c-41e9-42a0-8dae-eabb1ef15533",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_4d29696583f35d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a58b50a-15b3-443f-9a52-709d4b7b2ed2",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_6c88d19c8e8d4f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f92c48da-e3a0-4ba0-9bad-e034c0878dd2",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_982eaad38113db": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d4fa669f-3e41-4a36-a826-61cd1ca4ac02",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_a746c22719c3e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5d0dbdb-9a27-4b82-a932-5986e31021de",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_abe8dfb8a1af47": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6f2a83f7-394c-44e3-81ba-7937a673315e",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_c231f86aeb182b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a3d15c7-56e3-40ac-a262-a64da0def7b3",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_d26dc5ef9179d1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "591a8a67-b64a-441d-a8a3-0bf54653d78f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_d76e666807bd5c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6702c042-6760-46a1-bf3d-3f462dd2005c",
+        "model": "claude-opus-5"
+      },
+      "human_author": null
+    },
+    "s_f58dbd340e7f42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "89a6a4ad-4f17-450e-a440-ad7a4d8d7d72",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
