@@ -124,6 +124,10 @@ export async function registerIpc(w: BrowserWindow) {
     // Piggy-backed on the renderer's 3s re-list rather than given its own timer:
     // it is the moment the app already looks at what worktrees still exist.
     for (const p of stalePtyPaths(ptys.list(), existsSync)) ptys.kill(p)
+    // Same for watchers: a worktree torn down by a repo's own removeWorktree
+    // command never reaches the removeWorktree handler below, so its watcher
+    // would keep firing statusChanged for a directory that no longer exists.
+    for (const p of stalePtyPaths(watchers.list(), existsSync)) watchers.unwatch(p)
     return wt.listWorktrees(r)
   })
   ipcMain.handle(IPC.removeWorktree, async (_e, p: string, f: boolean) => {

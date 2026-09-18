@@ -3,13 +3,14 @@ import { useStore } from '../state/store'
 import { repoInitials } from '../state/board'
 import { taskDigit } from '../state/task-keys'
 import { ConfirmModal } from './ConfirmModal'
+import { NewTaskModal } from './NewTaskModal'
 import { disposeTerminal } from './TerminalView'
 import { deriveDot } from '@shared/agent-status'
 import { removeWorktreeCommand } from '@shared/repo-commands'
 import type { RepoCommand } from '@shared/ipc-types'
 import { PR_STATE_LABEL, graphiteUrl } from '@shared/pr-status'
 import {
-  addTask, cycleTaskState, dropTask, LANE_LABEL, LANES, laneOf, removeTask,
+  cycleTaskState, dropTask, LANE_LABEL, LANES, laneOf, removeTask,
   renameTask, setBlocked, setTaskNote, setTaskState, tasksInLane, type Lane, type Task
 } from '@shared/tasks'
 // The card's state box and its growing text box are the task list's, unchanged
@@ -290,79 +291,23 @@ export function Card({ task, lane }: { task: Task; lane: Lane }) {
   )
 }
 
-// The box at the bottom of To do. New tasks start there with no worktree —
-// getting one is a decision you make by opening the task, not by typing. What
-// you do pick here is the repo, which is what a worktree would be created in;
-// it sticks, because a run of tasks is nearly always about the same repo.
+// The + at the bottom of To do. Everything about making a task now lives in
+// the modal (see NewTaskModal) — this is only the way in, plus the nonce the
+// menu and Cmd+C use to ask for the same thing from the keyboard.
 export function NewTask() {
-  const doc = useStore(st => st.tasks)
-  const applyTasks = useStore(st => st.applyTasks)
-  const repos = useStore(st => st.repos)
-  const repo = useStore(st => st.newTaskRepo)
-  const setRepo = useStore(st => st.setNewTaskRepo)
   const nonce = useStore(st => st.newTaskNonce)
-  const ref = useRef<HTMLTextAreaElement>(null)
-  const [value, setValue] = useState('')
-  // Closed until asked for: the box sat at the foot of the lane whether or not
-  // there was a task to write, and an empty input reads as something unfinished.
   const [open, setOpen] = useState(false)
-  // Cmd+C (with nothing to copy) and the menu both ask for this box by bumping
-  // the nonce. Skipped on first render, which would open it at launch.
+  // Skipped on first render, which would open the modal at launch.
   useEffect(() => { if (nonce !== 0) setOpen(true) }, [nonce])
-  // Focus on open — including when the nonce opens it, which is the only way in
-  // from the keyboard. The ref is null until the textarea is actually mounted,
-  // so this cannot live in the handler that sets `open`.
-  useEffect(() => { if (open) ref.current?.focus() }, [open, nonce])
-  // Grow to fit, like the list's box: a long title wraps rather than scrolling.
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-  }, [value])
 
-  const close = () => { setValue(''); setOpen(false) }
-
-  if (!open) {
-    return (
+  return (
+    <>
       <button type="button" className="wt-card-add" onClick={() => setOpen(true)}
               title="New task">
         <span className="wt-card-add-sign">+</span>
       </button>
-    )
-  }
-
-  return (
-    <div className="wt-card-new">
-      <textarea ref={ref} className="wt-input wt-task-text" rows={1} placeholder="New task…"
-                value={value}
-                onChange={e => setValue(e.target.value)}
-                // Clicking away from an empty box is the same "never mind" that
-                // Escape is. A box with something typed in it stays, so a stray
-                // click can't lose what you wrote.
-                onBlur={() => { if (!value.trim()) close() }}
-                onKeyDown={e => {
-                  e.stopPropagation()
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (!value.trim()) return
-                    applyTasks(addTask(doc, value, Date.now(), repo || undefined))
-                    // Cleared but still open: tasks arrive in runs, and typing
-                    // the next one should not cost another click.
-                    setValue('')
-                  } else if (e.key === 'Escape') close()
-                }} />
-      {repos.length > 0 && (
-        <select className="wt-input wt-card-repo-select" value={repo}
-                onChange={e => setRepo(e.target.value)}
-                title="Which repo a worktree for this task would be created in">
-          {repos.map(r => (
-            <option key={r} value={r}>{r.split('/').filter(Boolean).pop()}</option>
-          ))}
-          <option value="">no repo</option>
-        </select>
-      )}
-    </div>
+      {open && <NewTaskModal onClose={() => setOpen(false)} />}
+    </>
   )
 }
 

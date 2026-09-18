@@ -1,5 +1,6 @@
 import simpleGit from 'simple-git'
 import { readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { WorktreeStatus, FileChange, LineStat } from '@shared/ipc-types'
 import { parseNumstat } from './numstat'
@@ -18,6 +19,13 @@ async function untrackedStat(worktreePath: string, path: string): Promise<LineSt
 }
 
 export async function getStatus(worktreePath: string): Promise<WorktreeStatus> {
+  // A worktree can be removed while a refresh for it is already in flight (or
+  // queued behind a watcher event). simple-git throws on a missing baseDir, and
+  // that rejection surfaces as an unhandled IPC error; an empty status is the
+  // honest answer for a directory that is gone.
+  if (!existsSync(worktreePath)) {
+    return { worktreePath, files: [], changeCount: 0, staged: {}, unstaged: {} }
+  }
   const git = simpleGit(worktreePath)
   const [raw, stagedRaw, unstagedRaw] = await Promise.all([
     git.raw(['status', '--porcelain=v1', '-uall']),

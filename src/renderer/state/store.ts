@@ -4,7 +4,7 @@ import { removeWorktreeCommand } from '@shared/repo-commands'
 import type { AgentReport } from '@shared/agent-status'
 import type { PrStatus } from '@shared/pr-status'
 import {
-  attachWorktree, emptyTasks, LANES, noteAgentWorking, reconcileTasks, removeTask,
+  attachWorktree, emptyTasks, LANES, noteAgentFinished, noteAgentWorking, reconcileTasks, removeTask,
   taskForWorktree, tasksInLane, type TasksDoc
 } from '@shared/tasks'
 import { loadNewTaskRepo, loadSeenAt, loadUnread, saveNewTaskRepo, saveSeenAt, saveUnread } from './seen'
@@ -18,6 +18,14 @@ export interface DiffTarget {
   untracked: boolean
   committed: boolean
 }
+
+// Whether starting a worktree should also take you to it. It does by default:
+// pressing Start from inside a task means you're looking at that task and want
+// its terminal. Creating the task and its worktree in one keystroke is the
+// other case — the point there is often to fire the agent off and carry on with
+// what you were doing, so that path passes `navigate: false`. The worktree,
+// the task and the agent are identical either way; only the selection differs.
+interface StartOpts { navigate?: boolean }
 
 interface State {
   repos: string[]
@@ -62,13 +70,15 @@ interface State {
   openTaskId?: string
   // Create a worktree for a task and attach it. Returns an error message to
   // show in place, rather than throwing — git's own words are the useful part.
-  startWorktree: (id: string, branch: string) => Promise<string | undefined>
+  // `navigate: false` creates the worktree and leaves you where you are — see
+  // StartOpts.
+  startWorktree: (id: string, branch: string, opts?: StartOpts) => Promise<string | undefined>
   // The same, through the repo's own create-worktree command: it decides where
   // the worktree goes, and its follow-ups open tmux, start the agent and hand
   // it the kickoff message.
   startWorktreeWithCommand: (
     id: string, command: RepoCommand, branch: string,
-    inputs: Record<string, string>, prompt: string
+    inputs: Record<string, string>, prompt: string, opts?: StartOpts
   ) => Promise<string | undefined>
   // Delete a task and, if it owns one, its worktree. The confirm lives in the
   // board; this is the part that has to not half-apply.
@@ -164,7 +174,7 @@ export const useStore = create<State>((set, get) => ({
     // surface below falls through to the root's terminal.
     get().select(path)
   },
-  startWorktree: async (id, branch) => {
+  startWorktree: async (id, branch, opts) => {
     const task = get().tasks.tasks.find(t => t.id === id)
     if (!task) return 'That task is gone.'
     const repo = task.repo ?? get().repos[0]
@@ -177,6 +187,7 @@ export const useStore = create<State>((set, get) => ({
       // would render a card pointing at nothing for a frame.
       await get().refreshWorktreeList()
       get().applyTasks(attachWorktree(get().tasks, id, res.path, repo))
+      if (opts?.navigate === false) return undefined
       get().select(res.path)
       set({ openTaskId: id })
       return undefined
@@ -184,7 +195,7 @@ export const useStore = create<State>((set, get) => ({
       set(st => ({ creating: st.creating - 1 }))
     }
   },
-  startWorktreeWithCommand: async (id, command, branch, inputs, prompt) => {
+  startWorktreeWithCommand: async (id, command, branch, inputs, prompt, opts) => {
     const task = get().tasks.tasks.find(t => t.id === id)
     if (!task) return 'That task is gone.'
     const repo = task.repo ?? get().repos[0]
@@ -210,8 +221,15 @@ export const useStore = create<State>((set, get) => ({
           : 'That command has no `select`, so there is no worktree to attach.'
       }
       get().applyTasks(attachWorktree(get().tasks, id, created.path, repo))
-      get().select(created.path)
-      // Typed after selecting, so the lines land in the terminal now on screen.
+      // Staying put still has to start the agent, and the agent is started *by*
+      // these lines. The main process refuses to type into a pty that doesn't
+      // exist (it would queue them until someone opened the worktree), so ask
+      // for the terminal first and let it run offscreen — the daemon buffers its
+      // output and replays the scrollback whenever the worktree is finally
+      // opened, exactly as it does across a renderer reload.
+      if (opts?.navigate === false) window.api.termStart(created.path)
+      else get().select(created.path)
+      // Typed after the terminal exists, so the lines aren't held back.
       if (outcome.terminal?.length) window.api.termRunLines(created.path, outcome.terminal)
       return undefined
     } finally {
@@ -300,8 +318,20 @@ export const useStore = create<State>((set, get) => ({
       // An agent working is what "in progress" means, so the card says so and
       // moves to the top of the lane. Identity-checked: this event repeats on
       // every tool call, and only a real change is written.
+      // An agent that just stopped is the card you want to read next, so it
+      // goes above even the worktrees still working.
+      if (r.status === 'done' || r.status === 'failed') {
+        const done = noteAgentFinished(get().tasks, p)
+        if (done !== get().tasks) get().applyTasks(done)
+        return
+      }
       if (r.status !== 'working') return
-      const next = noteAgentWorking(get().tasks, p)
+      // Worktrees whose agent is running right now keep their place at the top
+      // of the lane; without this the running cards trade places on every tool
+      // call. Read after the set above so `p` itself counts as working.
+      const statuses = get().agentStatuses
+      const busy = (w: string) => statuses[w]?.status === 'working'
+      const next = noteAgentWorking(get().tasks, p, Date.now(), busy)
       if (next !== get().tasks) get().applyTasks(next)
     })
     // Safety net: periodically re-list worktrees (branch names) and refresh the
@@ -327,6 +357,19 @@ export const useStore = create<State>((set, get) => ({
       all.push(...list)
     }
     set({ worktrees: all, repoOf })
+    // A worktree can vanish under us (deleted here, or `git worktree remove` in
+    // a terminal). Holding it as the selection leaves the app pointed at a
+    // directory that isn't there: every status refresh fails and the pane keeps
+    // drawing a dead worktree, which reads as a freeze.
+    const sel = get().selected
+    if (sel && !all.some(w => w.path === sel)) {
+      localStorage.removeItem('wtm.selected')
+      set(st => {
+        const statuses = { ...st.statuses }
+        delete statuses[sel]
+        return { selected: undefined, openTaskId: undefined, statuses }
+      })
+    }
     // Every non-main worktree must have a task. This runs on every re-list, not
     // just at launch: `git worktree add` in another terminal is the normal way
     // an unclaimed one appears, and the 3s tick is when we notice.
@@ -342,8 +385,19 @@ export const useStore = create<State>((set, get) => ({
     for (const w of get().worktrees) get().refreshStatus(w.path)
   },
   refreshStatus: async (p) => {
-    const s = await window.api.getStatus(p)
-    set(st => ({ statuses: { ...st.statuses, [p]: s } }))
+    // Never throws: this runs from a 3s timer and from watcher events, where a
+    // rejection is unhandled and the caller has nothing useful to do with it.
+    try {
+      const s = await window.api.getStatus(p)
+      set(st => ({ statuses: { ...st.statuses, [p]: s } }))
+    } catch {
+      set(st => {
+        if (!(p in st.statuses)) return st
+        const statuses = { ...st.statuses }
+        delete statuses[p]
+        return { statuses }
+      })
+    }
   },
   refreshPrStatuses: async () => {
     if (get().prRefreshing) return

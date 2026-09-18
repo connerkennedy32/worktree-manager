@@ -3,7 +3,7 @@ import {
   addTask, countTasks, cycleTaskState, emptyTasks, moveTask, parseTasksDoc, removeTask,
   renameTask, setBlocked, setTaskNote, setTaskState, setBoardHeight, resolveBoardHeight,
   attachWorktree, detachWorktree, dropTask, laneOf, reconcileTasks, taskForWorktree,
-  LANES, tasksInLane, noteAgentWorking,
+  LANES, tasksInLane, noteAgentWorking, noteAgentFinished,
   BOARD_HALF, BOARD_MAX_HEIGHT, BOARD_MIN_HEIGHT, MIN_TERMINAL_HEIGHT,
   setLayout, toggleLayout, setListWidth,
   LIST_DEFAULT_WIDTH, LIST_MAX_WIDTH, LIST_MIN_WIDTH, type TasksDoc
@@ -396,11 +396,42 @@ describe('an agent starting work', () => {
       .toEqual(['t3', 't1', 't2'])
   })
 
+  it('settles below the worktrees whose agents are still running', () => {
+    // Two agents going at once: each tool call would otherwise leapfrog the
+    // other and the two cards would trade places every few seconds.
+    const doc = withWorktrees('/wt/a', '/wt/b', '/wt/c')
+    const busy = (w: string) => w === '/wt/a'
+    expect(tasksInLane(noteAgentWorking(doc, '/wt/c', 5000, busy), 'progress').map(t => t.id))
+      .toEqual(['t1', 't3', 't2'])
+    // And once it is parked there, re-asserting changes nothing.
+    const settled = noteAgentWorking(doc, '/wt/c', 5000, busy)
+    expect(noteAgentWorking(settled, '/wt/c', 5000, busy)).toBe(settled)
+  })
+
+  it('promotes a to-do below the running cards rather than above them', () => {
+    let doc = withWorktrees('/wt/a', '/wt/b')
+    doc = setTaskState(doc, 't2', 'todo')
+    doc = noteAgentWorking(doc, '/wt/b', 5000, w => w === '/wt/a')
+    expect(tasksInLane(doc, 'progress').map(t => t.id)).toEqual(['t1', 't2'])
+  })
+
   it('is identity once the card is in progress and on top', () => {
     // `working` re-asserts on every tool call; an unequal doc here would write
     // tasks.json to disk dozens of times a turn.
     const doc = withWorktrees('/wt/a', '/wt/b')
     expect(noteAgentWorking(doc, '/wt/a')).toBe(doc)
+  })
+
+  it('pops a finished agent above the ones still working, without touching state', () => {
+    let doc = withWorktrees('/wt/a', '/wt/b', '/wt/c')
+    doc = noteAgentFinished(doc, '/wt/c')
+    expect(tasksInLane(doc, 'progress').map(t => t.id)).toEqual(['t3', 't1', 't2'])
+    expect(doc.tasks.find(t => t.id === 't3')?.state).toBe('progress')
+    // Already first: identity, so tasks.json stays put.
+    expect(noteAgentFinished(doc, '/wt/c')).toBe(doc)
+    // And a blocked card or an unclaimed worktree is left alone.
+    expect(noteAgentFinished(setBlocked(doc, 't1', 'waiting'), '/wt/a').tasks[0].id).toBe('t3')
+    expect(noteAgentFinished(doc, '/wt/nobody')).toBe(doc)
   })
 
   it('leaves a blocked task blocked, and ignores an unclaimed worktree', () => {

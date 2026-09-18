@@ -43,5 +43,6 @@ export class WatcherManager {
     clearTimeout(this.timers.get(worktreePath))
     this.timers.delete(worktreePath)
   }
+  list(): string[] { return [...this.watchers.keys()] }
   unwatchAll() { for (const [, w] of this.watchers) w.close(); this.watchers.clear() }
 }

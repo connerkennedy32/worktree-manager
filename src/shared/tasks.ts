@@ -135,23 +135,38 @@ function promotes(state: TaskState): boolean {
 // Reposition within the flat list so the task comes first among its own lane's
 // cards — the other lanes' order is untouched, since they interleave in the
 // document but not on screen.
-export function moveToLaneTop(doc: TasksDoc, id: string): TasksDoc {
+//
+// `pinned` guards the cards already at the top that must not be displaced: with
+// two agents running, each tool call would otherwise leapfrog the other and the
+// two cards would trade places every few seconds. The task lands below the
+// leading run of pinned cards instead, so a running worktree keeps its slot and
+// the newly-started one settles beneath it.
+export function moveToLaneTop(
+  doc: TasksDoc, id: string, pinned?: (task: Task) => boolean
+): TasksDoc {
   const task = doc.tasks.find(t => t.id === id)
   if (!task) return doc
   const lane = laneOf(task)
   const rest = doc.tasks.filter(t => t.id !== id)
-  const first = rest.findIndex(t => laneOf(t) === lane)
-  rest.splice(first === -1 ? rest.length : first, 0, task)
+  const inLane = rest.filter(t => laneOf(t) === lane)
+  let keep = 0
+  while (keep < inLane.length && pinned?.(inLane[keep])) keep++
+  const anchor = inLane[keep]
+  const at = anchor ? rest.indexOf(anchor)
+    : keep > 0 ? rest.indexOf(inLane[keep - 1]) + 1
+      : rest.findIndex(t => laneOf(t) === lane)
+  rest.splice(at === -1 ? rest.length : at, 0, task)
   return { ...doc, tasks: rest }
 }
 
 // Moving to 'done' stamps doneAt (that's what "done today" counts from);
 // moving off it clears the stamp.
 export function setTaskState(
-  doc: TasksDoc, id: string, state: TaskState, now = Date.now()
+  doc: TasksDoc, id: string, state: TaskState, now = Date.now(),
+  pinned?: (task: Task) => boolean
 ): TasksDoc {
   const next = updateTask(doc, id, { state, doneAt: state === 'done' ? now : undefined })
-  return promotes(state) ? moveToLaneTop(next, id) : next
+  return promotes(state) ? moveToLaneTop(next, id, pinned) : next
 }
 
 // Blocking leaves the card where it sits: a to-do blocks in To do, anything
@@ -416,17 +431,42 @@ export function reconcileTasks(
 // reviewing it, not a restart, and dragging it back yourself is the only thing
 // that should undo a review — but it still pops to the top of its own lane,
 // since the card you are querying is the one you want to see first either way.
+//
+// `busy` names the worktrees with an agent running right now. Those cards are
+// already parked at the top and stay there: the promotion is for the card you
+// just started, not a reshuffle of the ones that never stopped.
 export function noteAgentWorking(
-  doc: TasksDoc, worktreePath: string, now = Date.now()
+  doc: TasksDoc, worktreePath: string, now = Date.now(),
+  busy: (worktree: string) => boolean = () => false
 ): TasksDoc {
   const task = taskForWorktree(doc, worktreePath)
   if (!task || task.state === 'blocked') return doc
+  const pinned = (t: Task) => t.id !== task.id && !!t.worktree && busy(t.worktree)
   if (task.state === 'progress' || task.state === 'review') {
     const lane = laneOf(task)
-    return tasksInLane(doc, lane)[0]?.id === task.id ? doc : moveToLaneTop(doc, task.id)
+    const ahead = tasksInLane(doc, lane).slice(0, tasksInLane(doc, lane).findIndex(t => t.id === task.id))
+    // Already sitting directly under the running cards: nothing to do, and the
+    // identity of the doc is what keeps tasks.json off the disk.
+    if (ahead.every(pinned)) return doc
+    return moveToLaneTop(doc, task.id, pinned)
   }
   // setTaskState promotes on its way in, so this both marks and moves.
-  return setTaskState(doc, task.id, 'progress', now)
+  return setTaskState(doc, task.id, 'progress', now, pinned)
+}
+
+// The agent stopped — its turn is over and the card is the one that wants you.
+// Unlike `noteAgentWorking` this pops to the very top with nothing pinned: a
+// finished card outranks the ones still grinding away, since it is the one with
+// something to read. The state is left alone entirely; finishing a turn is not
+// finishing the work, and only you move a card to In review or Done.
+//
+// Identity-preserving for the same reason as `noteAgentWorking`: a card already
+// on top doesn't rewrite tasks.json.
+export function noteAgentFinished(doc: TasksDoc, worktreePath: string): TasksDoc {
+  const task = taskForWorktree(doc, worktreePath)
+  if (!task || task.state === 'blocked') return doc
+  const lane = laneOf(task)
+  return tasksInLane(doc, lane)[0]?.id === task.id ? doc : moveToLaneTop(doc, task.id)
 }
 
 // A board drop: the lane decides the state, the anchor decides the position,
