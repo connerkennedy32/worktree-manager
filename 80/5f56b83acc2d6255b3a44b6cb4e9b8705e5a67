@@ -1,0 +1,61 @@
+src/renderer/components/NewTaskModal.tsx
+  s_aa2177489b0592::t_117d07e6db9fc6 4,16-25,67,72-73,75-76
+  s_aa2177489b0592::t_92c9f07b1ae2be 80,90,95,98,108,120,123-124,135-174
+  s_aa2177489b0592::t_9ec6f22c6b2d32 1-3,5-15,26-66,68-71,74,77-79,81-89,91-94,96-97,99-107,109-119,121-122,125-134,175
+src/renderer/components/Board.tsx
+  s_aa2177489b0592::t_afeebd9f6775f8 294-296,300,303-304,309-310
+  s_aa2177489b0592::t_5722750e33db71 6
+  s_aa2177489b0592::t_479e5e254ef476 13
+src/main/watcher.ts
+  s_23206ae88cb390::t_87ec434b74e7f3 46
+tests/shared/tasks.test.ts
+  s_9a498d9b49b6df::t_36f7d00bb7f2fa 6,425-434
+  s_9a498d9b49b6df::t_3d641626324c19 399-417,435
+  s_9a498d9b49b6df::t_a173c005d0b367 436
+src/shared/tasks.ts
+  s_9a498d9b49b6df::t_3ebfdaf2604ff3 457-469
+  s_9a498d9b49b6df::t_a932c18ac85866 138-146,151-158,165-166,169,434-437,439-440,444,447-451,454
+  s_9a498d9b49b6df::t_969aec3611c5f8 455-456
+src/main/ipc.ts
+  s_23206ae88cb390::t_87ec434b74e7f3 127-130
+src/main/git/status.ts
+  s_23206ae88cb390::t_87ec434b74e7f3 3,22-28
+src/renderer/state/store.ts
+  s_23206ae88cb390::t_f213d7b32e477e 360-372,388-400
+  s_9a498d9b49b6df::t_3ebfdaf2604ff3 7,321-327
+  s_aa2177489b0592::t_da1b1914525e50 22-29
+  s_aa2177489b0592::t_c719855acc351a 73-75,81,177,190,198,224-232
+  s_9a498d9b49b6df::t_6318224c5bd2da 329-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "805f56b83acc2d6255b3a44b6cb4e9b8705e5a67",
+  "prompts": {},
+  "sessions": {
+    "s_23206ae88cb390": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0f68864a-c046-417b-9832-36e8ce5f6f93",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_9a498d9b49b6df": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "43adaebf-530b-413b-af35-842c80421ed8",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    },
+    "s_aa2177489b0592": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7948e135-db47-41c1-90df-9d84637bb7dc",
+        "model": "claude-opus-5"
+      },
+      "human_author": "Conner Kennedy <connerkennedy@MacBook-Pro-3.local>"
+    }
+  }
+}
